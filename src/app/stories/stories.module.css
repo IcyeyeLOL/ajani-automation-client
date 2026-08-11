@@ -1,0 +1,42 @@
+.storyShell { width:min(1700px,calc(100% - 120px)); margin:0 auto; padding:40px 0 86px; }
+.hero { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(340px,.7fr); align-items:end; gap:70px; min-height:380px; padding-bottom:42px; border-bottom:1px solid var(--line); }
+.hero h1 { max-width:840px; margin:17px 0 0; font-size:clamp(57px,5vw,83px); font-weight:600; line-height:.94; letter-spacing:-.075em; }
+.hero h1 em,.closing h2 em { color:var(--crimson); font-style:normal; }
+.lede { max-width:510px; margin:26px 0 0; color:var(--quiet); font-size:18px; line-height:1.48; }
+.signalCard { position:relative; min-height:255px; padding:24px; overflow:hidden; border-radius:18px; background:var(--ink); color:var(--pearl); box-shadow:0 20px 38px rgba(38,28,23,.18); }
+.signalCard::before,.signalCard::after { position:absolute; border:1px solid rgba(229,201,171,.28); border-radius:50%; content:""; }
+.signalCard::before { right:-48px; bottom:-76px; width:258px; height:258px; }
+.signalCard::after { right:42px; bottom:38px; width:106px; height:106px; border-color:rgba(229,201,171,.48); }
+.signalCard > span { position:relative; z-index:1; color:var(--sand); font:11px "Consolas",monospace; letter-spacing:.06em; }
+.signalCard > strong { position:relative; z-index:1; display:block; max-width:310px; margin-top:50px; font-size:29px; line-height:1.02; letter-spacing:-.055em; }
+.signalCard > p { position:relative; z-index:1; max-width:260px; margin:14px 0 0; color:#c9bdb7; font-size:13px; line-height:1.38; }
+.signalCard i { position:absolute; right:70px; bottom:64px; z-index:1; width:17px; height:17px; border-radius:50%; background:var(--sand); box-shadow:0 0 0 10px rgba(189,150,112,.12),0 0 28px rgba(189,150,112,.65); }
+.storyIntro { display:flex; align-items:end; justify-content:space-between; gap:36px; padding:48px 0 23px; }
+.storyIntro h2 { max-width:600px; margin:13px 0 0; font-size:36px; line-height:1; letter-spacing:-.055em; }
+.storyIntro > p { max-width:372px; margin:0; color:var(--quiet); font-size:15px; line-height:1.46; }
+.storyList { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.storyCard { position:relative; display:flex; flex-direction:column; min-height:332px; padding:24px; overflow:hidden; border:1px solid var(--line); border-radius:17px; background:var(--paper); transition:transform .32s var(--ease-standard),border-color .32s ease,box-shadow .32s ease,background .32s ease,color .32s ease; }
+.storyCard:hover { border-color:var(--ink); background:var(--ink); color:var(--pearl); box-shadow:0 20px 38px rgba(38,28,23,.16); transform:translateY(-7px); }
+.storyCard:first-child:hover { border-color:var(--crimson); background:var(--crimson); }
+.storyCard:nth-child(2):hover { border-color:var(--sand-deep); background:var(--sand); color:#2d211b; }
+.storyCard > span { color:var(--sand-deep); font:11px "Consolas",monospace; letter-spacing:.05em; }
+.storyCard:hover > span { color:var(--sand); }
+.storyCard:nth-child(2):hover > span { color:#624637; }
+.storyCard h3 { max-width:300px; margin:40px 0 0; font-size:29px; line-height:1.02; letter-spacing:-.055em; }
+.storyCard > p { max-width:295px; margin:17px 0 0; color:var(--quiet); font-size:14px; line-height:1.42; transition:color .3s ease; }
+.storyCard:hover > p { color:#c9bdb7; }
+.storyCard:first-child:hover > p { color:#f3c9c1; }
+.storyCard:nth-child(2):hover > p { color:#50392d; }
+.route { display:flex; align-items:center; gap:16px; margin-top:auto; padding-top:18px; }
+.route span { position:relative; display:grid; place-items:center; min-width:26px; height:28px; padding:0 9px; border:1px solid var(--line); border-radius:999px; background:var(--paper); color:var(--sand-deep); font:10px "Consolas",monospace; white-space:nowrap; transition:background .3s ease,border-color .3s ease,color .3s ease,transform .3s var(--ease-standard); }
+.route span:not(:last-child)::after { position:absolute; top:50%; left:calc(100% + 1px); width:15px; height:1px; background:var(--line); content:""; transition:background .3s ease; }
+.storyCard:hover .route span { border-color:rgba(255,255,255,.36); background:transparent; color:var(--sand); transform:scale(1.1); }
+.storyCard:hover .route span:not(:last-child)::after { background:var(--sand); }
+.storyCard:nth-child(2):hover .route span { border-color:#72533f; color:#50392d; }
+.storyCard:nth-child(2):hover .route span:not(:last-child)::after { background:#72533f; }
+.closing { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:34px; margin-top:50px; padding:32px; border-radius:18px; background:#e8dfd7; }
+.closing h2 { max-width:710px; margin:17px 0 0; font-size:clamp(32px,3.1vw,48px); line-height:.98; letter-spacing:-.06em; }
+.closing > a { display:inline-flex; align-items:center; justify-content:center; min-height:47px; padding:0 18px; border-radius:9px; background:var(--crimson); color:#fff; font-size:13px; font-weight:600; transition:transform .2s ease,box-shadow .2s ease; }
+.closing > a:hover { box-shadow:0 10px 20px rgba(121,0,24,.16); transform:translateY(-2px); }
+@media (max-width:1040px) { .storyShell { width:min(100% - 48px,1700px); }.hero { grid-template-columns:1fr; gap:35px; min-height:0; }.signalCard { max-width:530px; }.storyList { grid-template-columns:1fr; }.storyCard { min-height:290px; }.storyCard h3 { margin-top:32px; }.closing { grid-template-columns:1fr; }.closing > a { justify-self:start; } }
+@media (max-width:690px) { .storyShell { width:min(100% - 32px,1700px); padding-top:32px; }.hero h1 { font-size:50px; }.lede { font-size:16px; }.signalCard { min-height:230px; }.signalCard > strong { margin-top:38px; font-size:26px; }.signalCard i { right:45px; bottom:50px; }.storyIntro { align-items:start; flex-direction:column; gap:14px; padding-top:35px; }.storyIntro h2 { font-size:31px; }.storyCard { min-height:274px; }.closing { padding:25px; }.closing h2 { font-size:34px; } }

@@ -1,0 +1,22 @@
+import { ClerkProvider } from "@clerk/nextjs";
+import type { Metadata } from "next";
+import { AccountAccessProvider } from "@/components/account-access-dialog";
+import { hasClerkCredentials } from "@/lib/clerk/config";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Ajani Automation",
+  description: "Operational systems that make the work move.",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  const clerkEnabled = hasClerkCredentials();
+  const app = <AccountAccessProvider clerkEnabled={clerkEnabled}>{children}</AccountAccessProvider>;
+  const configuredApp = clerkEnabled ? <ClerkProvider>{app}</ClerkProvider> : app;
+
+  return (
+    <html data-motion="full" lang="en">
+      <body>{configuredApp}</body>
+    </html>
+  );
+}

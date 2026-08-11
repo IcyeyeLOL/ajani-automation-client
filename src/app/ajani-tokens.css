@@ -1,0 +1,30 @@
+:root {
+  --surface: var(--pearl);
+  --surface-raised: var(--paper);
+  --surface-inverse: var(--ink);
+  --content: var(--ink);
+  --content-muted: var(--quiet);
+  --content-inverse: var(--pearl);
+  --brand: var(--crimson);
+  --brand-hover: #620014;
+  --success: #2d7867;
+  --warning: #805f49;
+  --danger: #9c1229;
+  --border: var(--line);
+  --border-strong: var(--line-dark);
+  --focus-ring: rgba(121, 0, 24, 0.48);
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --ease-standard: cubic-bezier(.2, .78, .28, 1);
+}
+
+@theme inline {
+  --color-ajani-surface: var(--surface);
+  --color-ajani-surface-raised: var(--surface-raised);
+  --color-ajani-content: var(--content);
+  --color-ajani-content-muted: var(--content-muted);
+  --color-ajani-brand: var(--brand);
+  --color-ajani-success: var(--success);
+  --color-ajani-warning: var(--warning);
+  --color-ajani-danger: var(--danger);
+}

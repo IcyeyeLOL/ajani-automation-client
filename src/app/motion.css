@@ -1,0 +1,54 @@
+.route-transition { min-height:100vh; animation:route-enter .52s var(--ease-standard) both; }
+.motion-reveal { opacity:0; transform:translateY(20px); transition:opacity .68s var(--ease-standard) var(--reveal-delay,0ms),transform .68s var(--ease-standard) var(--reveal-delay,0ms); }
+.motion-reveal.is-visible { opacity:1; transform:translateY(0); }
+.site-nav a:not(.header-action) { position:relative; }
+.site-nav a:not(.header-action)::after { position:absolute; right:0; bottom:-7px; left:0; height:1px; background:var(--crimson); content:""; transform:scaleX(0); transform-origin:right; transition:transform var(--motion-standard) var(--ease-standard); }
+.site-nav a:not(.header-action):hover::after,.site-nav a:not(.header-action):focus-visible::after { transform:scaleX(1); transform-origin:left; }
+.site-nav .site-nav-link.is-active { color:var(--ink); }
+.site-nav .site-nav-link.is-active::after { transform:scaleX(1); transform-origin:left; }
+.site-nav .header-action { transition:transform var(--motion-standard) var(--ease-standard),box-shadow var(--motion-standard) ease,background var(--motion-standard) ease; }
+.site-nav .header-action:hover { box-shadow:0 8px 17px rgba(23,21,21,.16); transform:translateY(-2px); }
+.home-operations .operations-item { animation:operations-item-in .54s var(--ease-standard) both; }
+.home-operations .operations-item:nth-child(1) { animation-delay:90ms; }.home-operations .operations-item:nth-child(2) { animation-delay:180ms; }.home-operations .operations-item:nth-child(3) { animation-delay:270ms; }
+.home-operations .operations-result { animation:operations-item-in .6s var(--ease-standard) 370ms both; }
+.home-operations .live-dot::before,.flow-live::before { animation:live-indicator 1.6s ease-out infinite; }
+.method-signal { position:relative; display:flex; align-items:center; justify-content:space-between; max-width:255px; margin-top:34px; }
+.method-signal::before { position:absolute; right:7px; left:7px; height:1px; background:var(--line); content:""; }
+.method-signal::after { position:absolute; left:7px; width:0; height:1px; background:var(--crimson); content:""; animation:method-route 3.8s var(--ease-standard) infinite; }
+.method-signal span { position:relative; z-index:1; width:14px; height:14px; border:3px solid var(--pearl); border-radius:50%; background:var(--sand); }
+.method-signal span:nth-child(2) { animation-delay:.55s; }.method-signal span:nth-child(3) { animation-delay:1.1s; }.method-signal span:nth-child(4) { animation-delay:1.65s; }
+.flow-stage { animation:flow-stage-enter .56s var(--ease-standard) both; }
+.flow-stage > :not(.flow-heading) { animation:flow-content-enter .65s var(--ease-standard) .11s both; }
+.flow-progress button.active > span { box-shadow:0 0 0 0 rgba(121,0,24,.28); animation:stage-marker 1.75s ease-out infinite; }
+.recorder-card.recording .record-button { animation:recording-breath 1.6s ease-in-out infinite; }
+.recorder-card.recording .transcript-box { animation:transcript-glow 1.4s ease-in-out infinite alternate; }
+.system-canvas .system-block { animation:system-block-enter .52s var(--ease-standard) both; }
+.system-canvas .system-block:nth-child(1) { animation-delay:55ms; }.system-canvas .system-block:nth-child(2) { animation-delay:110ms; }.system-canvas .system-block:nth-child(3) { animation-delay:165ms; }.system-canvas .system-block:nth-child(4) { animation-delay:220ms; }.system-canvas .system-block:nth-child(n+5) { animation-delay:275ms; }
+
+button:active:not(:disabled),.button:active,.site-nav .header-action:active { transform:translateY(1px) scale(.985); }
+
+@keyframes route-enter { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
+@keyframes operations-item-in { from { opacity:0; transform:translateX(13px); } to { opacity:1; transform:translateX(0); } }
+@keyframes live-indicator { 65% { box-shadow:0 0 0 7px rgba(121,0,24,0); } 100% { box-shadow:0 0 0 0 rgba(121,0,24,0); } }
+@keyframes method-route { 0%,18% { width:0; } 52%,100% { width:calc(100% - 14px); } }
+@keyframes flow-stage-enter { from { opacity:0; transform:translateY(18px) scale(.99); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes flow-content-enter { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+@keyframes stage-marker { 70% { box-shadow:0 0 0 8px rgba(121,0,24,0); } 100% { box-shadow:0 0 0 0 rgba(121,0,24,0); } }
+@keyframes recording-breath { 50% { box-shadow:0 0 0 22px rgba(121,0,24,.08); } }
+@keyframes transcript-glow { to { border-color:#7a5958; box-shadow:0 0 0 3px rgba(121,0,24,.08); } }
+@keyframes system-block-enter { from { opacity:0; transform:translateY(13px); } to { opacity:1; transform:translateY(0); } }
+
+html[data-motion="full"] .route-transition { animation:route-enter .52s var(--ease-standard) both; }
+html[data-motion="full"] .motion-reveal { opacity:0; transform:translateY(20px); transition:opacity .68s var(--ease-standard) var(--reveal-delay,0ms),transform .68s var(--ease-standard) var(--reveal-delay,0ms); }
+html[data-motion="full"] .motion-reveal.is-visible { opacity:1; transform:translateY(0); }
+html[data-motion="full"] .home-operations .operations-item { animation:operations-item-in .54s var(--ease-standard) both; }
+html[data-motion="full"] .home-operations .operations-item:nth-child(1) { animation-delay:90ms; }html[data-motion="full"] .home-operations .operations-item:nth-child(2) { animation-delay:180ms; }html[data-motion="full"] .home-operations .operations-item:nth-child(3) { animation-delay:270ms; }
+html[data-motion="full"] .home-operations .operations-result { animation:operations-item-in .6s var(--ease-standard) 370ms both; }
+html[data-motion="full"] .home-operations .live-dot::before,html[data-motion="full"] .flow-live::before { animation:live-indicator 1.6s ease-out infinite; }
+html[data-motion="full"] .method-signal::after { animation:method-route 3.8s var(--ease-standard) infinite; }
+html[data-motion="full"] .flow-stage { animation:flow-stage-enter .56s var(--ease-standard) both; }
+html[data-motion="full"] .flow-stage > :not(.flow-heading) { animation:flow-content-enter .65s var(--ease-standard) .11s both; }
+html[data-motion="full"] .flow-progress button.active > span { animation:stage-marker 1.75s ease-out infinite; }
+html[data-motion="full"] .recorder-card.recording .record-button { animation:recording-breath 1.6s ease-in-out infinite; }
+html[data-motion="full"] .recorder-card.recording .transcript-box { animation:transcript-glow 1.4s ease-in-out infinite alternate; }
+html[data-motion="full"] .system-canvas .system-block { animation:system-block-enter .52s var(--ease-standard) both; }
