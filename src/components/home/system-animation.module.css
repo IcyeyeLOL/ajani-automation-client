@@ -1,0 +1,139 @@
+.wrap { display: grid; justify-items: center; gap: 14px; width: 100%; }
+
+.svg { width: 100%; max-width: 420px; height: auto; overflow: visible; }
+
+/* ---- beat 1: the spoken note ---- */
+.bar {
+  fill: var(--sand);
+  transform-origin: center 60px;
+  animation: wave 6.6s cubic-bezier(.2, .78, .28, 1) infinite;
+}
+
+/* ---- beat 2: the route assembles ---- */
+.link {
+  stroke: #6a5b55;
+  stroke-width: 1.8;
+  stroke-dasharray: 72;
+  stroke-dashoffset: 72;
+  animation: draw 6.6s cubic-bezier(.2, .78, .28, 1) infinite;
+}
+
+.node {
+  fill: #2b2523;
+  stroke: #7a6a62;
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: pop 6.6s cubic-bezier(.2, .78, .28, 1) infinite;
+}
+
+/* ---- beat 3: it runs ---- */
+.core {
+  fill: url(#ajaniActive);
+  opacity: 0;
+  animation: core 6.6s ease-out infinite;
+}
+
+.pulse {
+  fill: none;
+  stroke: url(#ajaniActive);
+  stroke-width: 2.2;
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: ring 6.6s ease-out infinite;
+}
+
+.packet {
+  fill: var(--sand);
+  opacity: 0;
+  /* transform, not cx — animating SVG geometry properties is not portable */
+  animation: travel 6.6s cubic-bezier(.4, 0, .3, 1) infinite;
+}
+
+.tag {
+  fill: #a2958f;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-anchor: middle;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: fade 6.6s ease infinite;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #a2958f;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.caption i { color: var(--sand); font-style: normal; }
+
+@keyframes wave {
+  0%, 2%   { opacity: 0; transform: scaleY(1); }
+  6%       { opacity: 1; transform: scaleY(3.6); }
+  10%      { transform: scaleY(1.4); }
+  14%      { transform: scaleY(4.6); }
+  18%      { transform: scaleY(1.9); }
+  22%      { opacity: 1; transform: scaleY(2.8); }
+  29%      { opacity: 0; transform: scaleY(.6); }
+  100%     { opacity: 0; transform: scaleY(.6); }
+}
+
+@keyframes draw {
+  0%, 23%  { stroke-dashoffset: 72; }
+  38%      { stroke-dashoffset: 0; }
+  93%      { stroke-dashoffset: 0; }
+  100%     { stroke-dashoffset: 72; }
+}
+
+@keyframes pop {
+  0%, 20%  { opacity: 0; transform: scale(.35); }
+  30%      { opacity: 1; transform: scale(1); }
+  93%      { opacity: 1; transform: scale(1); }
+  100%     { opacity: 0; transform: scale(.35); }
+}
+
+@keyframes core {
+  0%, 45%  { opacity: 0; }
+  52%      { opacity: 1; }
+  74%      { opacity: 1; }
+  86%, 100% { opacity: 0; }
+}
+
+@keyframes ring {
+  0%, 45%  { opacity: 0; transform: scale(1); }
+  52%      { opacity: .95; transform: scale(1); }
+  74%      { opacity: 0; transform: scale(1.85); }
+  100%     { opacity: 0; transform: scale(1.85); }
+}
+
+@keyframes travel {
+  0%, 44%   { opacity: 0; transform: translateX(0); }
+  48%       { opacity: 1; transform: translateX(0); }
+  84%       { opacity: 1; transform: translateX(309px); }
+  90%, 100% { opacity: 0; transform: translateX(309px); }
+}
+
+@keyframes fade {
+  0%, 26%  { opacity: 0; }
+  36%      { opacity: 1; }
+  93%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+/* Reduced motion keeps the finished route on screen, permanently. */
+@media (prefers-reduced-motion: reduce) {
+  .bar, .pulse, .packet { display: none; }
+  .link { animation: none; stroke-dashoffset: 0; }
+  .node { animation: none; opacity: 1; }
+  .core { animation: none; opacity: 1; }
+  .tag { animation: none; opacity: 1; }
+}

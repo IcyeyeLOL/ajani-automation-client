@@ -49,18 +49,25 @@
   color: #d8ccc6;
 }
 
+.visual {
+  display: grid;
+  place-items: center;
+  min-height: 148px;
+  padding: 26px 20px 6px;
+}
+
 .stage {
   display: grid;
   justify-items: center;
-  padding: 34px 24px 28px;
+  padding: 18px 24px 24px;
   text-align: center;
 }
 
 .record {
   display: grid;
   place-items: center;
-  width: 108px;
-  height: 108px;
+  width: 84px;
+  height: 84px;
   border: 1px solid #6a4f4f;
   border-radius: 50%;
   background: #382a2a;
@@ -73,8 +80,8 @@
 .record:focus-visible { outline: 3px solid var(--sand); outline-offset: 4px; }
 
 .record span {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #f6efeb;
   transition: width .2s ease, height .2s ease, border-radius .2s ease;
@@ -174,7 +181,7 @@
 
 @media (max-width: 560px) {
   .stage { padding: 26px 18px 22px; }
-  .record { width: 92px; height: 92px; }
+  .record { width: 76px; height: 76px; }
   .readout { margin: 0 16px; }
   .actions { padding: 16px; }
 }

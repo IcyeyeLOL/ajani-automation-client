@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SystemAnimation } from "./system-animation";
+import { LiveWaveform } from "./live-waveform";
 import styles from "./voice-recorder.module.css";
 
 type Phase = "idle" | "requesting" | "recording" | "ready" | "blocked";
@@ -28,11 +30,14 @@ export function VoiceRecorder({ id }: { id?: string }) {
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const [size, setSize] = useState(0);
+  // The waveform needs the stream as a prop, so it is mirrored into state.
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
 
   const stop = useCallback(() => {
     if (recorder.current?.state === "recording") recorder.current.stop();
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+    setLiveStream(null);
   }, []);
 
   useEffect(() => stop, [stop]);
@@ -63,6 +68,7 @@ export function VoiceRecorder({ id }: { id?: string }) {
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.current = media;
+      setLiveStream(media);
       const mediaRecorder = new MediaRecorder(media);
       recorder.current = mediaRecorder;
       mediaRecorder.ondataavailable = (event) => {
@@ -93,6 +99,10 @@ export function VoiceRecorder({ id }: { id?: string }) {
         </span>
         <b className={styles.timer}>{clock(seconds)}</b>
       </header>
+
+      <div className={styles.visual}>
+        {recording ? <LiveWaveform stream={liveStream} /> : <SystemAnimation />}
+      </div>
 
       <div className={styles.stage}>
         <button aria-label={label} className={styles.record} onClick={start} type="button">
