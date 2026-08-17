@@ -1,0 +1,139 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import styles from "./voice-recorder.module.css";
+
+type Phase = "idle" | "requesting" | "recording" | "ready" | "blocked";
+
+const MAX_SECONDS = 180;
+
+function clock(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const statusCopy: Record<Phase, string> = {
+  idle: "Ready to record",
+  requesting: "Waiting for microphone",
+  recording: "Recording",
+  ready: "Voice note ready",
+  blocked: "Microphone unavailable",
+};
+
+export function VoiceRecorder({ id }: { id?: string }) {
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [seconds, setSeconds] = useState(0);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const [size, setSize] = useState(0);
+
+  const stop = useCallback(() => {
+    if (recorder.current?.state === "recording") recorder.current.stop();
+    stream.current?.getTracks().forEach((track) => track.stop());
+    stream.current = null;
+  }, []);
+
+  useEffect(() => stop, [stop]);
+
+  useEffect(() => {
+    if (phase !== "recording") return;
+    const timer = window.setInterval(() => {
+      setSeconds((value) => {
+        if (value + 1 >= MAX_SECONDS) stop();
+        return value + 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [phase, stop]);
+
+  const start = async () => {
+    if (phase === "recording") {
+      stop();
+      setPhase("ready");
+      return;
+    }
+
+    setSeconds(0);
+    setSize(0);
+    chunks.current = [];
+    setPhase("requesting");
+
+    try {
+      const media = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.current = media;
+      const mediaRecorder = new MediaRecorder(media);
+      recorder.current = mediaRecorder;
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.current.push(event.data);
+      };
+      mediaRecorder.onstop = () => {
+        setSize(chunks.current.reduce((total, chunk) => total + chunk.size, 0));
+        setPhase("ready");
+      };
+      mediaRecorder.start();
+      setPhase("recording");
+    } catch {
+      // No microphone, no permission, or an insecure origin. Say so plainly
+      // rather than pretending a recording happened.
+      setPhase("blocked");
+    }
+  };
+
+  const recording = phase === "recording";
+  const label = recording ? "Stop recording" : "Record your voice note";
+
+  return (
+    <div className={styles.panel} data-phase={phase} id={id}>
+      <header className={styles.head}>
+        <span className={styles.status}>
+          <i aria-hidden="true" />
+          {statusCopy[phase]}
+        </span>
+        <b className={styles.timer}>{clock(seconds)}</b>
+      </header>
+
+      <div className={styles.stage}>
+        <button aria-label={label} className={styles.record} onClick={start} type="button">
+          <span aria-hidden="true" />
+        </button>
+        <strong>
+          {phase === "ready"
+            ? "Your note is ready to send"
+            : recording
+              ? "Tap when you're done"
+              : phase === "blocked"
+                ? "We couldn't reach your microphone"
+                : "Tap to start your voice note"}
+        </strong>
+        <small>
+          {phase === "blocked"
+            ? "Allow microphone access, or tell us in writing instead."
+            : "Speak for a minute or two. Up to three minutes."}
+        </small>
+      </div>
+
+      <div className={styles.readout}>
+        <span>What to cover</span>
+        <p>
+          Where the work gets stuck, who is involved, and what good would look like.
+          This is source material, not a test.
+        </p>
+        {phase === "ready" ? (
+          <p className={styles.captured} role="status">
+            Captured {clock(seconds)}
+            {size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}
+          </p>
+        ) : null}
+      </div>
+
+      <div className={styles.actions}>
+        <button className={styles.send} disabled={phase !== "ready"} type="button">
+          Send this note <span aria-hidden="true">→</span>
+        </button>
+        <small>No account needed to start. You see the scope and the price before you pay.</small>
+      </div>
+    </div>
+  );
+}
