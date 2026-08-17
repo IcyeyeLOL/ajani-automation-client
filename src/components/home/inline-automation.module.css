@@ -4,9 +4,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, .8fr);
   overflow: hidden;
-  border: 1px solid var(--panel-edge);
+  border: 1px solid #312a28;
   border-radius: 20px;
   background: #1b1817;
+  box-shadow: 0 26px 60px rgba(38, 28, 23, .22);
 }
 
 .map { padding: 24px 26px 26px; border-right: 1px solid var(--panel-edge); min-width: 0; }

@@ -263,12 +263,10 @@
 }
 .ghostCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
 
-/* ---------- band 4: automation ---------- */
-.showcase { background: var(--ink); color: var(--pearl); }
-.showcaseInner { width: var(--shell-width); margin: 0 auto; padding: 72px 0; }
-.showcaseInner .sectionHead .label { color: var(--sand); }
-.showcaseInner .sectionHead h2 em { color: var(--sand); }
-.showcaseInner .sectionHead > p { color: #b6a9a3; }
+/* ---------- band 4: automation ----------
+   The band itself is light like the rest of the body; the dark instrument
+   panel sits on it. Fewer background flips while scrolling, and the ink
+   surface still does its job by contrast rather than by taking the whole row. */
 .showcaseBody { margin-top: 34px; }
 
 /* ---------- band 5: process ---------- */
@@ -368,7 +366,7 @@
 @media (max-width: 620px) {
   .shell { --shell-width: min(100% - 32px, 1240px); }
   .hero { padding: 40px 0 48px; }
-  .section, .showcaseInner, .closeInner { padding: 48px 0; }
+  .section, .closeInner { padding: 48px 0; }
   .routes, .steps { grid-template-columns: 1fr; }
   .headerNav { gap: 12px; }
   .headerLink { display: none; }

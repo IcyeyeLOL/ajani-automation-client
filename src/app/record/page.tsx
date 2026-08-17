@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Reveal } from "@/components/home/reveal";
 import { VoiceRecorder } from "@/components/home/voice-recorder";
 import styles from "./record.module.css";
 
@@ -32,7 +33,7 @@ export default function RecordPage() {
 
       <section className={styles.stage}>
         <div className={styles.stageInner}>
-          <div className={styles.intro}>
+          <Reveal className={styles.intro}>
             <p className={styles.label}>Step one of one</p>
             <h1>Start with the work as it <em>actually happens.</em></h1>
             <p className={styles.lede}>
@@ -54,24 +55,24 @@ export default function RecordPage() {
             <p className={styles.reassure}>
               Would rather type it? <Link href="/portal">Send it in writing instead.</Link>
             </p>
-          </div>
+          </Reveal>
 
-          <div className={styles.recorderColumn}>
+          <Reveal className={styles.recorderColumn} delay={130}>
             <VoiceRecorder id="record" />
-          </div>
+          </Reveal>
         </div>
       </section>
 
       <section className={styles.after}>
         <div className={styles.afterInner}>
-          <p className={styles.label}>What happens after you send it</p>
+          <Reveal as="p" className={styles.label}>What happens after you send it</Reveal>
           <div className={styles.timeline}>
-            {next.map((step) => (
-              <article key={step.title}>
+            {next.map((step, index) => (
+              <Reveal as="article" delay={index * 90} key={step.title}>
                 <p className={styles.when}>{step.when}</p>
                 <h2>{step.title}</h2>
                 <p>{step.detail}</p>
-              </article>
+              </Reveal>
             ))}
           </div>
         </div>

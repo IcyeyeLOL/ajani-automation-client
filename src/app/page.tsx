@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AudiencePicker } from "@/components/home/audience-picker";
 import { InlineAutomation } from "@/components/home/inline-automation";
+import { Reveal } from "@/components/home/reveal";
 import { SystemAnimation } from "@/components/home/system-animation";
 import styles from "./home.module.css";
 
@@ -46,10 +47,10 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Band 1 — the proposition, with the system assembling beside it */}
+      {/* Band 1 — dark. The proposition, with the system assembling beside it. */}
       <section className={styles.hero}>
         <div className={styles.heroInner}>
-          <div className={styles.heroCopy}>
+          <Reveal className={styles.heroCopy}>
             <p className={styles.label}>Done-for-you automation</p>
             <h1>Tell us where the work sticks. <em>We build the system.</em></h1>
             <p>
@@ -68,8 +69,8 @@ export default function Home() {
               <span><i>✓</i> No account to start</span>
               <span><i>✓</i> Price before you commit</span>
             </div>
-          </div>
-          <div className={styles.heroVisual}>
+          </Reveal>
+          <Reveal className={styles.heroVisual} delay={140}>
             <div className={styles.heroVisualHead}>
               <span>Ajani / system preview</span>
               <em><i aria-hidden="true" />Assembling</em>
@@ -77,20 +78,23 @@ export default function Home() {
             <div className={styles.heroVisualBody}>
               <SystemAnimation />
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
+      {/* Bands 2 to 5 all sit on the same light ground. One continuous body,
+          so scrolling never flips between grounds. */}
+
       {/* Band 2 — recognition, not a fork: no per-card links */}
       <section className={styles.section}>
-        <div className={styles.sectionHead}>
+        <Reveal className={styles.sectionHead}>
           <p className={styles.label}>Where it usually goes wrong</p>
           <h2>Three places good work <em>quietly slips.</em></h2>
           <p>Most businesses lose the same three moments. If one of these sounds like yours, that is the note to record.</p>
-        </div>
+        </Reveal>
         <div className={styles.routes}>
-          {routes.map((route) => (
-            <article className={styles.route} key={route.number}>
+          {routes.map((route, index) => (
+            <Reveal as="article" className={styles.route} delay={index * 90} key={route.number}>
               <div className={styles.routeHead}>
                 <p className={styles.label}>{route.kicker}</p>
                 <b>{route.number}</b>
@@ -100,68 +104,68 @@ export default function Home() {
               <div className={styles.routeFlow}>
                 <span>Understand</span><i>→</i><span>Route</span><i>→</i><span>Resolve</span>
               </div>
-            </article>
+            </Reveal>
           ))}
         </div>
-        <div className={styles.sectionCta}>
+        <Reveal className={styles.sectionCta} delay={120}>
           <Link className={styles.ghostCta} href="/record">Record your note <span aria-hidden="true">→</span></Link>
-        </div>
+        </Reveal>
       </section>
 
       {/* Band 3 — one selector covering every kind of business, no extra links */}
       <section className={styles.section}>
-        <div className={styles.sectionHead}>
+        <Reveal className={styles.sectionHead}>
           <p className={styles.label}>Who this is for</p>
           <h2>Different businesses, <em>the same gap.</em></h2>
           <p>Pick the one closest to yours. The work is different; the moment it slips is not.</p>
-        </div>
-        <AudiencePicker />
+        </Reveal>
+        <Reveal delay={110}>
+          <AudiencePicker />
+        </Reveal>
       </section>
 
-      {/* Band 4 — the product, moving */}
-      <section className={styles.showcase}>
-        <div className={styles.showcaseInner}>
-          <div className={styles.sectionHead}>
-            <p className={styles.label}>A system, running</p>
-            <h2>This is what we <em>actually hand over.</em></h2>
-            <p>An after-hours lead, from the moment it arrives to the moment your team knows what to do about it.</p>
-          </div>
-          <div className={styles.showcaseBody}>
-            <InlineAutomation />
-          </div>
-        </div>
+      {/* Band 4 — the product, moving. Light ground, dark instrument on it. */}
+      <section className={styles.section}>
+        <Reveal className={styles.sectionHead}>
+          <p className={styles.label}>A system, running</p>
+          <h2>This is what we <em>actually hand over.</em></h2>
+          <p>An after-hours lead, from the moment it arrives to the moment your team knows what to do about it.</p>
+        </Reveal>
+        <Reveal className={styles.showcaseBody} delay={110}>
+          <InlineAutomation />
+        </Reveal>
       </section>
 
       {/* Band 5 — what happens after the memo */}
       <section className={styles.section} id="how">
-        <div className={styles.sectionHead}>
+        <Reveal className={styles.sectionHead}>
           <p className={styles.label}>After you send it</p>
           <h2>You will know exactly <em>what happens next.</em></h2>
           <p>No black box, no long discovery process. Four steps, and you can stop at any of them.</p>
-        </div>
+        </Reveal>
         <div className={styles.steps}>
-          {stages.map((stage) => (
-            <article className={styles.step} key={stage.title}>
+          {stages.map((stage, index) => (
+            <Reveal as="article" className={styles.step} delay={index * 85} key={stage.title}>
               <p className={styles.stepWhen}>{stage.when}</p>
               <h3>{stage.title}</h3>
               <p>{stage.detail}</p>
-            </article>
+            </Reveal>
           ))}
         </div>
       </section>
 
-      {/* Band 6 — the close */}
+      {/* Band 6 — dark again. The close mirrors the hero. */}
       <section className={styles.close}>
         <div className={styles.closeInner}>
-          <div className={styles.closeCopy}>
+          <Reveal className={styles.closeCopy}>
             <p className={styles.label}>Start here</p>
             <h2>The system you keep meaning to build. <em>Just say it out loud.</em></h2>
             <p>You do not need to know what the automation should be. That is the part we work out for you.</p>
             <Link className={styles.primaryCta} href="/record">
               Record a note <span aria-hidden="true">→</span>
             </Link>
-          </div>
-          <aside className={styles.priceCard}>
+          </Reveal>
+          <Reveal as="aside" className={styles.priceCard} delay={130}>
             <p className={styles.label}>What it costs</p>
             <div className={styles.priceRow}>
               <div className={styles.priceItem}><span>Typical build</span><b>$2,400 – $3,800</b></div>
@@ -169,7 +173,7 @@ export default function Home() {
               <div className={styles.priceItem}><span>You pay</span><b>After you approve</b></div>
             </div>
             <small>Nothing is charged until the scope is agreed in writing.</small>
-          </aside>
+          </Reveal>
         </div>
       </section>
 
