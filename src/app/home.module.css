@@ -177,35 +177,6 @@
 }
 .heroMeta i { color: #8fc7b7; font-style: normal; }
 
-/* ---------- band 2: proof ---------- */
-.proof { padding: 34px 0; background: var(--paper); border-bottom: 1px solid var(--line); }
-.proofInner {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  width: var(--shell-width);
-  margin: 0 auto;
-}
-
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--pearl);
-}
-.stat b {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -.05em;
-  color: var(--crimson);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.stat span { color: var(--quiet); font-size: 13.5px; line-height: 1.35; }
-
 /* ---------- shared section chrome ---------- */
 .section { width: var(--shell-width); margin: 0 auto; padding: 72px 0; }
 .sectionHead { max-width: 60ch; }
@@ -392,7 +363,6 @@
   .heroInner, .closeInner { grid-template-columns: 1fr; gap: 40px; }
   .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .proofInner { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
@@ -402,5 +372,4 @@
   .routes, .steps { grid-template-columns: 1fr; }
   .headerNav { gap: 12px; }
   .headerLink { display: none; }
-  .stat b { font-size: 26px; }
 }

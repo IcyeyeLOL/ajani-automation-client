@@ -24,14 +24,6 @@ const routes = [
   },
 ];
 
-// Commitments, not metrics. Swap these for real client outcomes as soon as
-// there are numbers we can stand behind on a call.
-const promises = [
-  ["7–10 days", "from voice note to a live system"],
-  ["One question", "before we build anything"],
-  ["30 days", "of refinement after launch"],
-];
-
 const stages = [
   { when: "Now", title: "You talk", detail: "Two minutes about the work that keeps slipping. No forms, no brief to write." },
   { when: "1 day", title: "One question", detail: "We ask the single thing that changes the shape of the system — nothing else." },
@@ -88,19 +80,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 2 — what we commit to, until there are real outcome numbers */}
-      <section className={styles.proof}>
-        <div className={styles.proofInner}>
-          {promises.map(([value, caption]) => (
-            <div className={styles.stat} key={value}>
-              <b>{value}</b>
-              <span>{caption}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Band 3 — recognition, not a fork: no per-card links */}
+      {/* Band 2 — recognition, not a fork: no per-card links */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <p className={styles.label}>Where it usually goes wrong</p>
@@ -127,7 +107,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 4 — the product, moving */}
+      {/* Band 3 — the product, moving */}
       <section className={styles.showcase}>
         <div className={styles.showcaseInner}>
           <div className={styles.sectionHead}>
@@ -141,7 +121,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 5 — what happens after the memo */}
+      {/* Band 4 — what happens after the memo */}
       <section className={styles.section} id="how">
         <div className={styles.sectionHead}>
           <p className={styles.label}>After you send it</p>
@@ -159,7 +139,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 6 — the close */}
+      {/* Band 5 — the close */}
       <section className={styles.close}>
         <div className={styles.closeInner}>
           <div className={styles.closeCopy}>
