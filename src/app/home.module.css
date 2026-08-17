@@ -1,8 +1,12 @@
 .shell {
   --shell-width: min(1240px, calc(100% - 72px));
   --panel-edge: #423936;
+  /* The light body is pure white. Cards keep a faint warm tint so the page
+     still reads as part of a warm palette rather than going clinical. */
+  --ground-light: #ffffff;
+  --card: #fbfaf7;
   min-height: 100vh;
-  background: var(--pearl);
+  background: var(--ground-light);
   font-family: var(--font-display), system-ui, sans-serif;
 }
 
@@ -207,7 +211,7 @@
   padding: 22px 24px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--paper);
+  background: var(--card);
   transition: border-color .24s ease, transform .24s var(--ease-standard), box-shadow .24s ease;
 }
 .route:hover {
@@ -277,7 +281,7 @@
   margin-top: 34px;
 }
 
-.step { padding: 22px 20px; border-top: 3px solid var(--sand); background: var(--paper); border-radius: 0 0 14px 14px; }
+.step { padding: 22px 20px; border-top: 3px solid var(--sand); background: var(--card); border-radius: 0 0 14px 14px; }
 .step:nth-child(2) { border-top-color: #a4763f; }
 .step:nth-child(3) { border-top-color: var(--crimson); }
 .step:nth-child(4) { border-top-color: var(--success); }

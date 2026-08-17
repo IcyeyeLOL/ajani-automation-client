@@ -14,7 +14,7 @@
   padding: 0 17px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--paper);
+  background: var(--card, #fbfaf7);
   color: var(--quiet);
   cursor: pointer;
   font-family: var(--font-display), system-ui, sans-serif;
@@ -58,7 +58,7 @@
   border-radius: 18px;
   background:
     linear-gradient(150deg, rgba(189, 150, 112, .16), rgba(121, 0, 24, .06)),
-    var(--paper);
+    var(--card, #fbfaf7);
 }
 
 .shotBadge {
