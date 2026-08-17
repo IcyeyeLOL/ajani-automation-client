@@ -1,0 +1,151 @@
+.picker { margin-top: 32px; }
+
+/* ---------- the selector ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  min-height: 42px;
+  padding: 0 17px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--quiet);
+  cursor: pointer;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s var(--ease-standard);
+}
+
+.tab:hover { border-color: var(--sand-deep); color: var(--text); transform: translateY(-2px); }
+.tab:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
+
+.tab[aria-selected="true"] {
+  border-color: var(--crimson);
+  background: var(--crimson);
+  color: #fff;
+}
+
+/* ---------- the panel ---------- */
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+  align-items: center;
+  gap: 44px;
+  padding-top: 34px;
+  animation: panel-in .34s var(--ease-standard) both;
+}
+.panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
+
+/* ---------- image slot ---------- */
+.shot { margin: 0; }
+
+.shotFrame {
+  display: grid;
+  align-content: end;
+  gap: 10px;
+  aspect-ratio: 4 / 3;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    linear-gradient(150deg, rgba(189, 150, 112, .16), rgba(121, 0, 24, .06)),
+    var(--paper);
+}
+
+.shotBadge {
+  justify-self: start;
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--sand);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.shotFrame p {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--sand-deep);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* ---------- copy ---------- */
+.copy h3 {
+  margin: 0;
+  font-size: clamp(24px, 2.5vw, 33px);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+}
+
+.problem { margin: 16px 0 0; color: var(--quiet); font-size: 16px; line-height: 1.5; }
+
+.system {
+  margin: 18px 0 0;
+  padding-left: 16px;
+  border-left: 3px solid var(--sand);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+.route span { display: inline-flex; align-items: center; }
+/* the arrow lives inside its span, so it needs its own breathing room */
+.route i { margin-left: 9px; color: var(--crimson); font-style: normal; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .tab { transition: none; }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .panel { grid-template-columns: 1fr; gap: 28px; }
+  .shotFrame { aspect-ratio: 16 / 9; }
+}
+
+@media (max-width: 620px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 20px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab { flex: 0 0 auto; scroll-snap-align: start; font-size: 13.5px; }
+  .panel { padding-top: 26px; }
+  .shotFrame { aspect-ratio: 3 / 2; padding: 18px; }
+}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AudiencePicker } from "@/components/home/audience-picker";
 import { InlineAutomation } from "@/components/home/inline-automation";
 import { SystemAnimation } from "@/components/home/system-animation";
 import styles from "./home.module.css";
@@ -107,7 +108,17 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 3 — the product, moving */}
+      {/* Band 3 — one selector covering every kind of business, no extra links */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <p className={styles.label}>Who this is for</p>
+          <h2>Different businesses, <em>the same gap.</em></h2>
+          <p>Pick the one closest to yours. The work is different; the moment it slips is not.</p>
+        </div>
+        <AudiencePicker />
+      </section>
+
+      {/* Band 4 — the product, moving */}
       <section className={styles.showcase}>
         <div className={styles.showcaseInner}>
           <div className={styles.sectionHead}>
@@ -121,7 +132,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 4 — what happens after the memo */}
+      {/* Band 5 — what happens after the memo */}
       <section className={styles.section} id="how">
         <div className={styles.sectionHead}>
           <p className={styles.label}>After you send it</p>
@@ -139,7 +150,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 5 — the close */}
+      {/* Band 6 — the close */}
       <section className={styles.close}>
         <div className={styles.closeInner}>
           <div className={styles.closeCopy}>
