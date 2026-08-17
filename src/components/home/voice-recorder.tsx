@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SystemAnimation } from "./system-animation";
 import { LiveWaveform } from "./live-waveform";
 import styles from "./voice-recorder.module.css";
 
@@ -100,9 +99,11 @@ export function VoiceRecorder({ id }: { id?: string }) {
         <b className={styles.timer}>{clock(seconds)}</b>
       </header>
 
-      <div className={styles.visual}>
-        {recording ? <LiveWaveform stream={liveStream} /> : <SystemAnimation />}
-      </div>
+      {recording ? (
+        <div className={styles.visual}>
+          <LiveWaveform stream={liveStream} />
+        </div>
+      ) : null}
 
       <div className={styles.stage}>
         <button aria-label={label} className={styles.record} onClick={start} type="button">

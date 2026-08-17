@@ -1,0 +1,153 @@
+.shell {
+  --shell-width: min(1180px, calc(100% - 72px));
+  --panel-edge: #423936;
+  min-height: 100vh;
+  background: var(--ink);
+  color: var(--pearl);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.label {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--sand);
+}
+
+/* ---------- header ---------- */
+.header { border-bottom: 1px solid #2f2827; }
+.headerInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: var(--shell-width);
+  margin: 0 auto;
+  padding: 18px 0;
+}
+.brand { color: var(--pearl); font-size: 21px; font-weight: 700; letter-spacing: -.06em; }
+.brand i { color: var(--sand); font-style: normal; }
+.back {
+  color: #b3a79f;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .05em;
+  transition: color .18s ease;
+}
+.back:hover { color: var(--pearl); }
+
+/* ---------- the recorder stage ---------- */
+.stage { background: radial-gradient(115% 85% at 15% 0%, #241d1f 0%, #171515 60%); }
+.stageInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, .92fr);
+  align-items: center;
+  gap: 60px;
+  width: var(--shell-width);
+  margin: 0 auto;
+  padding: 66px 0 74px;
+}
+
+.intro h1 {
+  margin: 16px 0 0;
+  font-size: clamp(38px, 4.2vw, 60px);
+  font-weight: 600;
+  line-height: .97;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+.intro h1 em { font-style: normal; color: var(--sand); }
+
+.lede {
+  max-width: 48ch;
+  margin: 20px 0 0;
+  color: #c3b7b1;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.covers { display: grid; gap: 0; margin: 30px 0 0; padding: 0; list-style: none; }
+.covers li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid #362e2c;
+}
+.covers b {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .06em;
+  color: var(--sand);
+}
+.covers strong { display: block; font-size: 15.5px; font-weight: 600; letter-spacing: -.015em; }
+.covers span { display: block; margin-top: 5px; color: #a99c96; font-size: 13.5px; line-height: 1.4; }
+
+.reassure { margin: 22px 0 0; color: #a2958f; font-size: 13.5px; }
+.reassure a { color: var(--sand); text-decoration: underline; text-underline-offset: 3px; }
+.reassure a:hover { color: var(--pearl); }
+
+.recorderColumn { display: grid; }
+
+/* ---------- what happens next ---------- */
+.after { border-top: 1px solid #2f2827; background: var(--ink); }
+.afterInner { width: var(--shell-width); margin: 0 auto; padding: 54px 0 66px; }
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 24px;
+}
+.timeline article {
+  padding: 22px 22px 24px;
+  border: 1px solid var(--panel-edge);
+  border-top: 3px solid var(--sand);
+  border-radius: 0 0 14px 14px;
+  background: #1e1a19;
+}
+.timeline article:nth-child(2) { border-top-color: #a4763f; }
+.timeline article:nth-child(3) { border-top-color: var(--success); }
+
+.when {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #a99c96;
+}
+.timeline h2 { margin: 13px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+.timeline article p:last-child { margin: 9px 0 0; color: #a99c96; font-size: 14px; line-height: 1.45; }
+
+/* ---------- footer ---------- */
+.footer { border-top: 1px solid #2f2827; }
+.footerInner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 26px;
+  width: var(--shell-width);
+  margin: 0 auto;
+  padding: 24px 0 32px;
+}
+.footerInner a, .footerInner span { color: #9d918b; font-size: 13px; }
+.footerInner a:hover { color: var(--pearl); }
+.footerLinks { display: flex; flex-wrap: wrap; gap: 18px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1040px) {
+  .shell { --shell-width: min(100% - 48px, 1180px); }
+  .stageInner { grid-template-columns: 1fr; gap: 40px; padding: 48px 0 56px; }
+  .timeline { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .shell { --shell-width: min(100% - 32px, 1180px); }
+  .stageInner { padding: 36px 0 44px; }
+  .afterInner { padding: 40px 0 48px; }
+}

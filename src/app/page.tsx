@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { InlineAutomation } from "@/components/home/inline-automation";
-import { VoiceRecorder } from "@/components/home/voice-recorder";
+import { SystemAnimation } from "@/components/home/system-animation";
 import styles from "./home.module.css";
 
 const routes = [
@@ -48,30 +48,43 @@ export default function Home() {
           <nav className={styles.headerNav}>
             <Link className={styles.headerLink} href="/stories">Stories</Link>
             <Link className={styles.headerLink} href="/portal">Sign in</Link>
-            <a className={styles.headerCta} href="#record">Record a note</a>
+            <Link className={styles.headerCta} href="/record">Record a note</Link>
           </nav>
         </div>
       </header>
 
-      {/* Band 1 — the proposition and the control, side by side */}
+      {/* Band 1 — the proposition, with the system assembling beside it */}
       <section className={styles.hero}>
         <div className={styles.heroInner}>
           <div className={styles.heroCopy}>
             <p className={styles.label}>Done-for-you automation</p>
             <h1>Tell us where the work sticks. <em>We build the system.</em></h1>
             <p>
-              Ajani builds operational systems for small businesses. Record a two-minute
-              voice note about the part of the work that keeps slipping — we turn it into
-              a system that handles it, and you approve the scope and price before
-              anything gets built.
+              Ajani builds operational systems for small businesses. Tell us about the
+              part of the work that keeps slipping — we turn it into a system that
+              handles it, and you approve the scope and price before anything gets built.
             </p>
+            <div className={styles.heroActions}>
+              <Link className={styles.primaryCta} href="/record">
+                Record a note <span aria-hidden="true">→</span>
+              </Link>
+              <a className={styles.secondaryCta} href="#how">See how it works</a>
+            </div>
             <div className={styles.heroMeta}>
+              <span><i>✓</i> Takes two minutes</span>
               <span><i>✓</i> No account to start</span>
               <span><i>✓</i> Price before you commit</span>
-              <span><i>✓</i> Built for you, not by you</span>
             </div>
           </div>
-          <VoiceRecorder id="record" />
+          <div className={styles.heroVisual}>
+            <div className={styles.heroVisualHead}>
+              <span>Ajani / system preview</span>
+              <em><i aria-hidden="true" />Assembling</em>
+            </div>
+            <div className={styles.heroVisualBody}>
+              <SystemAnimation />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -110,7 +123,7 @@ export default function Home() {
           ))}
         </div>
         <div className={styles.sectionCta}>
-          <a className={styles.ghostCta} href="#record">Record your note <span aria-hidden="true">→</span></a>
+          <Link className={styles.ghostCta} href="/record">Record your note <span aria-hidden="true">→</span></Link>
         </div>
       </section>
 
@@ -129,7 +142,7 @@ export default function Home() {
       </section>
 
       {/* Band 5 — what happens after the memo */}
-      <section className={styles.section}>
+      <section className={styles.section} id="how">
         <div className={styles.sectionHead}>
           <p className={styles.label}>After you send it</p>
           <h2>You will know exactly <em>what happens next.</em></h2>
@@ -146,20 +159,26 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 6 — the same control, once more */}
+      {/* Band 6 — the close */}
       <section className={styles.close}>
         <div className={styles.closeInner}>
           <div className={styles.closeCopy}>
             <p className={styles.label}>Start here</p>
             <h2>The system you keep meaning to build. <em>Just say it out loud.</em></h2>
             <p>You do not need to know what the automation should be. That is the part we work out for you.</p>
+            <Link className={styles.primaryCta} href="/record">
+              Record a note <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+          <aside className={styles.priceCard}>
+            <p className={styles.label}>What it costs</p>
             <div className={styles.priceRow}>
               <div className={styles.priceItem}><span>Typical build</span><b>$2,400 – $3,800</b></div>
               <div className={styles.priceItem}><span>Time to live</span><b>7–10 days</b></div>
-              <div className={styles.priceItem}><span>You pay</span><b>After you approve the scope</b></div>
+              <div className={styles.priceItem}><span>You pay</span><b>After you approve</b></div>
             </div>
-          </div>
-          <VoiceRecorder />
+            <small>Nothing is charged until the scope is agreed in writing.</small>
+          </aside>
         </div>
       </section>
 
@@ -169,7 +188,7 @@ export default function Home() {
           <div className={styles.footerLinks}>
             <Link href="/stories">Stories</Link>
             <Link href="/portal">Client portal</Link>
-            <a href="#record">Record a note</a>
+            <Link href="/record">Record a note</Link>
           </div>
         </div>
       </footer>
