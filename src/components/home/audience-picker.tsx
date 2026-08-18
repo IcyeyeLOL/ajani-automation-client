@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import styles from "./audience-picker.module.css";
 
@@ -9,8 +10,6 @@ type Audience = {
   tab: string;
   headline: string;
   problem: string;
-  system: string;
-  route: [string, string, string];
   /**
    * Path under /public once real photography exists for this business type.
    * Leave it out and the card is the thread alone — the layout works either
@@ -41,9 +40,7 @@ const audiences: Audience[] = [
     headline: "The quote that never got followed up.",
     problem:
       "Someone asks for a price on a Friday afternoon. You mean to chase it Monday, the week fills up, and the job quietly goes to whoever answered first.",
-    system: "Ajani replies while the enquiry is warm, captures what the job actually is, and puts the quote back in front of you when it needs a decision.",
-    route: ["Enquiry", "Quote sent", "Chased"],
-    photo: "/audiences/home-services.png",
+    photo: "/audiences/home-services.jpg",
     photoAlt: "A business owner at a desk, working through an enquiry on a laptop",
     thread: {
       stamp: "Fri 16:52",
@@ -60,8 +57,6 @@ const audiences: Audience[] = [
     headline: "The appointment nobody confirmed.",
     problem:
       "Bookings come in across phone, email and the website. Reminders go out when someone remembers, and the no-shows are the ones that never got a second touch.",
-    system: "Ajani confirms, reminds, and reschedules in one thread, and tells your front desk only about the ones that need a person.",
-    route: ["Booking", "Confirmed", "Reminded"],
     thread: {
       stamp: "Tue 19:20",
       source: "Missed call",
@@ -77,8 +72,6 @@ const audiences: Audience[] = [
     headline: "The client who just stopped coming.",
     problem:
       "A regular drifts off after eight weeks. There is no list of who is overdue, so the rebooking depends on whether someone happens to notice.",
-    system: "Ajani watches the gap since the last visit and sends a genuinely timed nudge, with the reason it is being sent attached.",
-    route: ["Last visit", "Gap noticed", "Rebooked"],
     thread: {
       stamp: "Week nine",
       source: "No booking since 12 June",
@@ -94,8 +87,6 @@ const audiences: Audience[] = [
     headline: "The kickoff that started from scratch.",
     problem:
       "You had the whole conversation in the sales call. Then delivery asks the client the same questions again, and the relationship starts on the back foot.",
-    system: "Ajani carries the context from first contact into the project brief, so the team starts knowing what you already know.",
-    route: ["Call", "Brief built", "Team briefed"],
     thread: {
       stamp: "Mon 11:04",
       source: "Proposal accepted",
@@ -111,8 +102,6 @@ const audiences: Audience[] = [
     headline: "The enquiry answered four hours late.",
     problem:
       "Portal leads arrive in bulk at all hours. The first agent to reply usually gets the viewing, and by the evening the good ones are already booked elsewhere.",
-    system: "Ajani answers immediately with the detail they asked for, qualifies the timeline, and hands you the ones worth your Saturday.",
-    route: ["Portal lead", "Answered", "Viewing booked"],
     thread: {
       stamp: "Sat 07:41",
       source: "Portal enquiry",
@@ -128,8 +117,6 @@ const audiences: Audience[] = [
     headline: "The day that got rearranged by phone.",
     problem:
       "A job overruns, two customers need moving, and the whole afternoon becomes a string of calls made from a van between sites.",
-    system: "Ajani tells the affected customers, offers the next real slot, and updates the day without you touching the phone.",
-    route: ["Overrun", "Customers told", "Day rebuilt"],
     thread: {
       stamp: "Wed 14:15",
       source: "Job overran",
@@ -191,10 +178,10 @@ export function AudiencePicker() {
         role="tabpanel"
         tabIndex={0}
       >
-        {/* With a photo the left column is the photo alone, stretched to the
-            height the copy needs, and the thread moves under the copy. Without
-            one the thread takes the left column, as it did before any
-            photography existed. Both columns stay the same height either way. */}
+        {/* The photo keeps the shape it was shot in — a fixed 4:3 frame rather
+            than one stretched to match the copy, which cropped both sides off.
+            Where there is no photo yet the example takes the left column, so
+            the panel is the same two-column shape either way. */}
         {current.photo ? (
           <figure className={styles.shotPhoto}>
             <Image
@@ -205,45 +192,36 @@ export function AudiencePicker() {
             />
           </figure>
         ) : (
-          <Thread thread={current.thread} />
+          <Example thread={current.thread} />
         )}
 
         <div className={styles.copy}>
           <h3>{current.headline}</h3>
           <p className={styles.problem}>{current.problem}</p>
-          <p className={styles.system}>{current.system}</p>
-          <div className={styles.route}>
-            {current.route.map((step, index) => (
-              <span key={step}>
-                {step}
-                {index < current.route.length - 1 ? <i aria-hidden="true">→</i> : null}
-              </span>
-            ))}
-          </div>
-          {current.photo ? <Thread thread={current.thread} /> : null}
+          {current.photo ? <Example thread={current.thread} /> : null}
+          <Link className={styles.panelCta} href="/record">
+            Record a note about this <span aria-hidden="true">→</span>
+          </Link>
         </div>
       </div>
     </div>
   );
 }
 
-function Thread({ thread }: { thread: Audience["thread"] }) {
+function Example({ thread }: { thread: Audience["thread"] }) {
   return (
-    <figure className={styles.shot}>
-      <figcaption className={styles.shotHead}>
-        <span className={styles.shotTag}>Example</span>
-        <span className={styles.shotStamp}>{thread.stamp} · {thread.source}</span>
+    <figure className={styles.example}>
+      <figcaption>
+        <b>Example</b>
+        <span>{thread.stamp} · {thread.source}</span>
       </figcaption>
-      <div className={styles.thread}>
-        <div className={`${styles.bubble} ${styles.inbound}`}>
-          <p>{thread.kind === "message" ? `\u201c${thread.inbound}\u201d` : thread.inbound}</p>
-          <span>{thread.kind === "message" ? "Incoming" : "Nobody wrote in — Ajani noticed"}</span>
-        </div>
-        <div className={`${styles.bubble} ${styles.outbound}`}>
-          <p>{thread.out}</p>
-          <span>{thread.outTo}</span>
-        </div>
-      </div>
+      <p className={styles.exampleIn}>
+        {thread.kind === "message" ? `\u201c${thread.inbound}\u201d` : thread.inbound}
+      </p>
+      <p className={styles.exampleOut}>
+        {thread.out}
+        <span>{thread.outTo}</span>
+      </p>
     </figure>
   );
 }
