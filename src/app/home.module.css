@@ -177,33 +177,50 @@
 }
 .heroMeta i { color: #8fc7b7; font-style: normal; }
 
-/* ---------- shared section chrome ---------- */
-.section { width: var(--shell-width); margin: 0 auto; padding: 72px 0; }
-.sectionHead { max-width: 60ch; }
+/* ---------- shared section chrome ----------
+   Every light band opens with the same head: the title on the left, the
+   supporting line and any action on the right. Stacked in one narrow column
+   the page collapsed into a left-hand strip and left the right half of the
+   canvas empty for the whole scroll; side by side it keeps the width the
+   hero establishes. The rule above each head is what marks a new band now
+   that the ground no longer changes colour. */
+.section { width: var(--shell-width); margin: 0 auto; padding: 46px 0; scroll-margin-top: 84px; }
+.sectionEnd { padding-bottom: 78px; }
+
+.sectionHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, .94fr);
+  align-items: end;
+  gap: 20px 56px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+}
 .sectionHead .label { color: var(--sand-deep); }
-.sectionHead h2 {
+.headMain h2 {
   margin: 13px 0 0;
-  font-size: clamp(30px, 3.4vw, 46px);
+  font-size: clamp(30px, 3.2vw, 44px);
   font-weight: 600;
   line-height: 1;
   letter-spacing: -.05em;
   text-wrap: balance;
 }
-.sectionHead h2 em { font-style: normal; color: var(--crimson); }
-.sectionHead > p { margin: 16px 0 0; color: var(--quiet); font-size: 17px; line-height: 1.5; }
+.headMain h2 em { font-style: normal; color: var(--crimson); }
 
-/* ---------- band 3: routes ---------- */
+.headAside { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-bottom: 5px; }
+.headAside p { max-width: 46ch; margin: 0; color: var(--quiet); font-size: 16.5px; line-height: 1.5; }
+
+/* ---------- band 2: routes ---------- */
 .routes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
-  margin-top: 34px;
+  margin-top: 38px;
 }
 
 .route {
   display: flex;
   flex-direction: column;
-  min-height: 210px;
+  min-height: 186px;
   padding: 22px 24px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -221,7 +238,7 @@
 .routeHead b { font-family: var(--font-mono), ui-monospace, monospace; font-size: 11px; color: var(--sand-deep); }
 
 .route h3 {
-  margin: 26px 0 0;
+  margin: 22px 0 0;
   font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
@@ -242,16 +259,17 @@
   text-transform: uppercase;
   color: var(--quiet);
 }
-.routeFlow i { color: var(--sand-deep); font-style: normal; }
-
-.sectionCta { display: flex; justify-content: center; margin-top: 30px; }
+/* the arrow sits inside its span, so the flex gap does not separate it from
+   the word it follows — it needs its own margin */
+.routeFlow span { display: inline-flex; align-items: center; }
+.routeFlow i { margin-left: 8px; color: var(--sand-deep); font-style: normal; }
 
 .ghostCta {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  min-height: 48px;
-  padding: 0 22px;
+  min-height: 46px;
+  padding: 0 20px;
   border: 1px solid var(--crimson);
   border-radius: 10px;
   background: transparent;
@@ -263,18 +281,12 @@
 }
 .ghostCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
 
-/* ---------- band 4: automation ----------
-   The band itself is light like the rest of the body; the dark instrument
-   panel sits on it. Fewer background flips while scrolling, and the ink
-   surface still does its job by contrast rather than by taking the whole row. */
-.showcaseBody { margin-top: 34px; }
-
-/* ---------- band 5: process ---------- */
+/* ---------- band 4: process ---------- */
 .steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 13px;
-  margin-top: 34px;
+  margin-top: 38px;
 }
 
 .step { padding: 22px 20px; border-top: 3px solid var(--sand); background: var(--paper); border-radius: 0 0 14px 14px; }
@@ -292,7 +304,7 @@
 .step h3 { margin: 14px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
 .step p { margin: 9px 0 0; color: var(--quiet); font-size: 14px; line-height: 1.45; }
 
-/* ---------- band 6: close ---------- */
+/* ---------- band 5: close ---------- */
 .close { background: radial-gradient(110% 90% at 80% 0%, #241d1f 0%, #171515 60%); color: var(--pearl); }
 .closeInner {
   display: grid;
@@ -359,6 +371,7 @@
 @media (max-width: 1040px) {
   .shell { --shell-width: min(100% - 48px, 1240px); }
   .heroInner, .closeInner { grid-template-columns: 1fr; gap: 40px; }
+  .sectionHead { grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -366,7 +379,10 @@
 @media (max-width: 620px) {
   .shell { --shell-width: min(100% - 32px, 1240px); }
   .hero { padding: 40px 0 48px; }
-  .section, .closeInner { padding: 48px 0; }
+  .section { padding: 34px 0; }
+  .sectionEnd { padding-bottom: 54px; }
+  .closeInner { padding: 48px 0; }
+  .sectionHead { padding-top: 24px; }
   .routes, .steps { grid-template-columns: 1fr; }
   .headerNav { gap: 12px; }
   .headerLink { display: none; }

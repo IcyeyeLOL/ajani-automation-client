@@ -25,7 +25,7 @@
   transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s var(--ease-standard);
 }
 
-.tab:hover { border-color: var(--sand-deep); color: var(--text); transform: translateY(-2px); }
+.tab:hover { border-color: var(--sand-deep); color: var(--ink); transform: translateY(-2px); }
 .tab:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
 
 .tab[aria-selected="true"] {
@@ -37,50 +37,83 @@
 /* ---------- the panel ---------- */
 .panel {
   display: grid;
-  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
-  align-items: center;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  align-items: start;
   gap: 44px;
   padding-top: 34px;
   animation: panel-in .34s var(--ease-standard) both;
 }
 .panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
 
-/* ---------- image slot ---------- */
-.shot { margin: 0; }
-
-.shotFrame {
-  display: grid;
-  align-content: end;
-  gap: 10px;
-  aspect-ratio: 4 / 3;
-  padding: 22px;
+/* ---------- the worked example ----------
+   This slot used to be an empty photo frame captioned with a description of
+   the photograph that should go there. With no image behind it, it read as a
+   broken one. A short thread shows the same moment and shows the product
+   handling it, so the slot carries its own weight until real photography
+   exists. Everything in it is illustrative, and labelled as such. */
+.shot {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background:
-    linear-gradient(150deg, rgba(189, 150, 112, .16), rgba(121, 0, 24, .06)),
-    var(--paper);
+  background: var(--paper);
+  box-shadow: 0 16px 34px rgba(38, 28, 23, .07);
 }
 
-.shotBadge {
-  justify-self: start;
-  padding: 4px 9px;
-  border-radius: 5px;
-  background: var(--ink);
-  color: var(--sand);
+.shotHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(189, 150, 112, .09);
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: .08em;
+  font-size: 10.5px;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 
-.shotFrame p {
-  margin: 0;
-  max-width: 34ch;
-  color: var(--sand-deep);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 12.5px;
-  line-height: 1.45;
+.shotTag {
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--sand);
 }
+.shotStamp { color: var(--sand-deep); text-align: right; }
+
+.thread { display: grid; gap: 14px; padding: 20px 18px 22px; }
+
+.bubble { max-width: 92%; padding: 14px 16px; border-radius: 14px; }
+.bubble p { margin: 0; font-size: 14.5px; line-height: 1.45; }
+.bubble span {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.inbound {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 5px;
+  background: #fff;
+  color: var(--ink);
+}
+.inbound span { color: var(--quiet); }
+
+/* the reply is the product speaking, so it takes the ink surface */
+.outbound {
+  justify-self: end;
+  border-bottom-right-radius: 5px;
+  background: var(--ink);
+  color: var(--pearl);
+}
+.outbound span { color: var(--sand); }
 
 /* ---------- copy ---------- */
 .copy h3 {
@@ -98,7 +131,7 @@
   margin: 18px 0 0;
   padding-left: 16px;
   border-left: 3px solid var(--sand);
-  color: var(--text);
+  color: var(--ink);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -134,7 +167,6 @@
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .panel { grid-template-columns: 1fr; gap: 28px; }
-  .shotFrame { aspect-ratio: 16 / 9; }
 }
 
 @media (max-width: 620px) {
@@ -147,5 +179,6 @@
   }
   .tab { flex: 0 0 auto; scroll-snap-align: start; font-size: 13.5px; }
   .panel { padding-top: 26px; }
-  .shotFrame { aspect-ratio: 3 / 2; padding: 18px; }
+  .thread { padding: 16px 14px 18px; }
+  .bubble { max-width: 96%; }
 }

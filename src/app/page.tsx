@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { AudiencePicker } from "@/components/home/audience-picker";
-import { InlineAutomation } from "@/components/home/inline-automation";
 import { Reveal } from "@/components/home/reveal";
 import { SystemAnimation } from "@/components/home/system-animation";
 import styles from "./home.module.css";
@@ -11,18 +10,21 @@ const routes = [
     kicker: "Lead response",
     title: "Reply while the intent is still alive.",
     detail: "An enquiry that lands at 9pm gets a useful answer before it goes cold, and you still see every thread.",
+    flow: ["Enquiry", "Answered", "Booked"],
   },
   {
     number: "02",
     kicker: "Client handoff",
     title: "Keep the context attached to the work.",
     detail: "Notes, files, and decisions travel with the job, so nobody restarts a conversation you already had.",
+    flow: ["Job won", "Brief built", "Team ready"],
   },
   {
     number: "03",
     kicker: "Returning clients",
     title: "Make follow-up feel timely, not random.",
     detail: "The moment a past client is worth reaching out to, the reason is already written down for you.",
+    flow: ["Signal", "Reason", "Outreach"],
   },
 ];
 
@@ -82,15 +84,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Bands 2 to 5 all sit on the same light ground. One continuous body,
-          so scrolling never flips between grounds. */}
+      {/* Bands 2 to 4 share one light ground, so scrolling never flips between
+          grounds. Each opens with the same two-column head — title left, the
+          supporting line and any action right — so the page keeps using its
+          full width instead of narrowing into a left-hand column. */}
 
       {/* Band 2 — recognition, not a fork: no per-card links */}
       <section className={styles.section}>
         <Reveal className={styles.sectionHead}>
-          <p className={styles.label}>Where it usually goes wrong</p>
-          <h2>Three places good work <em>quietly slips.</em></h2>
-          <p>Most businesses lose the same three moments. If one of these sounds like yours, that is the note to record.</p>
+          <div className={styles.headMain}>
+            <p className={styles.label}>Where it usually goes wrong</p>
+            <h2>Three places good work <em>quietly slips.</em></h2>
+          </div>
+          <div className={styles.headAside}>
+            <p>Most businesses lose the same three moments. If one of these sounds like yours, that is the note to record.</p>
+            <Link className={styles.ghostCta} href="/record">Record your note <span aria-hidden="true">→</span></Link>
+          </div>
         </Reveal>
         <div className={styles.routes}>
           {routes.map((route, index) => (
@@ -102,46 +111,44 @@ export default function Home() {
               <h3>{route.title}</h3>
               <p>{route.detail}</p>
               <div className={styles.routeFlow}>
-                <span>Understand</span><i>→</i><span>Route</span><i>→</i><span>Resolve</span>
+                {route.flow.map((step, position) => (
+                  <span key={step}>
+                    {step}
+                    {position < route.flow.length - 1 ? <i aria-hidden="true">→</i> : null}
+                  </span>
+                ))}
               </div>
             </Reveal>
           ))}
         </div>
-        <Reveal className={styles.sectionCta} delay={120}>
-          <Link className={styles.ghostCta} href="/record">Record your note <span aria-hidden="true">→</span></Link>
-        </Reveal>
       </section>
 
       {/* Band 3 — one selector covering every kind of business, no extra links */}
       <section className={styles.section}>
         <Reveal className={styles.sectionHead}>
-          <p className={styles.label}>Who this is for</p>
-          <h2>Different businesses, <em>the same gap.</em></h2>
-          <p>Pick the one closest to yours. The work is different; the moment it slips is not.</p>
+          <div className={styles.headMain}>
+            <p className={styles.label}>Who this is for</p>
+            <h2>Different businesses, <em>the same gap.</em></h2>
+          </div>
+          <div className={styles.headAside}>
+            <p>Pick the one closest to yours. The work is different; the moment it slips is not.</p>
+          </div>
         </Reveal>
         <Reveal delay={110}>
           <AudiencePicker />
         </Reveal>
       </section>
 
-      {/* Band 4 — the product, moving. Light ground, dark instrument on it. */}
-      <section className={styles.section}>
+      {/* Band 4 — what happens after the memo */}
+      <section className={`${styles.section} ${styles.sectionEnd}`} id="how">
         <Reveal className={styles.sectionHead}>
-          <p className={styles.label}>A system, running</p>
-          <h2>This is what we <em>actually hand over.</em></h2>
-          <p>An after-hours lead, from the moment it arrives to the moment your team knows what to do about it.</p>
-        </Reveal>
-        <Reveal className={styles.showcaseBody} delay={110}>
-          <InlineAutomation />
-        </Reveal>
-      </section>
-
-      {/* Band 5 — what happens after the memo */}
-      <section className={styles.section} id="how">
-        <Reveal className={styles.sectionHead}>
-          <p className={styles.label}>After you send it</p>
-          <h2>You will know exactly <em>what happens next.</em></h2>
-          <p>No black box, no long discovery process. Four steps, and you can stop at any of them.</p>
+          <div className={styles.headMain}>
+            <p className={styles.label}>After you send it</p>
+            <h2>You will know exactly <em>what happens next.</em></h2>
+          </div>
+          <div className={styles.headAside}>
+            <p>No black box, no long discovery process. Four steps, and you can stop at any of them.</p>
+          </div>
         </Reveal>
         <div className={styles.steps}>
           {stages.map((stage, index) => (
@@ -154,7 +161,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Band 6 — dark again. The close mirrors the hero. */}
+      {/* Band 5 — dark again. The close mirrors the hero. */}
       <section className={styles.close}>
         <div className={styles.closeInner}>
           <Reveal className={styles.closeCopy}>
