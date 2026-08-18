@@ -22,7 +22,18 @@ const statusCopy: Record<Phase, string> = {
   blocked: "Microphone unavailable",
 };
 
-export function VoiceRecorder({ id }: { id?: string }) {
+type RecorderProps = {
+  id?: string;
+  /**
+   * Set when the recorder is a step inside a larger flow: the panel drops its
+   * own send button and guidance, because the flow around it owns both.
+   */
+  embedded?: boolean;
+  /** Fires when a recording finishes, with what was actually captured. */
+  onCaptured?: (capture: { seconds: number; bytes: number }) => void;
+};
+
+export function VoiceRecorder({ id, embedded = false, onCaptured }: RecorderProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -31,6 +42,9 @@ export function VoiceRecorder({ id }: { id?: string }) {
   const [size, setSize] = useState(0);
   // The waveform needs the stream as a prop, so it is mirrored into state.
   const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
+  // onstop fires outside React's render, so it reads the count from a ref
+  // rather than from the state closure it was created in.
+  const secondsRef = useRef(0);
 
   const stop = useCallback(() => {
     if (recorder.current?.state === "recording") recorder.current.stop();
@@ -45,8 +59,10 @@ export function VoiceRecorder({ id }: { id?: string }) {
     if (phase !== "recording") return;
     const timer = window.setInterval(() => {
       setSeconds((value) => {
-        if (value + 1 >= MAX_SECONDS) stop();
-        return value + 1;
+        const next = value + 1;
+        secondsRef.current = next;
+        if (next >= MAX_SECONDS) stop();
+        return next;
       });
     }, 1000);
     return () => window.clearInterval(timer);
@@ -60,6 +76,7 @@ export function VoiceRecorder({ id }: { id?: string }) {
     }
 
     setSeconds(0);
+    secondsRef.current = 0;
     setSize(0);
     chunks.current = [];
     setPhase("requesting");
@@ -74,8 +91,10 @@ export function VoiceRecorder({ id }: { id?: string }) {
         if (event.data.size > 0) chunks.current.push(event.data);
       };
       mediaRecorder.onstop = () => {
-        setSize(chunks.current.reduce((total, chunk) => total + chunk.size, 0));
+        const bytes = chunks.current.reduce((total, chunk) => total + chunk.size, 0);
+        setSize(bytes);
         setPhase("ready");
+        onCaptured?.({ seconds: secondsRef.current, bytes });
       };
       mediaRecorder.start();
       setPhase("recording");
@@ -125,26 +144,34 @@ export function VoiceRecorder({ id }: { id?: string }) {
         </small>
       </div>
 
-      <div className={styles.readout}>
-        <span>What to cover</span>
-        <p>
-          Where the work gets stuck, who is involved, and what good would look like.
-          This is source material, not a test.
-        </p>
-        {phase === "ready" ? (
-          <p className={styles.captured} role="status">
-            Captured {clock(seconds)}
-            {size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}
-          </p>
-        ) : null}
-      </div>
+      {embedded && phase !== "ready" ? null : (
+        <div className={styles.readout}>
+          {embedded ? null : (
+            <>
+              <span>What to cover</span>
+              <p>
+                Where the work gets stuck, who is involved, and what good would look like.
+                This is source material, not a test.
+              </p>
+            </>
+          )}
+          {phase === "ready" ? (
+            <p className={styles.captured} role="status">
+              Captured {clock(seconds)}
+              {size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}
+            </p>
+          ) : null}
+        </div>
+      )}
 
-      <div className={styles.actions}>
-        <button className={styles.send} disabled={phase !== "ready"} type="button">
-          Send this note <span aria-hidden="true">→</span>
-        </button>
-        <small>No account needed to start. You see the scope and the price before you pay.</small>
-      </div>
+      {embedded ? null : (
+        <div className={styles.actions}>
+          <button className={styles.send} disabled={phase !== "ready"} type="button">
+            Send this note <span aria-hidden="true">→</span>
+          </button>
+          <small>No account needed to start. You see the scope and the price before you pay.</small>
+        </div>
+      )}
     </div>
   );
 }

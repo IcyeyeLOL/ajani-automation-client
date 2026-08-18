@@ -53,7 +53,7 @@ export function AccountAccessProvider({ children, clerkEnabled }: { children: Re
           </Dialog.Description>
 
           {clerkEnabled ? <div className="clerk-in-request">
-            {signUp ? <SignUp appearance={clerkAppearance} fallbackRedirectUrl="/request" signInUrl="/sign-in" /> : <SignIn appearance={clerkAppearance} fallbackRedirectUrl="/portal" signUpUrl="/sign-up" />}
+            {signUp ? <SignUp appearance={clerkAppearance} fallbackRedirectUrl="/portal" signInUrl="/sign-in" /> : <SignIn appearance={clerkAppearance} fallbackRedirectUrl="/portal" signUpUrl="/sign-up" />}
           </div> : <div className="account-access-preview">
             <b>CLERK CONNECTION NEEDED</b>
             <p>Add the Clerk publishable and secret keys to activate account access here. The public request flow remains available in the meantime.</p>
