@@ -9,6 +9,8 @@ type RevealProps = {
   /** Stagger, in ms. Use small steps — 70 to 110 reads as one gesture. */
   delay?: number;
   as?: ElementType;
+  /** Merged with the reveal's own delay variable, for per-instance tokens. */
+  style?: CSSProperties;
 };
 
 /**
@@ -20,7 +22,7 @@ type RevealProps = {
  * component ever marks it shown. The observer is then harmless rather than
  * load-bearing, and nothing here can hide content if JavaScript fails.
  */
-export function Reveal({ children, className, delay = 0, as }: RevealProps) {
+export function Reveal({ children, className, delay = 0, as, style }: RevealProps) {
   const node = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(false);
   const Tag = (as ?? "div") as ElementType;
@@ -64,7 +66,7 @@ export function Reveal({ children, className, delay = 0, as }: RevealProps) {
     <Tag
       className={[styles.reveal, shown ? styles.shown : "", className].filter(Boolean).join(" ")}
       ref={node}
-      style={{ "--reveal-delay": `${delay}ms` } as CSSProperties}
+      style={{ ...style, "--reveal-delay": `${delay}ms` } as CSSProperties}
     >
       {children}
     </Tag>

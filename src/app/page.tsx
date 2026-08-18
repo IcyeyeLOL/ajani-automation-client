@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AudiencePicker } from "@/components/home/audience-picker";
 import { Reveal } from "@/components/home/reveal";
 import { SystemAnimation } from "@/components/home/system-animation";
+import { SiteFoot, SiteTop } from "@/components/site/chrome";
 import styles from "./home.module.css";
 
 const routes = [
@@ -38,16 +39,7 @@ const stages = [
 export default function Home() {
   return (
     <main className={styles.shell}>
-      <header className={styles.header}>
-        <div className={styles.headerInner}>
-          <Link className={styles.brand} href="/">ajani<i>.</i></Link>
-          <nav className={styles.headerNav}>
-            <Link className={styles.headerLink} href="/stories">Stories</Link>
-            <Link className={styles.headerLink} href="/portal">Sign in</Link>
-            <Link className={styles.headerCta} href="/record">Record a note</Link>
-          </nav>
-        </div>
-      </header>
+      <SiteTop />
 
       {/* Band 1 — dark. The proposition, with the system assembling beside it. */}
       <section className={styles.hero}>
@@ -184,16 +176,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className={styles.footer}>
-        <div className={styles.footerInner}>
-          <span>© {new Date().getFullYear()} Ajani Automation</span>
-          <div className={styles.footerLinks}>
-            <Link href="/stories">Stories</Link>
-            <Link href="/portal">Client portal</Link>
-            <Link href="/record">Record a note</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFoot />
     </main>
   );
 }
