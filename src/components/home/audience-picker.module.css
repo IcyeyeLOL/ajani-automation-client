@@ -38,11 +38,12 @@
 .panel {
   display: grid;
   grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
-  align-items: start;
+  align-items: stretch;
   gap: 44px;
   padding-top: 34px;
   animation: panel-in .34s var(--ease-standard) both;
 }
+.panel[data-photo="no"] { align-items: start; }
 .panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
 
 /* ---------- the worked example ----------
@@ -51,6 +52,8 @@
    broken one. A short thread shows the same moment and shows the product
    handling it, so the slot carries its own weight until real photography
    exists. Everything in it is illustrative, and labelled as such. */
+.copy .shot { margin-top: 26px; }
+
 .shot {
   display: flex;
   flex-direction: column;
@@ -61,6 +64,20 @@
   background: var(--paper);
   box-shadow: 0 16px 34px rgba(38, 28, 23, .07);
 }
+
+/* The photo fills whatever height the copy beside it needs, so the row is
+   balanced whatever shape the source image is. A minimum keeps it from
+   collapsing when the copy is short. */
+.shotPhoto {
+  position: relative;
+  min-height: 340px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(150deg, rgba(189, 150, 112, .16), rgba(121, 0, 24, .06));
+}
+.shotPhoto img { object-fit: cover; }
 
 .shotHead {
   display: flex;
@@ -116,6 +133,7 @@
 .outbound span { color: var(--sand); }
 
 /* ---------- copy ---------- */
+.copy { display: flex; flex-direction: column; }
 .copy h3 {
   margin: 0;
   font-size: clamp(24px, 2.5vw, 33px);
@@ -167,6 +185,7 @@
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .panel { grid-template-columns: 1fr; gap: 28px; }
+  .shotPhoto { min-height: 0; aspect-ratio: 16 / 10; }
 }
 
 @media (max-width: 620px) {

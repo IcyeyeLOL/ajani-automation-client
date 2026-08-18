@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState } from "react";
 import styles from "./audience-picker.module.css";
 
@@ -10,6 +11,14 @@ type Audience = {
   problem: string;
   system: string;
   route: [string, string, string];
+  /**
+   * Path under /public once real photography exists for this business type.
+   * Leave it out and the card is the thread alone — the layout works either
+   * way, so images can land one at a time.
+   */
+  photo?: string;
+  /** Alt text for that photo. Required whenever `photo` is set. */
+  photoAlt?: string;
   /**
    * A worked example of the moment, not a testimonial: what arrives, and what
    * Ajani sends back. `kind` is "message" when a person wrote in and "signal"
@@ -174,31 +183,28 @@ export function AudiencePicker() {
       <div
         aria-labelledby={`audience-tab-${current.id}`}
         className={styles.panel}
+        data-photo={current.photo ? "yes" : "no"}
         id="audience-panel"
         key={current.id}
         role="tabpanel"
         tabIndex={0}
       >
-        <figure className={styles.shot}>
-          <figcaption className={styles.shotHead}>
-            <span className={styles.shotTag}>Example</span>
-            <span className={styles.shotStamp}>{current.thread.stamp} · {current.thread.source}</span>
-          </figcaption>
-          <div className={styles.thread}>
-            <div className={`${styles.bubble} ${styles.inbound}`}>
-              <p>
-                {current.thread.kind === "message"
-                  ? `\u201c${current.thread.inbound}\u201d`
-                  : current.thread.inbound}
-              </p>
-              <span>{current.thread.kind === "message" ? "Incoming" : "Nobody wrote in — Ajani noticed"}</span>
-            </div>
-            <div className={`${styles.bubble} ${styles.outbound}`}>
-              <p>{current.thread.out}</p>
-              <span>{current.thread.outTo}</span>
-            </div>
-          </div>
-        </figure>
+        {/* With a photo the left column is the photo alone, stretched to the
+            height the copy needs, and the thread moves under the copy. Without
+            one the thread takes the left column, as it did before any
+            photography existed. Both columns stay the same height either way. */}
+        {current.photo ? (
+          <figure className={styles.shotPhoto}>
+            <Image
+              alt={current.photoAlt ?? ""}
+              fill
+              sizes="(max-width: 900px) 100vw, 46vw"
+              src={current.photo}
+            />
+          </figure>
+        ) : (
+          <Thread thread={current.thread} />
+        )}
 
         <div className={styles.copy}>
           <h3>{current.headline}</h3>
@@ -212,8 +218,30 @@ export function AudiencePicker() {
               </span>
             ))}
           </div>
+          {current.photo ? <Thread thread={current.thread} /> : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function Thread({ thread }: { thread: Audience["thread"] }) {
+  return (
+    <figure className={styles.shot}>
+      <figcaption className={styles.shotHead}>
+        <span className={styles.shotTag}>Example</span>
+        <span className={styles.shotStamp}>{thread.stamp} · {thread.source}</span>
+      </figcaption>
+      <div className={styles.thread}>
+        <div className={`${styles.bubble} ${styles.inbound}`}>
+          <p>{thread.kind === "message" ? `\u201c${thread.inbound}\u201d` : thread.inbound}</p>
+          <span>{thread.kind === "message" ? "Incoming" : "Nobody wrote in — Ajani noticed"}</span>
+        </div>
+        <div className={`${styles.bubble} ${styles.outbound}`}>
+          <p>{thread.out}</p>
+          <span>{thread.outTo}</span>
+        </div>
+      </div>
+    </figure>
   );
 }
