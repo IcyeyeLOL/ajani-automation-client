@@ -43,6 +43,8 @@ const audiences: Audience[] = [
       "Someone asks for a price on a Friday afternoon. You mean to chase it Monday, the week fills up, and the job quietly goes to whoever answered first.",
     system: "Ajani replies while the enquiry is warm, captures what the job actually is, and puts the quote back in front of you when it needs a decision.",
     route: ["Enquiry", "Quote sent", "Chased"],
+    photo: "/audiences/home-services.png",
+    photoAlt: "A business owner at a desk, working through an enquiry on a laptop",
     thread: {
       stamp: "Fri 16:52",
       source: "Website form",
