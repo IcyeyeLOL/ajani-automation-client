@@ -51,12 +51,12 @@
    copy sliced both sides off. */
 .shotPhoto {
   position: relative;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: linear-gradient(150deg, rgba(189, 150, 112, .16), rgba(121, 0, 24, .06));
+  background: var(--pearl);
 }
 .shotPhoto img { object-fit: cover; }
 
