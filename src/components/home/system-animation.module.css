@@ -129,11 +129,14 @@
   100%     { opacity: 0; }
 }
 
-/* Reduced motion keeps the finished route on screen, permanently. */
+/* Reduced motion keeps the finished route on screen unless the site has
+   explicitly selected its full-motion presentation. */
 @media (prefers-reduced-motion: reduce) {
-  .bar, .pulse, .packet { display: none; }
-  .link { animation: none; stroke-dashoffset: 0; }
-  .node { animation: none; opacity: 1; }
-  .core { animation: none; opacity: 1; }
-  .tag { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .bar,
+  :global(html:not([data-motion="full"])) .pulse,
+  :global(html:not([data-motion="full"])) .packet { display: none; }
+  :global(html:not([data-motion="full"])) .link { animation: none; stroke-dashoffset: 0; }
+  :global(html:not([data-motion="full"])) .node { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .core { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .tag { animation: none; opacity: 1; }
 }
