@@ -1,0 +1,196 @@
+.shell {
+  --shell-width: min(1240px, calc(100% - 72px));
+  --panel-edge: #423936;
+  min-height: 100vh;
+  background: var(--pearl);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.label {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.hero {
+  padding: 60px 0 68px;
+  background: radial-gradient(120% 90% at 12% 0%, #241d1f 0%, #171515 58%);
+  color: var(--pearl);
+}
+
+.heroInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  align-items: end;
+  gap: 56px;
+  width: var(--shell-width);
+  margin: 0 auto;
+}
+
+.heroCopy .label,
+.guide .label,
+.closeCopy .label,
+.promise .label { color: var(--sand); }
+
+.heroCopy h1 {
+  max-width: 850px;
+  margin: 16px 0 0;
+  font-size: clamp(40px, 4.6vw, 68px);
+  font-weight: 600;
+  line-height: .95;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+
+.heroCopy h1 em,
+.closeCopy h2 em {
+  color: var(--sand);
+  font-style: normal;
+}
+
+.heroCopy > p {
+  max-width: 48ch;
+  margin: 22px 0 0;
+  color: #c3b7b1;
+  font-size: 17.5px;
+  line-height: 1.5;
+}
+
+.guide {
+  padding: 22px 24px;
+  border: 1px solid var(--panel-edge);
+  border-left: 3px solid var(--sand);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .03);
+}
+
+.guide ol {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid #352e2b;
+  color: #c3b7b1;
+  font-size: 14px;
+}
+
+.guide li:first-child { border-top: 0; }
+.guide b {
+  color: var(--sand);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.demoSection { background: var(--pearl); }
+
+.close {
+  background: radial-gradient(110% 90% at 78% 0%, #241d1f 0%, #171515 60%);
+  color: var(--pearl);
+}
+
+.closeInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .92fr);
+  align-items: center;
+  gap: 56px;
+  width: var(--shell-width);
+  margin: 0 auto;
+  padding: 74px 0;
+}
+
+.closeCopy h2 {
+  margin: 15px 0 0;
+  font-size: clamp(32px, 3.6vw, 50px);
+  font-weight: 600;
+  line-height: .98;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+
+.closeCopy > p {
+  max-width: 48ch;
+  margin: 18px 0 0;
+  color: #c3b7b1;
+  font-size: 16.5px;
+  line-height: 1.5;
+}
+
+.primaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  margin-top: 30px;
+  padding: 0 26px;
+  border-radius: 11px;
+  background: var(--sand);
+  color: #33241d;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  transition: transform .18s var(--ease-standard), background .18s ease, box-shadow .18s ease;
+}
+
+.primaryCta:hover {
+  background: #d3ab82;
+  box-shadow: 0 12px 26px rgba(189, 150, 112, .22);
+  transform: translateY(-2px);
+}
+
+.primaryCta:active { transform: translateY(1px); }
+.primaryCta:focus-visible { outline: 3px solid var(--sand); outline-offset: 4px; }
+
+.promise {
+  padding: 26px 28px 24px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 20px;
+  background: linear-gradient(160deg, #241f1e, #1a1717);
+}
+
+.promise > p:nth-child(2) {
+  margin: 16px 0 0;
+  color: #c3b7b1;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.promise > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--panel-edge);
+  color: #a99c95;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.promise i { color: var(--sand); font-style: normal; }
+
+@media (max-width: 1040px) {
+  .shell { --shell-width: min(100% - 48px, 1240px); }
+  .heroInner { grid-template-columns: 1fr; align-items: start; gap: 34px; }
+  .guide { max-width: 60ch; }
+  .closeInner { grid-template-columns: 1fr; gap: 34px; }
+}
+
+@media (max-width: 620px) {
+  .shell { --shell-width: min(100% - 32px, 1240px); }
+  .hero { padding: 40px 0 46px; }
+  .closeInner { padding: 48px 0; }
+}

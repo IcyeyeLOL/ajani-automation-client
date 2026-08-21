@@ -1,7 +1,7 @@
 import Link from "next/link";
 import styles from "./chrome.module.css";
 
-type Nav = "stories" | null;
+type Nav = "demos" | "stories" | null;
 
 /**
  * The marketing header and footer, shared so the pages a visitor moves between
@@ -15,6 +15,13 @@ export function SiteTop({ active = null }: { active?: Nav }) {
       <div className={styles.headerInner}>
         <Link className={styles.brand} href="/">ajani<i>.</i></Link>
         <nav className={styles.nav}>
+          <Link
+            aria-current={active === "demos" ? "page" : undefined}
+            className={styles.link}
+            href="/demos"
+          >
+            Demos
+          </Link>
           <Link
             aria-current={active === "stories" ? "page" : undefined}
             className={styles.link}
@@ -36,6 +43,7 @@ export function SiteFoot() {
       <div className={styles.footerInner}>
         <span>© {new Date().getFullYear()} Ajani Automation</span>
         <div className={styles.footerLinks}>
+          <Link href="/demos">Demos</Link>
           <Link href="/stories">Stories</Link>
           <Link href="/portal">Client portal</Link>
           <Link href="/record">Record a note</Link>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import styles from "./demo-theatre.module.css";
 
 const DEMO_STEP_DURATION = 3_000;
@@ -131,6 +131,7 @@ export function DemoGrid() {
   const [activeStep, setActiveStep] = useState(0);
   const [mode, setMode] = useState<"idle" | "playing" | "paused" | "complete">("idle");
   const [reducedMotion, setReducedMotion] = useState(false);
+  const scenarioTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const scenario = scenarios[scenarioIndex];
   const totalSteps = scenario.nodes.length;
   const activeEvent = scenario.events[Math.max(activeStep - 1, 0)];
@@ -161,6 +162,20 @@ export function DemoGrid() {
   const chooseScenario = (index: number) => {
     setScenarioIndex(index);
     resetRun();
+  };
+
+  const moveScenarioFocus = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const keyTargets: Partial<Record<KeyboardEvent<HTMLButtonElement>["key"], number>> = {
+      ArrowLeft: (index - 1 + scenarios.length) % scenarios.length,
+      ArrowRight: (index + 1) % scenarios.length,
+      End: scenarios.length - 1,
+      Home: 0,
+    };
+    const nextIndex = keyTargets[event.key];
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    chooseScenario(nextIndex);
+    scenarioTabs.current[nextIndex]?.focus();
   };
 
   const runOrPause = () => {
@@ -213,7 +228,7 @@ export function DemoGrid() {
     </div>
 
     <div aria-label="Choose an automation scenario" className={styles.scenarioTabs} role="tablist">
-      {scenarios.map((item, index) => <button aria-controls="automation-stage" aria-selected={index === scenarioIndex} className={styles.scenarioTab} key={item.id} onClick={() => chooseScenario(index)} role="tab" type="button">
+      {scenarios.map((item, index) => <button aria-controls="automation-stage" aria-selected={index === scenarioIndex} className={styles.scenarioTab} id={`scenario-tab-${item.id}`} key={item.id} onClick={() => chooseScenario(index)} onKeyDown={(event) => moveScenarioFocus(event, index)} ref={(node) => { scenarioTabs.current[index] = node; }} role="tab" tabIndex={index === scenarioIndex ? 0 : -1} type="button">
         <span>0{index + 1}</span>
         <strong>{item.label}</strong>
         <small>{item.subtitle}</small>
@@ -221,7 +236,7 @@ export function DemoGrid() {
       </button>)}
     </div>
 
-    <div className={styles.controlRoom} id="automation-stage" role="tabpanel">
+    <div aria-labelledby={`scenario-tab-${scenario.id}`} className={styles.controlRoom} id="automation-stage" role="tabpanel">
       <header className={styles.roomHeader} key={`header-${scenario.id}`}>
         <div>
           <span className={styles.liveMark}><i /> {modeLabel} route</span>
@@ -295,7 +310,7 @@ export function DemoGrid() {
           <button aria-label="Restart automation demo" className={styles.restartControl} onClick={resetRun} type="button"><PlaybackIcon name="restart" /> RESTART</button>
         </div>
         <p aria-live="polite" className={styles.runStatus} role="status">{mode === "idle" ? "Ready to trace the system." : mode === "playing" ? `Playing automation: ${scenario.nodes[activeStep - 1]?.label}.` : mode === "paused" ? `Paused at ${scenario.nodes[activeStep - 1]?.label}.` : "Automation route complete."}{reducedMotion && " Motion is simplified for this device."}</p>
-        <Link href="/request">REQUEST THIS FLOW <span>→</span></Link>
+        <Link href="/record">RECORD A NOTE ABOUT THIS <span>→</span></Link>
       </footer>
     </div>
   </section>;

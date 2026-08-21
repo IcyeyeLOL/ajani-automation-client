@@ -36,6 +36,8 @@ test("the header sign-in entry leads to the protected portal", async ({ page }) 
 test("automation theatre runs play by play with accessible controls", async ({ page }) => {
   await page.goto("/demos");
 
+  await expect(page.getByRole("heading", { name: /Watch the system work/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Demos" }).first()).toHaveAttribute("aria-current", "page");
   const theatre = page.getByRole("region", { name: "Automation theatre" });
   await expect(theatre.getByRole("tab", { name: /After-hours leads/i })).toHaveAttribute("aria-selected", "true");
   await theatre.getByRole("button", { name: "Run After-hours leads automation" }).press("Enter");
@@ -106,6 +108,7 @@ test("mobile navigation fits the viewport and keeps every destination available"
   const header = page.locator("header").first();
   const headerOverflows = await header.evaluate((node) => node.scrollWidth > node.clientWidth);
   expect(headerOverflows).toBe(false);
+  await expect(header.getByRole("link", { name: "Demos" })).toBeVisible();
   await expect(header.getByRole("link", { name: "Stories" })).toBeVisible();
   await expect(header.getByRole("link", { name: "Sign in" })).toBeVisible();
   await expect(header.getByRole("link", { name: "Record a note" })).toBeVisible();
