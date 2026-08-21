@@ -1,0 +1,325 @@
+.shell {
+  --shell-width: min(1240px, calc(100% - 72px));
+  --panel-edge: #423936;
+  min-height: 100vh;
+  background: var(--pearl);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+/* ---------- band 1: hero ---------- */
+.hero {
+  padding: 62px 0 74px;
+  background: radial-gradient(120% 90% at 12% 0%, #241d1f 0%, #171515 58%);
+  color: var(--pearl);
+}
+
+.heroInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(380px, .98fr);
+  align-items: center;
+  gap: 58px;
+  width: var(--shell-width);
+  margin: 0 auto;
+}
+
+.heroCopy .label { color: var(--sand); }
+
+.heroCopy h1 {
+  margin: 16px 0 0;
+  font-size: clamp(42px, 4.8vw, 72px);
+  font-weight: 600;
+  line-height: .95;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+.heroCopy h1 em { font-style: normal; color: var(--sand); }
+
+.heroCopy > p {
+  max-width: 46ch;
+  margin: 22px 0 0;
+  color: #c3b7b1;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.heroActions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 30px; }
+
+.primaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 26px;
+  border-radius: 11px;
+  background: var(--sand);
+  color: #33241d;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  transition: transform .18s var(--ease-standard), background .18s ease, box-shadow .18s ease;
+}
+.primaryCta:hover {
+  background: #d3ab82;
+  box-shadow: 0 12px 26px rgba(189, 150, 112, .22);
+  transform: translateY(-2px);
+}
+.primaryCta:active { transform: translateY(1px); }
+.primaryCta:focus-visible { outline: 3px solid var(--sand); outline-offset: 4px; }
+
+.secondaryCta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 0 20px;
+  border: 1px solid #5a4d48;
+  border-radius: 11px;
+  color: #d6cac4;
+  font-size: 15px;
+  font-weight: 500;
+  transition: border-color .18s ease, color .18s ease;
+}
+.secondaryCta:hover { border-color: var(--sand); color: var(--pearl); }
+
+/* the assembling route, now the hero's own visual */
+.heroVisual {
+  overflow: hidden;
+  border: 1px solid var(--panel-edge);
+  border-radius: 22px;
+  background: linear-gradient(160deg, #241f1e, #1a1717);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, .3);
+}
+
+.heroVisualHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--panel-edge);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--sand);
+}
+.heroVisualHead em { display: flex; align-items: center; gap: 8px; color: #a2958f; font-style: normal; }
+.heroVisualHead i { width: 7px; height: 7px; border-radius: 50%; background: var(--sand); }
+
+.heroVisualBody { display: grid; place-items: center; padding: 40px 26px 32px; }
+
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 26px;
+}
+.heroMeta span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b6a9a3;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+.heroMeta i { color: #8fc7b7; font-style: normal; }
+
+/* ---------- shared section chrome ----------
+   Every light band opens with the same head: the title on the left, the
+   supporting line and any action on the right. Stacked in one narrow column
+   the page collapsed into a left-hand strip and left the right half of the
+   canvas empty for the whole scroll; side by side it keeps the width the
+   hero establishes. The rule above each head is what marks a new band now
+   that the ground no longer changes colour. */
+.section { width: var(--shell-width); margin: 0 auto; padding: 46px 0; scroll-margin-top: 84px; }
+.sectionEnd { padding-bottom: 78px; }
+
+.sectionHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, .94fr);
+  align-items: end;
+  gap: 20px 56px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+}
+.sectionHead .label { color: var(--sand-deep); }
+.headMain h2 {
+  margin: 13px 0 0;
+  font-size: clamp(30px, 3.2vw, 44px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+.headMain h2 em { font-style: normal; color: var(--crimson); }
+
+.headAside { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-bottom: 5px; }
+.headAside p { max-width: 46ch; margin: 0; color: var(--quiet); font-size: 16.5px; line-height: 1.5; }
+
+/* ---------- band 2: routes ---------- */
+.routes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 38px;
+}
+
+.route {
+  display: flex;
+  flex-direction: column;
+  min-height: 186px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  transition: border-color .24s ease, transform .24s var(--ease-standard), box-shadow .24s ease;
+}
+.route:hover {
+  border-color: var(--crimson);
+  box-shadow: 0 14px 30px rgba(121, 0, 24, .09);
+  transform: translateY(-4px);
+}
+
+.routeHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.routeHead .label { color: var(--crimson); }
+.routeHead b { font-family: var(--font-mono), ui-monospace, monospace; font-size: 11px; color: var(--sand-deep); }
+
+.route h3 {
+  margin: 22px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+.route p { margin: 11px 0 0; color: var(--quiet); font-size: 14.5px; line-height: 1.45; }
+
+.routeFlow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+/* the arrow sits inside its span, so the flex gap does not separate it from
+   the word it follows — it needs its own margin */
+.routeFlow span { display: inline-flex; align-items: center; }
+.routeFlow i { margin-left: 8px; color: var(--sand-deep); font-style: normal; }
+
+.ghostCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--crimson);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--crimson);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  transition: background .18s ease, color .18s ease, transform .18s var(--ease-standard);
+}
+.ghostCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
+
+/* ---------- band 4: process ---------- */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 38px;
+}
+
+.step { padding: 22px 20px; border-top: 3px solid var(--sand); background: var(--paper); border-radius: 0 0 14px 14px; }
+.step:nth-child(2) { border-top-color: #a4763f; }
+.step:nth-child(3) { border-top-color: var(--crimson); }
+.step:nth-child(4) { border-top-color: var(--success); }
+
+.stepWhen {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--sand-deep);
+}
+.step h3 { margin: 14px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+.step p { margin: 9px 0 0; color: var(--quiet); font-size: 14px; line-height: 1.45; }
+
+/* ---------- band 5: close ---------- */
+.close { background: radial-gradient(110% 90% at 80% 0%, #241d1f 0%, #171515 60%); color: var(--pearl); }
+.closeInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, .95fr);
+  align-items: center;
+  gap: 56px;
+  width: var(--shell-width);
+  margin: 0 auto;
+  padding: 74px 0;
+}
+.closeCopy .label { color: var(--sand); }
+.closeCopy h2 {
+  margin: 15px 0 0;
+  font-size: clamp(32px, 3.6vw, 50px);
+  font-weight: 600;
+  line-height: .98;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+.closeCopy h2 em { font-style: normal; color: var(--sand); }
+.closeCopy > p { max-width: 44ch; margin: 18px 0 0; color: #c3b7b1; font-size: 16.5px; line-height: 1.5; }
+
+.closeCopy .primaryCta { margin-top: 30px; }
+
+.priceCard {
+  padding: 26px 28px 24px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 20px;
+  background: linear-gradient(160deg, #241f1e, #1a1717);
+}
+.priceCard .label { color: var(--sand); }
+.priceCard > small { display: block; margin-top: 16px; color: #a2958f; font-size: 12.5px; line-height: 1.45; }
+
+.priceRow { display: grid; gap: 2px; margin-top: 18px; }
+.priceItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #3a322f;
+}
+.priceItem:last-child { border-bottom: 0; }
+.priceItem span { color: #b6a9a3; font-family: var(--font-mono), ui-monospace, monospace; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; }
+.priceItem b { font-size: 19px; font-weight: 600; letter-spacing: -.03em; white-space: nowrap; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1040px) {
+  .shell { --shell-width: min(100% - 48px, 1240px); }
+  .heroInner, .closeInner { grid-template-columns: 1fr; gap: 40px; }
+  .sectionHead { grid-template-columns: 1fr; align-items: start; gap: 18px; }
+  .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .shell { --shell-width: min(100% - 32px, 1240px); }
+  .hero { padding: 40px 0 48px; }
+  .section { padding: 34px 0; }
+  .sectionEnd { padding-bottom: 54px; }
+  .closeInner { padding: 48px 0; }
+  .sectionHead { padding-top: 24px; }
+  .routes, .steps { grid-template-columns: 1fr; }
+}
