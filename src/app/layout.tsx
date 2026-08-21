@@ -1,6 +1,8 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { AccountAccessProvider } from "@/components/account-access-dialog";
+import { NavigationFeedback } from "@/components/site/navigation-feedback";
 import { ajaniClerkAppearance, ajaniClerkLocalization } from "@/lib/clerk/appearance";
 import { hasClerkCredentials } from "@/lib/clerk/config";
 import { display, mono } from "./fonts";
@@ -27,7 +29,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html className={`${display.variable} ${mono.variable}`} data-motion="full" lang="en">
-      <body>{configuredApp}</body>
+      <body>
+        <Suspense fallback={null}><NavigationFeedback /></Suspense>
+        {configuredApp}
+      </body>
     </html>
   );
 }

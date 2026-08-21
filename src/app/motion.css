@@ -1,4 +1,5 @@
 .route-transition { min-height:100vh; animation:route-enter .52s var(--ease-standard) both; }
+.route-transition::after { position:fixed; inset:0; z-index:70; background:linear-gradient(110deg,rgba(189,150,112,.08),transparent 34%); content:""; opacity:0; pointer-events:none; animation:route-wash .62s var(--ease-standard) both; }
 .motion-reveal { opacity:0; transform:translateY(20px); transition:opacity .68s var(--ease-standard) var(--reveal-delay,0ms),transform .68s var(--ease-standard) var(--reveal-delay,0ms); }
 .motion-reveal.is-visible { opacity:1; transform:translateY(0); }
 .site-nav a:not(.header-action) { position:relative; }
@@ -28,6 +29,7 @@
 button:active:not(:disabled),.button:active,.site-nav .header-action:active { transform:translateY(1px) scale(.985); }
 
 @keyframes route-enter { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
+@keyframes route-wash { 0% { opacity:.48; } 100% { opacity:0; } }
 @keyframes operations-item-in { from { opacity:0; transform:translateX(13px); } to { opacity:1; transform:translateX(0); } }
 @keyframes live-indicator { 65% { box-shadow:0 0 0 7px rgba(121,0,24,0); } 100% { box-shadow:0 0 0 0 rgba(121,0,24,0); } }
 @keyframes method-route { 0%,18% { width:0; } 52%,100% { width:calc(100% - 14px); } }
@@ -52,3 +54,7 @@ html[data-motion="full"] .flow-progress button.active > span { animation:stage-m
 html[data-motion="full"] .recorder-card.recording .record-button { animation:recording-breath 1.6s ease-in-out infinite; }
 html[data-motion="full"] .recorder-card.recording .transcript-box { animation:transcript-glow 1.4s ease-in-out infinite alternate; }
 html[data-motion="full"] .system-canvas .system-block { animation:system-block-enter .52s var(--ease-standard) both; }
+
+@media (prefers-reduced-motion:reduce) {
+  .route-transition::after { animation:none; }
+}

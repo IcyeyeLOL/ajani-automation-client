@@ -101,6 +101,20 @@ test("full motion is the default site experience", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
 });
 
+test("internal navigation shows branded progress and clears it after the route opens", async ({ page }) => {
+  await page.goto("/");
+
+  const feedback = page.locator('[data-visible][role="status"]');
+  await expect(feedback).toHaveAttribute("data-ready", "true");
+  await Promise.all([
+    expect(feedback).toHaveAttribute("data-visible", "true"),
+    page.getByRole("link", { name: "Stories" }).first().click(),
+  ]);
+  await expect(page).toHaveURL(/\/stories$/);
+  await expect(feedback).toContainText("Opening stories");
+  await expect(feedback).toHaveAttribute("data-visible", "false", { timeout: 2_000 });
+});
+
 test("mobile navigation fits the viewport and keeps every destination available", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
