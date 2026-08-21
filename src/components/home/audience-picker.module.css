@@ -49,16 +49,36 @@
    A fixed 3:2 frame rather than one stretched to match the height of the
    copy, which sliced both sides off the image. Mobile uses the same ratio,
    so a single crop serves both and nothing is reframed between them. */
-.shotPhoto {
+.shotPhoto { margin: 0; }
+
+.shotFrame {
   position: relative;
   aspect-ratio: 3 / 2;
-  margin: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--pearl);
 }
-.shotPhoto img { object-fit: cover; }
+.shotFrame img { object-fit: cover; }
+
+/* The event, then what Ajani does about it. Real type rather than text baked
+   into the image: it stays legible at any size, matches the page's face, and
+   can be changed without regenerating a photograph. */
+.shotCaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 0 2px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.shotCaption span { color: var(--quiet); }
+.shotCaption i { color: var(--sand-deep); font-style: normal; }
+.shotCaption b { color: var(--crimson); font-weight: 400; }
 
 /* ---------- copy ---------- */
 .copy { display: flex; flex-direction: column; align-items: flex-start; }

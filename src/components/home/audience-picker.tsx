@@ -19,6 +19,13 @@ type Audience = {
   /** Alt text for that photo. Required whenever `photo` is set. */
   photoAlt?: string;
   /**
+   * The pair under the photo: the event that arrives, and what Ajani does
+   * about it. The left half is deliberately neutral — naming the failure
+   * there ("missed call", "job overran") advertises the problem on a page
+   * selling the fix.
+   */
+  caption?: { event: string; action: string };
+  /**
    * A worked example of the moment, not a testimonial: what arrives, and what
    * Ajani sends back. `kind` is "message" when a person wrote in and "signal"
    * when nothing arrived at all and the gap itself is the trigger.
@@ -36,6 +43,7 @@ type Audience = {
 const audiences: Audience[] = [
   {
     id: "home-services",
+    caption: { event: "Enquiry arrives", action: "Reply sent" },
     tab: "Home services",
     headline: "The quote that never got followed up.",
     problem:
@@ -53,6 +61,7 @@ const audiences: Audience[] = [
   },
   {
     id: "clinics",
+    caption: { event: "After-hours call", action: "Answered on the spot" },
     tab: "Clinics & practices",
     headline: "The appointment nobody confirmed.",
     problem:
@@ -68,6 +77,7 @@ const audiences: Audience[] = [
   },
   {
     id: "salons",
+    caption: { event: "Rebooking due", action: "Invite sent" },
     tab: "Salons & studios",
     headline: "The client who just stopped coming.",
     problem:
@@ -83,6 +93,7 @@ const audiences: Audience[] = [
   },
   {
     id: "agencies",
+    caption: { event: "Proposal signed", action: "Brief built" },
     tab: "Agencies & consultants",
     headline: "The kickoff that started from scratch.",
     problem:
@@ -98,6 +109,7 @@ const audiences: Audience[] = [
   },
   {
     id: "real-estate",
+    caption: { event: "Portal enquiry", action: "Viewing scheduled" },
     tab: "Property & real estate",
     headline: "The enquiry answered four hours late.",
     problem:
@@ -113,6 +125,7 @@ const audiences: Audience[] = [
   },
   {
     id: "trades",
+    caption: { event: "Schedule changes", action: "Customers updated" },
     tab: "Trades & field work",
     headline: "The day that got rearranged by phone.",
     problem:
@@ -184,12 +197,21 @@ export function AudiencePicker() {
             the panel is the same two-column shape either way. */}
         {current.photo ? (
           <figure className={styles.shotPhoto}>
-            <Image
-              alt={current.photoAlt ?? ""}
-              fill
-              sizes="(max-width: 900px) 100vw, 46vw"
-              src={current.photo}
-            />
+            <div className={styles.shotFrame}>
+              <Image
+                alt={current.photoAlt ?? ""}
+                fill
+                sizes="(max-width: 900px) 100vw, 46vw"
+                src={current.photo}
+              />
+            </div>
+            {current.caption ? (
+              <figcaption className={styles.shotCaption}>
+                <span>{current.caption.event}</span>
+                <i aria-hidden="true">→</i>
+                <b>{current.caption.action}</b>
+              </figcaption>
+            ) : null}
           </figure>
         ) : (
           <Example thread={current.thread} />
