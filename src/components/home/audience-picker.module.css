@@ -32,6 +32,7 @@
   border-color: var(--crimson);
   background: var(--crimson);
   color: #fff;
+  transform: translateY(-1px);
 }
 
 /* ---------- the panel ---------- */
@@ -41,16 +42,30 @@
   align-items: start;
   gap: 44px;
   padding-top: 34px;
-  animation: panel-in .34s var(--ease-standard) both;
+  animation-duration: .52s;
+  animation-timing-function: var(--ease-standard);
+  animation-fill-mode: both;
 }
+.panel[data-direction="forward"] { animation-name: panel-in-forward; }
+.panel[data-direction="backward"] { animation-name: panel-in-backward; }
 .panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
 
-/* ---------- the photo ----------
-   A fixed 4:3 frame, the shape most photographs are taken in, so the image
-   is shown rather than cropped. Stretching it to match the height of the
-   copy sliced both sides off. */
+.panel > *,
+.copy > * {
+  animation: panel-detail-in .5s var(--ease-standard) both;
+}
+.panel > :nth-child(1) { animation-delay: 35ms; }
+.copy > :nth-child(1) { animation-delay: 80ms; }
+.copy > :nth-child(2) { animation-delay: 125ms; }
+.copy > :nth-child(3) { animation-delay: 170ms; }
+.copy > :nth-child(4) { animation-delay: 215ms; }
+
+/* The frame is screen-safe and the entire supplied image remains visible. */
 .shotPhoto {
   position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
   aspect-ratio: 3 / 2;
   margin: 0;
   overflow: hidden;
@@ -58,7 +73,10 @@
   border-radius: 18px;
   background: var(--pearl);
 }
-.shotPhoto img { object-fit: cover; }
+.shotPhoto img {
+  object-fit: contain;
+  object-position: center;
+}
 
 /* ---------- copy ---------- */
 .copy { display: flex; flex-direction: column; align-items: flex-start; }
@@ -145,19 +163,32 @@
 .panelCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
 .panelCta:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
 
-@keyframes panel-in {
+@keyframes panel-in-forward {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes panel-in-backward {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes panel-detail-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel { animation: none; }
-  .tab { transition: none; }
+  :global(html:not([data-motion="full"])) .panel,
+  :global(html:not([data-motion="full"])) .panel > *,
+  :global(html:not([data-motion="full"])) .copy > * { animation: none; }
+  :global(html:not([data-motion="full"])) .tab { transition: none; }
 }
 
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .panel { grid-template-columns: 1fr; gap: 26px; }
+  .shotPhoto { max-height: min(62vh, 520px); }
 }
 
 @media (max-width: 620px) {

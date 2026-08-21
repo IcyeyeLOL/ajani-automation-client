@@ -106,18 +106,25 @@ test("full motion is the default site experience", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
 });
 
-test("internal navigation shows branded progress and clears it after the route opens", async ({ page }) => {
+test("internal navigation does not show a floating opening notice", async ({ page }) => {
   await page.goto("/");
 
-  const feedback = page.locator('[data-visible][role="status"]');
-  await expect(feedback).toHaveAttribute("data-ready", "true");
-  await Promise.all([
-    expect(feedback).toHaveAttribute("data-visible", "true"),
-    page.getByRole("link", { name: "Stories" }).first().click(),
-  ]);
-  await expect(page).toHaveURL(/\/stories$/);
-  await expect(feedback).toContainText("Opening stories");
-  await expect(feedback).toHaveAttribute("data-visible", "false", { timeout: 2_000 });
+  await expect(page.getByText(/Opening stories/i)).toHaveCount(0);
+  await expect(page.getByText(/Opening demos/i)).toHaveCount(0);
+});
+
+test("audience tabs animate their content and keep supplied imagery contained", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("tab", { name: "Clinics & practices" }).click();
+  const panel = page.getByRole("tabpanel");
+  await expect(panel).toHaveAttribute("data-direction", "forward");
+  await expect(panel).toHaveCSS("animation-name", /panel-in-forward/);
+  await expect(page.getByRole("heading", { name: "The appointment nobody confirmed." })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Home services" }).click();
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("data-direction", "backward");
+  await expect(page.getByRole("tabpanel").locator("img")).toHaveCSS("object-fit", "contain");
 });
 
 test("mobile navigation fits the viewport and keeps every destination available", async ({ page }) => {

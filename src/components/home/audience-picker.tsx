@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import styles from "./audience-picker.module.css";
 
+type Direction = "forward" | "backward";
+
 type Audience = {
   id: string;
   tab: string;
@@ -130,19 +132,27 @@ const audiences: Audience[] = [
 
 export function AudiencePicker() {
   const [active, setActive] = useState(0);
+  const [direction, setDirection] = useState<Direction>("forward");
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const move = (index: number) => {
+  const select = (index: number, nextDirection: Direction) => {
     const next = (index + audiences.length) % audiences.length;
+    if (next === active) return;
+    setDirection(nextDirection);
     setActive(next);
+  };
+
+  const move = (index: number, nextDirection: Direction) => {
+    const next = (index + audiences.length) % audiences.length;
+    select(next, nextDirection);
     tabs.current[next]?.focus();
   };
 
   const onKey = (event: React.KeyboardEvent, index: number) => {
-    if (event.key === "ArrowRight") { event.preventDefault(); move(index + 1); }
-    if (event.key === "ArrowLeft") { event.preventDefault(); move(index - 1); }
-    if (event.key === "Home") { event.preventDefault(); move(0); }
-    if (event.key === "End") { event.preventDefault(); move(audiences.length - 1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); move(index + 1, "forward"); }
+    if (event.key === "ArrowLeft") { event.preventDefault(); move(index - 1, "backward"); }
+    if (event.key === "Home") { event.preventDefault(); move(0, "backward"); }
+    if (event.key === "End") { event.preventDefault(); move(audiences.length - 1, "forward"); }
   };
 
   const current = audiences[active];
@@ -157,7 +167,7 @@ export function AudiencePicker() {
             className={styles.tab}
             id={`audience-tab-${audience.id}`}
             key={audience.id}
-            onClick={() => setActive(index)}
+            onClick={() => select(index, index > active ? "forward" : "backward")}
             onKeyDown={(event) => onKey(event, index)}
             ref={(node) => { tabs.current[index] = node; }}
             role="tab"
@@ -172,22 +182,21 @@ export function AudiencePicker() {
       <div
         aria-labelledby={`audience-tab-${current.id}`}
         className={styles.panel}
+        data-direction={direction}
         data-photo={current.photo ? "yes" : "no"}
         id="audience-panel"
         key={current.id}
         role="tabpanel"
         tabIndex={0}
       >
-        {/* The photo keeps the shape it was shot in — a fixed 3:2 frame rather
-            than one stretched to match the copy, which cropped both sides off.
-            Where there is no photo yet the example takes the left column, so
-            the panel is the same two-column shape either way. */}
+        {/* Containment keeps the whole supplied asset visible. A replacement can
+            be landscape, square, or portrait without stretching or clipping. */}
         {current.photo ? (
           <figure className={styles.shotPhoto}>
             <Image
               alt={current.photoAlt ?? ""}
               fill
-              sizes="(max-width: 900px) 100vw, 46vw"
+              sizes="(max-width: 620px) calc(100vw - 32px), (max-width: 900px) calc(100vw - 48px), 46vw"
               src={current.photo}
             />
           </figure>
