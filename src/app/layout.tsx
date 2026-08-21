@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { AccountAccessProvider } from "@/components/account-access-dialog";
 import { hasClerkCredentials } from "@/lib/clerk/config";
+import { display, mono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   const configuredApp = clerkEnabled ? <ClerkProvider>{app}</ClerkProvider> : app;
 
   return (
-    <html data-motion="full" lang="en">
+    <html className={`${display.variable} ${mono.variable}`} data-motion="full" lang="en">
       <body>{configuredApp}</body>
     </html>
   );

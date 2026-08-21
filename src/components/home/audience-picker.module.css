@@ -1,0 +1,195 @@
+.picker { margin-top: 32px; }
+
+/* ---------- the selector ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  min-height: 42px;
+  padding: 0 17px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--quiet);
+  cursor: pointer;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s var(--ease-standard);
+}
+
+.tab:hover { border-color: var(--sand-deep); color: var(--ink); transform: translateY(-2px); }
+.tab:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
+
+.tab[aria-selected="true"] {
+  border-color: var(--crimson);
+  background: var(--crimson);
+  color: #fff;
+}
+
+/* ---------- the panel ---------- */
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 44px;
+  padding-top: 34px;
+  animation: panel-in .34s var(--ease-standard) both;
+}
+.panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
+
+/* ---------- the photo ----------
+   A fixed 3:2 frame rather than one stretched to match the height of the
+   copy, which sliced both sides off the image. Mobile uses the same ratio,
+   so a single crop serves both and nothing is reframed between them. */
+.shotPhoto { margin: 0; }
+
+.shotFrame {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--pearl);
+}
+.shotFrame img { object-fit: cover; }
+
+/* The event, then what Ajani does about it. Real type rather than text baked
+   into the image: it stays legible at any size, matches the page's face, and
+   can be changed without regenerating a photograph. */
+.shotCaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 0 2px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.shotCaption span { color: var(--quiet); }
+.shotCaption i { color: var(--sand-deep); font-style: normal; }
+.shotCaption b { color: var(--crimson); font-weight: 400; }
+
+/* ---------- copy ---------- */
+.copy { display: flex; flex-direction: column; align-items: flex-start; }
+
+.copy h3 {
+  margin: 0;
+  font-size: clamp(24px, 2.5vw, 33px);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+}
+
+.problem { margin: 16px 0 0; color: var(--quiet); font-size: 16px; line-height: 1.5; }
+
+/* ---------- the example ----------
+   One card: what came in, what went back. It used to be two chat bubbles in a
+   bordered panel next to a blockquote and a route strip, which was the same
+   idea three times over. */
+.example {
+  width: 100%;
+  margin: 24px 0 0;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.example figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.example figcaption b { font-weight: 400; color: var(--crimson); }
+.example figcaption span { color: var(--sand-deep); text-align: right; }
+
+.exampleIn {
+  margin: 14px 0 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.exampleOut {
+  margin: 14px 0 0;
+  padding: 12px 0 0 14px;
+  border-top: 1px solid var(--line);
+  border-left: 2px solid var(--sand);
+  color: var(--quiet);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.exampleOut span {
+  display: block;
+  margin-top: 8px;
+  color: var(--sand-deep);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+/* ---------- the way out of the panel ---------- */
+.panelCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  margin-top: 22px;
+  padding: 0 20px;
+  border: 1px solid var(--crimson);
+  border-radius: 10px;
+  color: var(--crimson);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  transition: background .18s ease, color .18s ease, transform .18s var(--ease-standard);
+}
+.panelCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
+.panelCta:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .tab { transition: none; }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .panel { grid-template-columns: 1fr; gap: 26px; }
+}
+
+@media (max-width: 620px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 20px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab { flex: 0 0 auto; scroll-snap-align: start; font-size: 13.5px; }
+  .panel { padding-top: 26px; }
+  .example { padding: 14px 15px 16px; }
+  .panelCta { width: 100%; justify-content: center; }
+}
