@@ -110,7 +110,69 @@
   color: var(--sand);
 }
 .heroVisualHead em { display: flex; align-items: center; gap: 8px; color: #a2958f; font-style: normal; }
-.heroVisualHead i { width: 7px; height: 7px; border-radius: 50%; background: var(--sand); }
+.heroVisualHead i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sand);
+  animation: previewDot 7.2s ease infinite;
+}
+
+.previewStatus { position: relative; display: inline-grid; min-width: 82px; height: 1.2em; }
+.previewStatus b {
+  grid-area: 1 / 1;
+  font-weight: 400;
+  opacity: 0;
+  transform: translateY(3px);
+  animation-duration: 7.2s;
+  animation-timing-function: ease;
+  animation-iteration-count: infinite;
+}
+.statusListening { animation-name: statusListening; }
+.statusMapping { animation-name: statusMapping; }
+.statusRouting { animation-name: statusRouting; }
+.statusReady { animation-name: statusReady; }
+
+@keyframes statusListening {
+  0%, 15% { opacity: 1; transform: translateY(0); }
+  19%, 95% { opacity: 0; transform: translateY(-3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes statusMapping {
+  0%, 15% { opacity: 0; transform: translateY(3px); }
+  19%, 31% { opacity: 1; transform: translateY(0); }
+  35%, 100% { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes statusRouting {
+  0%, 31% { opacity: 0; transform: translateY(3px); }
+  35%, 69% { opacity: 1; transform: translateY(0); }
+  73%, 100% { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes statusReady {
+  0%, 69% { opacity: 0; transform: translateY(3px); }
+  73%, 92% { opacity: 1; transform: translateY(0); }
+  96%, 100% { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes previewDot {
+  0%, 17% { background: var(--sand); }
+  22%, 34% { background: #c8865f; }
+  38%, 71% { background: #b78a63; }
+  75%, 92% { background: #8fc7b7; }
+  100% { background: var(--sand); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .heroVisualHead i {
+    background: #8fc7b7;
+    animation: none;
+  }
+  :global(html:not([data-motion="full"])) .previewStatus b {
+    opacity: 0;
+    transform: none;
+    animation: none;
+  }
+  :global(html:not([data-motion="full"])) .previewStatus .statusReady { opacity: 1; }
+}
 
 .heroVisualBody { display: grid; place-items: center; padding: 40px 26px 32px; }
 

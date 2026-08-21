@@ -95,8 +95,9 @@ test("full motion is the default site experience", async ({ page }) => {
   await expect(page.getByRole("button", { name: /motion/i })).toHaveCount(0);
   const systemPreview = page.locator('svg[role="presentation"]').first();
   await expect(systemPreview.locator("rect").first()).not.toHaveCSS("display", "none");
-  await expect(systemPreview.locator("rect").first()).toHaveCSS("animation-name", /wave/);
+  await expect(systemPreview.locator("g").first()).toHaveCSS("animation-name", /waveform/);
   await expect(systemPreview.locator("line").first()).toHaveCSS("animation-name", /draw/);
+  await expect(systemPreview.locator("circle").first()).toHaveCSS("animation-duration", "7.2s");
   await Promise.all([
     page.waitForURL("**/stories"),
     page.getByRole("link", { name: "Stories" }).first().click(),

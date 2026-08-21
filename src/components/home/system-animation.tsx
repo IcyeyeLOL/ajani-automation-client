@@ -17,6 +17,10 @@ const NODES = [
 
 const CY = 60;
 const R = 21;
+const WAVE_HEIGHTS = [
+  8, 14, 22, 13, 28, 38, 21, 45, 31, 17, 37, 52, 29,
+  42, 23, 48, 32, 19, 39, 26, 44, 30, 16, 27, 18, 10,
+];
 
 export function SystemAnimation() {
   return (
@@ -31,16 +35,15 @@ export function SystemAnimation() {
 
         {/* beat one — the spoken note */}
         <g className={styles.wave}>
-          {Array.from({ length: 26 }).map((_, i) => (
+          {WAVE_HEIGHTS.map((height, i) => (
             <rect
               className={styles.bar}
-              height="5"
+              height={height}
               key={i}
               rx="2"
-              style={{ animationDelay: `${i * 48}ms` }}
               width="3.4"
               x={44 + i * 12.6}
-              y={CY - 2.5}
+              y={CY - height / 2}
             />
           ))}
         </g>
@@ -49,8 +52,8 @@ export function SystemAnimation() {
         {NODES.slice(0, -1).map((node, i) => (
           <line
             className={styles.link}
+            data-step={i + 1}
             key={node.label}
-            style={{ animationDelay: `${1500 + i * 230}ms` }}
             x1={node.x + R + 5}
             x2={NODES[i + 1].x - R - 5}
             y1={CY}
@@ -59,27 +62,24 @@ export function SystemAnimation() {
         ))}
 
         {NODES.map((node, i) => (
-          <g key={node.label}>
+          <g data-step={i + 1} key={node.label}>
             <circle
               className={styles.node}
               cx={node.x}
               cy={CY}
               r={R}
-              style={{ animationDelay: `${1320 + i * 230}ms` }}
             />
             <circle
               className={styles.core}
               cx={node.x}
               cy={CY}
               r={5.5}
-              style={{ animationDelay: `${3040 + i * 400}ms` }}
             />
             <circle
               className={styles.pulse}
               cx={node.x}
               cy={CY}
               r={R}
-              style={{ animationDelay: `${3000 + i * 400}ms` }}
             />
             <text className={styles.tag} x={node.x} y={CY + 44}>
               {node.label}
@@ -87,7 +87,8 @@ export function SystemAnimation() {
           </g>
         ))}
 
-        {/* a single packet travelling the finished route */}
+        {/* a restrained trail keeps the packet readable without adding glow */}
+        <circle className={styles.packetTrail} cx={NODES[0].x} cy={CY} r="2.4" />
         <circle className={styles.packet} cx={NODES[0].x} cy={CY} r="4" />
       </svg>
 

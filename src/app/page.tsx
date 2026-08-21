@@ -67,7 +67,15 @@ export default function Home() {
           <Reveal className={styles.heroVisual} delay={140}>
             <div className={styles.heroVisualHead}>
               <span>Ajani / system preview</span>
-              <em><i aria-hidden="true" />Assembling</em>
+              <em aria-label="System preview running">
+                <i aria-hidden="true" />
+                <span aria-hidden="true" className={styles.previewStatus}>
+                  <b className={styles.statusListening}>Listening</b>
+                  <b className={styles.statusMapping}>Mapping</b>
+                  <b className={styles.statusRouting}>Routing</b>
+                  <b className={styles.statusReady}>System ready</b>
+                </span>
+              </em>
             </div>
             <div className={styles.heroVisualBody}>
               <SystemAnimation />
