@@ -46,9 +46,9 @@
 .panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
 
 /* ---------- the photo ----------
-   A fixed 4:3 frame, the shape most photographs are taken in, so the image
-   is shown rather than cropped. Stretching it to match the height of the
-   copy sliced both sides off. */
+   A fixed 3:2 frame rather than one stretched to match the height of the
+   copy, which sliced both sides off the image. Mobile uses the same ratio,
+   so a single crop serves both and nothing is reframed between them. */
 .shotPhoto {
   position: relative;
   aspect-ratio: 3 / 2;
