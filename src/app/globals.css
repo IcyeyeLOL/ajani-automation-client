@@ -66,3 +66,5 @@
 
 /* Client-facing labels should read comfortably without competing with the main message. */
 .eyebrow { font-size:12px; letter-spacing:.05em; }.operations-head,.operations-item > span { font-size:12px; }.operations-item i,.operations-result span { font-size:11px; }.proof-card-head > p,.proof-card-head > span { font-size:11px; }.proof-card .proof-route { font-size:10px; }.proof-intro-route > span { font-size:11px; }.proof-intro-route > div { font-size:11px; }.approach-cards article > p { font-size:11px; }.flow-meta,.flow-progress button,.recorder-top { font-size:12px; }.flow-progress button > span { font-size:10px; }.recorder-center small,.transcript-box > span,.note-guide li b,.source-card > div span,.question-card > span,.scope-card > span,.submission-card > span,.next-timeline > span,.route-review header span { font-size:11px; }.note-guide li span { font-size:13px; }.flow-actions button { font-size:12px; }.source-card footer span { font-size:10px; }.build-save-modal > small,.account-access-preview b,.modal-config-note b { font-size:12px; }
+
+.flow-save-error { margin:18px 0 -8px; color:var(--crimson); font:12px/1.45 "Consolas",monospace; }

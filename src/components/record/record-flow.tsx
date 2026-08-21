@@ -5,6 +5,7 @@ import { type DragEvent, type ReactNode, useState } from "react";
 import { useAccountAccess } from "@/components/account-access-dialog";
 import { VoiceRecorder } from "@/components/home/voice-recorder";
 import type { SystemBlock } from "@/lib/domain/types";
+import { saveWebsiteRequestDraft } from "@/lib/request-drafts/client";
 import styles from "./record-flow.module.css";
 
 const stages = ["Your note", "One question", "The system", "Review", "Send"];
@@ -61,6 +62,8 @@ export function RecordFlow() {
   const [answer, setAnswer] = useState("");
   const [blocks, setBlocks] = useState(initialBlocks);
   const [dragged, setDragged] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const noteReady = capture !== null || written.trim().length > 20;
 
@@ -85,6 +88,29 @@ export function RecordFlow() {
       return [...rest.slice(0, at), item, ...rest.slice(at)];
     });
     setDragged(null);
+  };
+
+  const sendRequest = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      const firstStep = blocks[0]?.title ?? "Your request";
+      const finalStep = blocks.at(-1)?.title ?? "handoff";
+      await saveWebsiteRequestDraft({
+        title: `${firstStep} → ${finalStep}`.slice(0, 120),
+        transcript: written.trim(),
+        clarificationAnswer: answer.trim(),
+        systemBlocks: blocks,
+        voiceMemo: capture ? { durationSeconds: capture.seconds, byteLength: capture.bytes } : null,
+      });
+      openAccountAccess("request");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Your request could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -422,10 +448,11 @@ export function RecordFlow() {
           </div>
 
           <Actions
-            hint="Creating an account is how you get back to the build later."
-            onPrimary={() => openAccountAccess("request")}
+            hint={saveError ?? "Creating an account is how you get back to the build later."}
+            onPrimary={sendRequest}
             onSecondary={() => go(3)}
-            primary="Send the request"
+            primary={saving ? "Saving request…" : "Send the request"}
+            primaryDisabled={saving}
             secondary="Back to review"
           />
         </Stage>

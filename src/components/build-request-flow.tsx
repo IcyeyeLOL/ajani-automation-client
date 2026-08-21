@@ -3,6 +3,7 @@
 import { useState, type DragEvent } from "react";
 import { useAccountAccess } from "@/components/account-access-dialog";
 import type { SystemBlock } from "@/lib/domain/types";
+import { saveWebsiteRequestDraft } from "@/lib/request-drafts/client";
 
 const initialBlocks: SystemBlock[] = [
   { id: "trigger", kind: "trigger", title: "New lead arrives", detail: "Instagram or website inquiry enters the route." },
@@ -30,6 +31,8 @@ export function BuildRequestFlow() {
   const [answer, setAnswer] = useState("");
   const [blocks, setBlocks] = useState(initialBlocks);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const advance = () => setStage((current) => Math.min(current + 1, stageNames.length - 1));
   const goBack = () => setStage((current) => Math.max(current - 1, 0));
@@ -51,6 +54,26 @@ export function BuildRequestFlow() {
       return [...remaining.slice(0, targetIndex), dragged, ...remaining.slice(targetIndex)];
     });
     setDraggedId(null);
+  };
+  const sendRequest = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      await saveWebsiteRequestDraft({
+        title: "After-hours lead handoff",
+        transcript: "Most leads come through Instagram and the website. When someone replies after hours, I want the first response to feel personal before the team gets involved.",
+        clarificationAnswer: answer.trim(),
+        systemBlocks: blocks,
+        voiceMemo: null,
+      });
+      openAccountAccess("request");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Your request could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -86,7 +109,8 @@ export function BuildRequestFlow() {
 
       {stage === 4 && <section className={`flow-stage stage-${stage}`} key={stage}><FlowHeading eyebrow="05 / SUBMIT YOUR REQUEST" title={<>Everything is clear. Now send the <em>build request.</em></>} copy="Once submitted, Ajani reviews the approved route and opens your private handoff room." />
         <div className="launch-grid"><article className="submission-card"><span>READY TO REQUEST</span><h2>After-hours lead handoff</h2><div>{[["VOICE NOTE", "01:12 RECEIVED"], ["SYSTEM", `${String(blocks.length).padStart(2, "0")} BLOCKS APPROVED`], ["BUILD WINDOW", "7 TO 10 DAYS"]].map(([label, value]) => <p key={label}><small>{label}</small><b>{value}</b></p>)}</div><p>Request this exact system, then use your private account to follow the build.</p></article><NextTimeline /></div>
-        <FlowActions secondary="BACK TO REVIEW" primary="REQUEST BUILD" onPrimary={() => openAccountAccess("request")} onSecondary={goBack} />
+        {saveError ? <p className="flow-save-error" role="alert">{saveError}</p> : null}
+        <FlowActions secondary="BACK TO REVIEW" primary={saving ? "SAVING REQUEST…" : "REQUEST BUILD"} primaryDisabled={saving} onPrimary={sendRequest} onSecondary={goBack} />
       </section>}
     </div>
   );
