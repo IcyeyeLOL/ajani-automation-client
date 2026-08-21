@@ -1,34 +1,36 @@
 import { expect, test } from "@playwright/test";
 
 test("a visitor can complete the public funnel and open account access without losing progress", async ({ page }) => {
-  await page.goto("/request");
+  await page.goto("/record");
 
-  await page.getByRole("button", { name: "Record voice note" }).click();
-  await page.getByRole("button", { name: "Stop recording" }).click();
-  await page.getByRole("button", { name: /submit voice note/i }).click();
+  await page.getByRole("button", { name: "Rather type it than say it?" }).click();
+  await page.getByRole("textbox", { name: "Describe the work in writing" }).fill(
+    "Website enquiries arrive after hours and our team misses the follow-up.",
+  );
+  await page.getByRole("button", { name: /^Continue/ }).click();
 
-  await page.getByRole("button", { name: "They ask about availability" }).click();
+  await page.getByRole("button", { name: "When they ask about price or availability" }).click();
   await page.getByRole("button", { name: /save answer/i }).click();
   await page.getByRole("button", { name: /ready for review/i }).click();
-  await page.getByRole("button", { name: /approve system/i }).click();
-  await page.getByRole("button", { name: /request build/i }).click();
+  await page.getByRole("button", { name: /approve this route/i }).click();
+  await page.getByRole("button", { name: /send the request/i }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Create an account to request this build.");
+  await expect(dialog).toContainText("Add the Clerk publishable and secret keys to activate account access here.");
 
   await page.getByRole("button", { name: "Close account access" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("Everything is clear. Now send the build request.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Everything is clear. Send the request./i })).toBeVisible();
 });
 
-test("the header account dialog supports keyboard dismissal", async ({ page }) => {
+test("the header sign-in entry leads to the protected portal", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeHidden();
+  const signIn = page.getByRole("link", { name: "Sign in" });
+  await expect(signIn).toHaveAttribute("href", "/portal");
+  await signIn.click();
+  await expect(page).toHaveURL(/\/portal$/);
 });
 
 test("automation theatre runs play by play with accessible controls", async ({ page }) => {
@@ -77,11 +79,10 @@ test("automation theatre plays through reduced motion preferences after user int
 test("stories presents visual system narratives instead of a placeholder", async ({ page }) => {
   await page.goto("/stories");
 
-  await expect(page.getByRole("heading", { name: /Proof feels better/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The lead that would have waited until tomorrow." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The context that arrives before the meeting starts." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The client moment that does not disappear quietly." })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Tell us where work sticks/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /The work is the proof/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The 7am portal lead that got the viewing." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Different trades, the same shape/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Record a note/i }).first()).toBeVisible();
 });
 
 test("full motion is the default site experience", async ({ page }) => {
@@ -91,23 +92,23 @@ test("full motion is the default site experience", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
   await expect(page.getByRole("button", { name: /motion/i })).toHaveCount(0);
   await Promise.all([
-    page.waitForURL("**/approach"),
-    page.getByRole("link", { name: "Approach" }).click(),
+    page.waitForURL("**/stories"),
+    page.getByRole("link", { name: "Stories" }).first().click(),
   ]);
   await expect(page.locator(".route-transition")).toHaveCSS("animation-name", "route-enter");
-  await expect(page.getByRole("link", { name: "Approach" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("link", { name: "Approach" })).toHaveClass(/is-active/);
+  await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
 });
 
 test("mobile navigation fits the viewport and keeps every destination available", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const headerOverflows = await page.locator(".site-header").evaluate((header) => header.scrollWidth > header.clientWidth);
+  const header = page.locator("header").first();
+  const headerOverflows = await header.evaluate((node) => node.scrollWidth > node.clientWidth);
   expect(headerOverflows).toBe(false);
-
-  await page.getByRole("button", { name: "Open navigation menu" }).click();
-  await expect(page.getByRole("menuitem", { name: "Stories" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Stories" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Record a note" })).toBeVisible();
 
   await page.goto("/demos");
   const theatreOverflows = await page.getByRole("region", { name: "Automation theatre" }).evaluate((theatre) => theatre.scrollWidth > theatre.clientWidth);

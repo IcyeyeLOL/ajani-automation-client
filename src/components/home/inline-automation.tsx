@@ -42,14 +42,16 @@ const steps = [
 
 export function InlineAutomation() {
   const [active, setActive] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [inView, setInView] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [manuallyPaused, setManuallyPaused] = useState(false);
   const region = useRef<HTMLDivElement | null>(null);
 
   // Only run while the band is actually on screen, and stop entirely when the
   // visitor prefers reduced motion — they can still step through by hand.
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setPlaying(!reduced.matches);
+    const apply = () => setReducedMotion(reduced.matches);
     apply();
     reduced.addEventListener("change", apply);
     return () => reduced.removeEventListener("change", apply);
@@ -59,7 +61,7 @@ export function InlineAutomation() {
     const node = region.current;
     if (!node) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setPlaying((value) => value && entry.isIntersecting),
+      ([entry]) => setInView(entry.isIntersecting),
       { threshold: 0.3 },
     );
     observer.observe(node);
@@ -67,12 +69,13 @@ export function InlineAutomation() {
   }, []);
 
   useEffect(() => {
+    const playing = inView && !reducedMotion && !manuallyPaused;
     if (!playing) return;
     const timer = window.setInterval(() => {
       setActive((value) => (value + 1) % steps.length);
     }, STEP_MS);
     return () => window.clearInterval(timer);
-  }, [playing]);
+  }, [inView, manuallyPaused, reducedMotion]);
 
   const current = steps[active];
 
@@ -91,7 +94,7 @@ export function InlineAutomation() {
                 className={styles.node}
                 data-state={index < active ? "done" : index === active ? "active" : "waiting"}
                 onClick={() => {
-                  setPlaying(false);
+                  setManuallyPaused(true);
                   setActive(index);
                 }}
                 type="button"

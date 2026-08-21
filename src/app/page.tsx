@@ -93,7 +93,7 @@ export default function Home() {
             <Link className={styles.ghostCta} href="/record">Record your note <span aria-hidden="true">→</span></Link>
           </div>
         </Reveal>
-        <div className={styles.routes}>
+        <div className={styles.routes} data-testid="home-routes">
           {routes.map((route, index) => (
             <Reveal as="article" className={styles.route} delay={index * 90} key={route.number}>
               <div className={styles.routeHead}>

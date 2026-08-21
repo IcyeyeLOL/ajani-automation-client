@@ -178,7 +178,7 @@ export function AudiencePicker() {
         role="tabpanel"
         tabIndex={0}
       >
-        {/* The photo keeps the shape it was shot in — a fixed 4:3 frame rather
+        {/* The photo keeps the shape it was shot in — a fixed 3:2 frame rather
             than one stretched to match the copy, which cropped both sides off.
             Where there is no photo yet the example takes the left column, so
             the panel is the same two-column shape either way. */}

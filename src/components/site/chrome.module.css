@@ -64,6 +64,13 @@
 .footerLinks { display: flex; flex-wrap: wrap; gap: 18px; }
 
 @media (max-width: 620px) {
-  .nav { gap: 12px; }
-  .link { display: none; }
+  .headerInner { gap: 12px; }
+  .nav { gap: 9px; }
+  .link { font-size: 12px; white-space: nowrap; }
+  .cta {
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
 }

@@ -101,6 +101,7 @@ export function VoiceRecorder({ id, embedded = false, onCaptured }: RecorderProp
     } catch {
       // No microphone, no permission, or an insecure origin. Say so plainly
       // rather than pretending a recording happened.
+      stop();
       setPhase("blocked");
     }
   };
@@ -125,7 +126,13 @@ export function VoiceRecorder({ id, embedded = false, onCaptured }: RecorderProp
       ) : null}
 
       <div className={styles.stage}>
-        <button aria-label={label} className={styles.record} onClick={start} type="button">
+        <button
+          aria-label={label}
+          className={styles.record}
+          disabled={phase === "requesting"}
+          onClick={start}
+          type="button"
+        >
           <span aria-hidden="true" />
         </button>
         <strong>
