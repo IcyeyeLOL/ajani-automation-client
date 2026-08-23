@@ -12,13 +12,12 @@ type Audience = {
   tab: string;
   headline: string;
   problem: string;
-  /**
-   * Path under /public once real photography exists for this business type.
-   * Leave it out and the card is the thread alone — the layout works either
-   * way, so images can land one at a time.
-   */
+  /** Completed workspace-card export from Figma. */
   photo?: string;
-  /** Alt text for that photo. Required whenever `photo` is set. */
+  /** Intrinsic dimensions preserve each card's intended framing. */
+  photoWidth?: number;
+  photoHeight?: number;
+  /** Alt text for that workspace card. Required whenever `photo` is set. */
   photoAlt?: string;
   /**
    * A worked example of the moment, not a testimonial: what arrives, and what
@@ -43,6 +42,8 @@ const audiences: Audience[] = [
     problem:
       "Someone asks for a price on a Friday afternoon. You mean to chase it Monday, the week fills up, and the job quietly goes to whoever answered first.",
     photo: "/audiences/home-services.png",
+    photoWidth: 1008,
+    photoHeight: 687,
     photoAlt: "Home services workspace showing a new lead becoming a prepared contract",
     thread: {
       stamp: "Fri 16:52",
@@ -60,6 +61,8 @@ const audiences: Audience[] = [
     problem:
       "Bookings come in across phone, email and the website. Reminders go out when someone remembers, and the no-shows are the ones that never got a second touch.",
     photo: "/audiences/clinics-practices.png",
+    photoWidth: 1296,
+    photoHeight: 667,
     photoAlt: "Clinic workspace showing a booking, cancellation, and newly opened slot",
     thread: {
       stamp: "Tue 19:20",
@@ -76,7 +79,9 @@ const audiences: Audience[] = [
     headline: "The client who just stopped coming.",
     problem:
       "A regular drifts off after eight weeks. There is no list of who is overdue, so the rebooking depends on whether someone happens to notice.",
-    photo: "/audiences/salons-studios.png",
+    photo: "/audiences/salons-studios-v2.png",
+    photoWidth: 1296,
+    photoHeight: 667,
     photoAlt: "Salon workspace showing a booking, automated follow-up, and rebooking reminder",
     thread: {
       stamp: "Week nine",
@@ -94,6 +99,8 @@ const audiences: Audience[] = [
     problem:
       "You had the whole conversation in the sales call. Then delivery asks the client the same questions again, and the relationship starts on the back foot.",
     photo: "/audiences/agencies-consultants.png",
+    photoWidth: 1008,
+    photoHeight: 692,
     photoAlt: "Consulting workspace showing a scope check becoming an automated invoice",
     thread: {
       stamp: "Mon 11:04",
@@ -110,8 +117,10 @@ const audiences: Audience[] = [
     headline: "The enquiry answered four hours late.",
     problem:
       "Portal leads arrive in bulk at all hours. The first agent to reply usually gets the viewing, and by the evening the good ones are already booked elsewhere.",
-    photo: "/audiences/property-real-estate.png",
-    photoAlt: "Property workspace showing a lead being tagged, tracked, and reported",
+    photo: "/audiences/trades-field-work.png",
+    photoWidth: 1008,
+    photoHeight: 692,
+    photoAlt: "Property workspace showing a service request being automatically routed",
     thread: {
       stamp: "Sat 07:41",
       source: "Portal enquiry",
@@ -127,8 +136,10 @@ const audiences: Audience[] = [
     headline: "The day that got rearranged by phone.",
     problem:
       "A job overruns, two customers need moving, and the whole afternoon becomes a string of calls made from a van between sites.",
-    photo: "/audiences/trades-field-work.png",
-    photoAlt: "Field-work workspace showing a service request being automatically routed",
+    photo: "/audiences/property-real-estate.png",
+    photoWidth: 1296,
+    photoHeight: 667,
+    photoAlt: "Field-work workspace showing a lead being tagged, tracked, and reported",
     thread: {
       stamp: "Wed 14:15",
       source: "Job overran",
@@ -199,15 +210,15 @@ export function AudiencePicker() {
         role="tabpanel"
         tabIndex={0}
       >
-        {/* Containment keeps the whole supplied asset visible. A replacement can
-            be landscape, square, or portrait without stretching or clipping. */}
+        {/* Intrinsic sizing keeps the complete workspace card large and uncropped. */}
         {current.photo ? (
           <figure className={styles.shotPhoto}>
             <Image
               alt={current.photoAlt ?? ""}
-              fill
+              height={current.photoHeight ?? 1}
               sizes="(max-width: 620px) calc(100vw - 32px), (max-width: 900px) calc(100vw - 48px), 46vw"
               src={current.photo}
+              width={current.photoWidth ?? 1}
             />
           </figure>
         ) : (
