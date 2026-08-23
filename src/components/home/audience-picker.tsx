@@ -42,8 +42,8 @@ const audiences: Audience[] = [
     headline: "The quote that never got followed up.",
     problem:
       "Someone asks for a price on a Friday afternoon. You mean to chase it Monday, the week fills up, and the job quietly goes to whoever answered first.",
-    photo: "/audiences/home-services.jpg",
-    photoAlt: "A business owner at a desk, working through an enquiry on a laptop",
+    photo: "/audiences/home-services.png",
+    photoAlt: "Home services workspace showing a new lead becoming a prepared contract",
     thread: {
       stamp: "Fri 16:52",
       source: "Website form",
@@ -59,6 +59,8 @@ const audiences: Audience[] = [
     headline: "The appointment nobody confirmed.",
     problem:
       "Bookings come in across phone, email and the website. Reminders go out when someone remembers, and the no-shows are the ones that never got a second touch.",
+    photo: "/audiences/clinics-practices.png",
+    photoAlt: "Clinic workspace showing a booking, cancellation, and newly opened slot",
     thread: {
       stamp: "Tue 19:20",
       source: "Missed call",
@@ -74,6 +76,8 @@ const audiences: Audience[] = [
     headline: "The client who just stopped coming.",
     problem:
       "A regular drifts off after eight weeks. There is no list of who is overdue, so the rebooking depends on whether someone happens to notice.",
+    photo: "/audiences/salons-studios.png",
+    photoAlt: "Salon workspace showing a booking, automated follow-up, and rebooking reminder",
     thread: {
       stamp: "Week nine",
       source: "No booking since 12 June",
@@ -89,6 +93,8 @@ const audiences: Audience[] = [
     headline: "The kickoff that started from scratch.",
     problem:
       "You had the whole conversation in the sales call. Then delivery asks the client the same questions again, and the relationship starts on the back foot.",
+    photo: "/audiences/agencies-consultants.png",
+    photoAlt: "Consulting workspace showing a scope check becoming an automated invoice",
     thread: {
       stamp: "Mon 11:04",
       source: "Proposal accepted",
@@ -104,6 +110,8 @@ const audiences: Audience[] = [
     headline: "The enquiry answered four hours late.",
     problem:
       "Portal leads arrive in bulk at all hours. The first agent to reply usually gets the viewing, and by the evening the good ones are already booked elsewhere.",
+    photo: "/audiences/property-real-estate.png",
+    photoAlt: "Property workspace showing a lead being tagged, tracked, and reported",
     thread: {
       stamp: "Sat 07:41",
       source: "Portal enquiry",
@@ -119,6 +127,8 @@ const audiences: Audience[] = [
     headline: "The day that got rearranged by phone.",
     problem:
       "A job overruns, two customers need moving, and the whole afternoon becomes a string of calls made from a van between sites.",
+    photo: "/audiences/trades-field-work.png",
+    photoAlt: "Field-work workspace showing a service request being automatically routed",
     thread: {
       stamp: "Wed 14:15",
       source: "Job overran",
