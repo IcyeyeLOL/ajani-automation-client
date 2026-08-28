@@ -28,6 +28,7 @@ Create `.env.local` from the following inventory. Values marked optional are not
 | `REQUEST_RATE_LIMIT_SECRET` | Anonymous intake throttling | Dedicated random secret used only to hash request fingerprints. |
 | `AJANI_ADMIN_EMAIL_ALLOWLIST` | Internal admin authorization | Comma-separated Ajani team email addresses. |
 | `AI_GATEWAY_API_KEY` | AI clarification and workflow generation | Optional when Vercel OIDC is available. Keep server-only. |
+| `AI_PRIMARY_PROVIDER` | AI provider order | Optional. Defaults to `gateway`; set to `anthropic` only when direct Anthropic should be tried first. |
 | `ANTHROPIC_API_KEY` | Direct AI-provider fallback | Optional server-only fallback. |
 | `REQUEST_DEMAND_MODEL` | Saved-request demand classification | Optional Vercel AI Gateway model override. |
 | `AUTOMATION_WORKFLOW_MODEL` | Clarification and workflow generation | Optional Vercel AI Gateway model override. |
