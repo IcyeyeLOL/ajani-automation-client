@@ -251,10 +251,33 @@ function readStoredFlow(): StoredFlow | null {
   }
 }
 
+type ClerkSetActive = ReturnType<typeof useClerk>["setActive"];
+
 export function RecordFlow() {
-  const { openAccountAccess } = useAccountAccess();
+  const { clerkEnabled } = useAccountAccess();
+
+  return clerkEnabled
+    ? <ConfiguredRecordFlow />
+    : <RecordFlowExperience isLoaded isSignedIn={false} setActive={null} />;
+}
+
+function ConfiguredRecordFlow() {
   const { isLoaded, isSignedIn } = useAuth();
   const { setActive } = useClerk();
+
+  return <RecordFlowExperience
+    isLoaded={isLoaded}
+    isSignedIn={Boolean(isSignedIn)}
+    setActive={setActive}
+  />;
+}
+
+function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  setActive: ClerkSetActive | null;
+}) {
+  const { openAccountAccess } = useAccountAccess();
   const router = useRouter();
   const [stage, setStage] = useState(0);
   const [reached, setReached] = useState(0);
@@ -1164,6 +1187,7 @@ export function RecordFlow() {
         setSubmissionStatus("connecting");
         let result = await claimSavedWebsiteRequestDraft();
         if (result.status === "organization_activation_required" && result.organizationId) {
+          if (!setActive) throw new Error("Account access is unavailable. Please retry.");
           await setActive({ organization: result.organizationId });
           result = await claimSavedWebsiteRequestDraft();
         }
