@@ -395,6 +395,22 @@ test("the recorder keeps compact progress, focus, and motion safe at narrow widt
   const routeMap = routeEditor.getByRole("navigation", { name: "Choose a route step" });
   await expect(routeMap.getByRole("button")).toHaveCount(4);
   const stepTitle = routeEditor.getByRole("textbox", { name: "Step name" });
+  const stepDetail = routeEditor.getByRole("textbox", { name: "What happens" });
+  await stepDetail.scrollIntoViewIfNeeded();
+  const [routeEditorBounds, checkRouteBounds, backToClarifyBounds] = await Promise.all([
+    routeEditor.boundingBox(),
+    page.getByRole("button", { name: "Check this route" }).boundingBox(),
+    page.getByRole("button", { name: "Back to clarify" }).boundingBox(),
+  ]);
+  expect(routeEditorBounds).not.toBeNull();
+  expect(checkRouteBounds).not.toBeNull();
+  expect(backToClarifyBounds).not.toBeNull();
+  for (const actionBounds of [checkRouteBounds!, backToClarifyBounds!]) {
+    expect(
+      actionBounds.y,
+      "mobile route actions must stay below the complete editor while its fields are scrolled into view",
+    ).toBeGreaterThanOrEqual(routeEditorBounds!.y + routeEditorBounds!.height - 1);
+  }
   await stepTitle.fill("Capture the new enquiry from every active customer channel");
   await expect(stepTitle).toHaveAttribute("maxlength", "120");
   expect(await stepTitle.evaluate((node) => ({

@@ -1333,7 +1333,7 @@
   .mobileRouteUtilities button { padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: 700 10px var(--font-mono), ui-monospace, monospace; text-transform: uppercase; }
   .mobileRouteUtilities button:first-child { border-color: var(--ink); background: var(--ink); color: #fff; }
   .mobileRouteUtilities button:disabled { opacity: .4; }
-  .routeActions { position: sticky; z-index: 6; bottom: 0; margin: 18px -1px 0; }
+  .routeActions { position: static; margin: 18px -1px 0; }
   .routeActions .actions { margin-top: 0; }
   .outcomeBand > header { align-items: flex-start; flex-direction: column; padding: 14px 18px; }
   .outcomeBand > div { padding: 22px 20px 24px; }

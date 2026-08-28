@@ -3,6 +3,7 @@ import "server-only";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
+import { shouldPreferDirectAnthropic } from "@/lib/ai/provider-order";
 import type { WebsiteRequestDraftInput } from "@/lib/validation/website-request-draft";
 
 export const REQUEST_DEMAND_PROMPT_VERSION = "request-demand-v1";
@@ -59,10 +60,11 @@ export async function extractRequestDemand(
   const startedAt = Date.now();
   const gatewayModel = process.env.REQUEST_DEMAND_MODEL || DEFAULT_REQUEST_DEMAND_MODEL;
   const anthropicModel = process.env.REQUEST_DEMAND_ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_REQUEST_DEMAND_MODEL;
-  const directAnthropicAvailable = Boolean(process.env.ANTHROPIC_API_KEY);
-  const preferDirectAnthropic = process.env.NODE_ENV === "development"
-    && !process.env.AI_GATEWAY_API_KEY
-    && directAnthropicAvailable;
+  const directAnthropicAvailable = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  const preferDirectAnthropic = shouldPreferDirectAnthropic({
+    AI_PRIMARY_PROVIDER: process.env.AI_PRIMARY_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  });
   const candidates: Array<{ provider: "vercel_ai_gateway" | "anthropic"; model: string; languageModel: string | LanguageModel }> = preferDirectAnthropic
     ? [
       { provider: "anthropic", model: anthropicModel, languageModel: anthropic(anthropicModel) },

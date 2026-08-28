@@ -4,6 +4,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { normalizeGeneratedProse } from "@/lib/ai/generated-prose";
+import { shouldPreferDirectAnthropic } from "@/lib/ai/provider-order";
 import {
   automationClarificationSchema,
   automationEmailBriefSchema,
@@ -83,8 +84,11 @@ async function generateStructured<T>(
 ): Promise<{ output: T; model: string } | null> {
   const gatewayModel = process.env.AUTOMATION_WORKFLOW_MODEL || DEFAULT_AUTOMATION_WORKFLOW_MODEL;
   const directModel = process.env.AUTOMATION_WORKFLOW_ANTHROPIC_MODEL || DEFAULT_DIRECT_AUTOMATION_WORKFLOW_MODEL;
-  const directAvailable = Boolean(process.env.ANTHROPIC_API_KEY);
-  const preferDirect = process.env.NODE_ENV === "development" && !process.env.AI_GATEWAY_API_KEY && directAvailable;
+  const directAvailable = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  const preferDirect = shouldPreferDirectAnthropic({
+    AI_PRIMARY_PROVIDER: process.env.AI_PRIMARY_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  });
   const candidates: Array<{ model: string; languageModel: string | LanguageModel }> = preferDirect
     ? [{ model: directModel, languageModel: anthropic(directModel) }, { model: gatewayModel, languageModel: gatewayModel }]
     : [
