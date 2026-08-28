@@ -1,13 +1,14 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { twoProportionZScore } from "@/lib/admin/statistics";
+import { hasAdequateProportionSample, multipleComparisonCriticalZ, twoProportionZScore } from "@/lib/admin/statistics";
 import type {
   AdminDashboardData,
   AdminMetric,
   FunnelStage,
   OperationsStatus,
   OutreachExperiment,
+  OutreachMessageStep,
   OutreachTotals,
   RecentBatch,
   TrendPoint,
@@ -55,10 +56,10 @@ export async function loadAdminDashboardData(): Promise<AdminDashboardData> {
     readRows(admin, "request_draft_ai_runs", "id,task,status,latency_ms,error_code,created_at,completed_at", "created_at", since),
     readRows(admin, "voice_memo_transcription_jobs", "id,status,attempt_count,confidence,started_at,completed_at,created_at", "created_at", since),
     readRows(admin, "build_request_notification_jobs", "build_request_id,status,attempt_count,created_at,sent_at", "created_at", since),
-    readRows(admin, "outreach_experiments", "id,title,audience,campaign,channel,method,primary_metric,status,created_at"),
+    readRows(admin, "outreach_experiments", "id,title,audience,campaign,channel,method,message_step,primary_metric,status,created_at"),
     readRows(admin, "outreach_variants", "id,experiment_id,label,title,sort_order,active,created_at"),
     readRows(admin, "outreach_batches", "id,activity_date,team_member,channel,method,audience,campaign,experiment_id,created_at"),
-    readRows(admin, "outreach_batch_metrics", "id,batch_id,variant_id,variant_label,connection_requests,connections_accepted,initial_dms,f1_sent,f2_sent,replies,positive_replies,calls_booked,created_at"),
+    readRows(admin, "outreach_batch_metrics", "id,batch_id,variant_id,variant_label,connection_requests,connections_accepted,initial_dms,f1_sent,f2_sent,custom_sent,replies,attributed_replies,positive_replies,calls_booked,created_at"),
   ]);
 
   const coreAvailable = drafts.available || builds.available || organizations.available;
@@ -172,7 +173,7 @@ function buildMetrics(input: {
     return time >= previousStart && time < currentStart;
   }).map((row) => stringValue(row.id)));
   const sumTouches = (ids: Set<string>) => input.batchMetrics.reduce((sum, row) => ids.has(stringValue(row.batch_id))
-    ? sum + touchCount(row)
+    ? sum + outreachTouchCount(row)
     : sum, 0);
   const sumReplies = (ids: Set<string>) => input.batchMetrics.reduce((sum, row) => ids.has(stringValue(row.batch_id)) ? sum + numberValue(row.replies) : sum, 0);
   const outreachCurrent = sumTouches(currentBatchIds);
@@ -197,7 +198,7 @@ function buildFunnel(drafts: Row[], aiStates: Row[]): FunnelStage[] {
   const saved = drafts.length;
   const processed = drafts.filter((draft) => {
     const state = aiByDraft.get(stringValue(draft.id));
-    return state && Object.keys(objectValue(state.latest_extraction)).length > 0;
+    return state && hasAiDemandExtraction(objectValue(state.latest_extraction));
   }).length;
   const approved = drafts.filter((draft) => numberOrNull(aiByDraft.get(stringValue(draft.id))?.approved_revision) !== null).length;
   const claimed = drafts.filter((draft) => Boolean(draft.claimed_at)).length;
@@ -221,7 +222,7 @@ function buildTrend(drafts: Row[], builds: Row[], batches: Row[], metrics: Row[]
     const batch = batchById.get(stringValue(row.batch_id));
     if (!batch) return;
     const date = stringValue(batch.activity_date).slice(0, 10);
-    increment(byDate, date, "outreach", touchCount(row));
+    increment(byDate, date, "outreach", outreachTouchCount(row));
     increment(byDate, date, "replies", numberValue(row.replies));
   });
   return points;
@@ -247,6 +248,7 @@ function shapeExperiments(experiments: Row[], variants: Row[]): OutreachExperime
     campaign: nullableString(experiment.campaign),
     channel: stringValue(experiment.channel),
     method: stringValue(experiment.method),
+    messageStep: messageStepValue(experiment.message_step),
     primaryMetric: stringValue(experiment.primary_metric),
     status: stringValue(experiment.status),
     variants: variants
@@ -263,6 +265,7 @@ function aggregateOutreach(rows: Row[]): OutreachTotals {
     initialDms: sum.initialDms + numberValue(row.initial_dms),
     f1Sent: sum.f1Sent + numberValue(row.f1_sent),
     f2Sent: sum.f2Sent + numberValue(row.f2_sent),
+    customSent: sum.customSent + numberValue(row.custom_sent),
     replies: sum.replies + numberValue(row.replies),
     positiveReplies: sum.positiveReplies + numberValue(row.positive_replies),
     callsBooked: sum.callsBooked + numberValue(row.calls_booked),
@@ -275,10 +278,10 @@ function aggregateOutreach(rows: Row[]): OutreachTotals {
 }
 
 function emptyOutreach(): OutreachTotals {
-  return { connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, replies: 0, positiveReplies: 0, callsBooked: 0, acceptanceRate: null, replyRate: null };
+  return { connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, customSent: 0, replies: 0, positiveReplies: 0, callsBooked: 0, acceptanceRate: null, replyRate: null };
 }
 
-function aggregateExperimentPerformance(experiments: OutreachExperiment[], batches: Row[], metrics: Row[]) {
+export function aggregateExperimentPerformance(experiments: OutreachExperiment[], batches: Row[], metrics: Row[]) {
   const batchById = new Map(batches.map((batch) => [stringValue(batch.id), batch]));
   return Object.fromEntries(experiments.map((experiment) => {
     const experimentRows = metrics.filter((row) => {
@@ -287,15 +290,15 @@ function aggregateExperimentPerformance(experiments: OutreachExperiment[], batch
     });
     const performance: VariantPerformance[] = experiment.variants.map((variant) => {
       const rows = experimentRows.filter((row) => stringValue(row.variant_id) === variant.id || stringValue(row.variant_label) === variant.label);
-      const sent = rows.reduce((sum, row) => sum + numberValue(row.initial_dms), 0);
-      const replies = rows.reduce((sum, row) => sum + numberValue(row.replies), 0);
+      const sent = rows.reduce((sum, row) => sum + exposureCount(row, experiment.messageStep), 0);
+      const attributedReplies = rows.reduce((sum, row) => sum + numberValue(row.attributed_replies), 0);
       const positiveReplies = rows.reduce((sum, row) => sum + numberValue(row.positive_replies), 0);
       const callsBooked = rows.reduce((sum, row) => sum + numberValue(row.calls_booked), 0);
       const connectionRequests = rows.reduce((sum, row) => sum + numberValue(row.connection_requests), 0);
       const connectionsAccepted = rows.reduce((sum, row) => sum + numberValue(row.connections_accepted), 0);
       const primary = primaryOutcome(experiment.primaryMetric, {
         sent,
-        replies,
+        replies: attributedReplies,
         positiveReplies,
         callsBooked,
         connectionRequests,
@@ -304,13 +307,13 @@ function aggregateExperimentPerformance(experiments: OutreachExperiment[], batch
       return {
         ...variant,
         sent,
-        replies,
+        replies: attributedReplies,
         positiveReplies,
         callsBooked,
         connectionRequests,
         connectionsAccepted,
         acceptanceRate: percentage(connectionsAccepted, connectionRequests),
-        replyRate: percentage(replies, sent),
+        replyRate: percentage(attributedReplies, sent),
         positiveRate: percentage(positiveReplies, sent),
         bookingRate: percentage(callsBooked, sent),
         primaryRate: percentage(primary.numerator, primary.denominator),
@@ -328,14 +331,17 @@ function aggregateExperimentPerformance(experiments: OutreachExperiment[], batch
     const ranked = performance.filter((item) => item.primaryRate !== null).sort((a, b) => (b.primaryRate ?? 0) - (a.primaryRate ?? 0));
     const leader = ranked[0];
     const runnerUp = ranked[1];
-    if (leader && runnerUp && leader.primaryDenominator >= 50 && runnerUp.primaryDenominator >= 50) {
+    if (leader && runnerUp
+      && hasAdequateProportionSample(leader.primaryNumerator, leader.primaryDenominator)
+      && hasAdequateProportionSample(runnerUp.primaryNumerator, runnerUp.primaryDenominator)) {
       const zScore = twoProportionZScore(
         leader.primaryNumerator,
         leader.primaryDenominator,
         runnerUp.primaryNumerator,
         runnerUp.primaryDenominator,
       );
-      if (zScore !== null && Math.abs(zScore) >= 1.96) leader.status = "leading";
+      const criticalZ = multipleComparisonCriticalZ(performance.length);
+      if (zScore !== null && Math.abs(zScore) >= criticalZ) leader.status = "leading";
     }
     return [experiment.id, performance];
   }));
@@ -353,6 +359,21 @@ function primaryOutcome(metricName: string, totals: {
   if (metricName === "positive_reply_rate") return { numerator: totals.positiveReplies, denominator: totals.sent, label: "positive reply rate" };
   if (metricName === "booking_rate") return { numerator: totals.callsBooked, denominator: totals.sent, label: "booking rate" };
   return { numerator: totals.replies, denominator: totals.sent, label: "reply rate" };
+}
+
+function exposureCount(row: Row, messageStep: OutreachMessageStep) {
+  if (messageStep === "connection_request") return numberValue(row.connection_requests);
+  if (messageStep === "follow_up_1") return numberValue(row.f1_sent);
+  if (messageStep === "follow_up_2") return numberValue(row.f2_sent);
+  if (messageStep === "custom") return numberValue(row.custom_sent);
+  return numberValue(row.initial_dms);
+}
+
+function messageStepValue(value: unknown): OutreachMessageStep {
+  const step = stringValue(value);
+  return ["connection_request", "initial_dm", "follow_up_1", "follow_up_2", "custom"].includes(step)
+    ? step as OutreachMessageStep
+    : "initial_dm";
 }
 
 function buildOperations(systems: Row[], aiRuns: Row[], transcriptionJobs: Row[], notificationJobs: Row[]): OperationsStatus[] {
@@ -386,29 +407,37 @@ function buildRecentBatches(batches: Row[], metrics: Row[]): RecentBatch[] {
         date: stringValue(batch.activity_date),
         teamMember: stringValue(batch.team_member),
         context: [titleCase(stringValue(batch.channel)), titleCase(stringValue(batch.method)), stringValue(batch.audience)].filter(Boolean).join(" / "),
-        sent: rows.reduce((sum, row) => sum + touchCount(row), 0),
+        sent: rows.reduce((sum, row) => sum + outreachTouchCount(row), 0),
         replies: rows.reduce((sum, row) => sum + numberValue(row.replies), 0),
         calls: rows.reduce((sum, row) => sum + numberValue(row.calls_booked), 0),
       };
     });
 }
 
-function buildContentDemand(aiStates: Row[]) {
+export function buildContentDemand(aiStates: Row[]) {
   const counts = new Map<string, number>();
   aiStates.forEach((row) => {
     const extraction = objectValue(row.latest_extraction);
-    const vertical = typeof extraction.vertical === "string" ? extraction.vertical.trim() : "";
-    if (vertical) counts.set(vertical, (counts.get(vertical) ?? 0) + 1);
+    const demand = objectValue(extraction.demand);
+    if (demand.method !== "ai") return;
+    const confidence = numberOrNull(demand.confidence);
+    if (confidence !== null && confidence < 0.5) return;
+    const category = typeof demand.demandCategory === "string" ? demand.demandCategory.trim() : "";
+    if (category) counts.set(category, (counts.get(category) ?? 0) + 1);
   });
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
+}
+
+function hasAiDemandExtraction(extraction: Row) {
+  return objectValue(extraction.demand).method === "ai";
 }
 
 function initialDmsForIds(rows: Row[], ids: Set<string>) {
   return rows.reduce((sum, row) => ids.has(stringValue(row.batch_id)) ? sum + numberValue(row.initial_dms) : sum, 0);
 }
 
-function touchCount(row: Row) {
-  return numberValue(row.connection_requests) + numberValue(row.initial_dms) + numberValue(row.f1_sent) + numberValue(row.f2_sent);
+export function outreachTouchCount(row: Row) {
+  return numberValue(row.connection_requests) + numberValue(row.initial_dms) + numberValue(row.f1_sent) + numberValue(row.f2_sent) + numberValue(row.custom_sent);
 }
 
 function percentage(numerator: number, denominator: number) {

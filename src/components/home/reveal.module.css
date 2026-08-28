@@ -15,7 +15,7 @@
 /* Reduced motion: the component sets shown immediately, and this removes the
    transition entirely so nothing eases in. */
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
+  :global(html:not([data-motion="full"])) .reveal {
     opacity: 1;
     transform: none;
     transition: none;

@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function AuthSurface({ children, label }: { children: ReactNode; label: string }) {
-  return <main className="auth-shell">
+  return <main className="auth-shell" id="main-content" tabIndex={-1}>
+    <h1 className="sr-only">{label}</h1>
     <div aria-hidden="true" className="auth-ambient"><i /><i /><i /></div>
     <Link aria-label="Ajani Automation home" className="brand auth-brand" href="/">ajani<i>.</i></Link>
     <p className="auth-route-label">AJANI / PRIVATE WORKSPACE</p>

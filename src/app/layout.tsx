@@ -26,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   ) : app;
 
   return (
-    <html className={`${display.variable} ${mono.variable}`} data-motion="full" lang="en">
+    <html className={`${display.variable} ${mono.variable}`} lang="en">
       <body>
         {configuredApp}
       </body>

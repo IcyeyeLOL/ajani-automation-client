@@ -1,4 +1,4 @@
-.route-transition { min-height:100vh; animation:route-enter .52s var(--ease-standard) both; }
+.route-transition { min-height:100vh; animation:route-enter .52s var(--ease-standard); }
 .route-transition::after { position:fixed; inset:0; z-index:70; background:linear-gradient(110deg,rgba(189,150,112,.08),transparent 34%); content:""; opacity:0; pointer-events:none; animation:route-wash .62s var(--ease-standard) both; }
 .motion-reveal { opacity:0; transform:translateY(20px); transition:opacity .68s var(--ease-standard) var(--reveal-delay,0ms),transform .68s var(--ease-standard) var(--reveal-delay,0ms); }
 .motion-reveal.is-visible { opacity:1; transform:translateY(0); }
@@ -8,7 +8,7 @@
 .site-nav .site-nav-link.is-active { color:var(--ink); }
 .site-nav .site-nav-link.is-active::after { transform:scaleX(1); transform-origin:left; }
 .site-nav .header-action { transition:transform var(--motion-standard) var(--ease-standard),box-shadow var(--motion-standard) ease,background var(--motion-standard) ease; }
-.site-nav .header-action:hover { box-shadow:0 8px 17px rgba(23,21,21,.16); transform:translateY(-2px); }
+.site-nav .header-action:hover { box-shadow:0 8px 17px rgba(23,21,21,.16); }
 .home-operations .operations-item { animation:operations-item-in .54s var(--ease-standard) both; }
 .home-operations .operations-item:nth-child(1) { animation-delay:90ms; }.home-operations .operations-item:nth-child(2) { animation-delay:180ms; }.home-operations .operations-item:nth-child(3) { animation-delay:270ms; }
 .home-operations .operations-result { animation:operations-item-in .6s var(--ease-standard) 370ms both; }
@@ -40,21 +40,24 @@ button:active:not(:disabled),.button:active,.site-nav .header-action:active { tr
 @keyframes transcript-glow { to { border-color:#7a5958; box-shadow:0 0 0 3px rgba(121,0,24,.08); } }
 @keyframes system-block-enter { from { opacity:0; transform:translateY(13px); } to { opacity:1; transform:translateY(0); } }
 
-html[data-motion="full"] .route-transition { animation:route-enter .52s var(--ease-standard) both; }
-html[data-motion="full"] .motion-reveal { opacity:0; transform:translateY(20px); transition:opacity .68s var(--ease-standard) var(--reveal-delay,0ms),transform .68s var(--ease-standard) var(--reveal-delay,0ms); }
-html[data-motion="full"] .motion-reveal.is-visible { opacity:1; transform:translateY(0); }
-html[data-motion="full"] .home-operations .operations-item { animation:operations-item-in .54s var(--ease-standard) both; }
-html[data-motion="full"] .home-operations .operations-item:nth-child(1) { animation-delay:90ms; }html[data-motion="full"] .home-operations .operations-item:nth-child(2) { animation-delay:180ms; }html[data-motion="full"] .home-operations .operations-item:nth-child(3) { animation-delay:270ms; }
-html[data-motion="full"] .home-operations .operations-result { animation:operations-item-in .6s var(--ease-standard) 370ms both; }
-html[data-motion="full"] .home-operations .live-dot::before,html[data-motion="full"] .flow-live::before { animation:live-indicator 1.6s ease-out infinite; }
-html[data-motion="full"] .method-signal::after { animation:method-route 3.8s var(--ease-standard) infinite; }
-html[data-motion="full"] .flow-stage { animation:flow-stage-enter .56s var(--ease-standard) both; }
-html[data-motion="full"] .flow-stage > :not(.flow-heading) { animation:flow-content-enter .65s var(--ease-standard) .11s both; }
-html[data-motion="full"] .flow-progress button.active > span { animation:stage-marker 1.75s ease-out infinite; }
-html[data-motion="full"] .recorder-card.recording .record-button { animation:recording-breath 1.6s ease-in-out infinite; }
-html[data-motion="full"] .recorder-card.recording .transcript-box { animation:transcript-glow 1.4s ease-in-out infinite alternate; }
-html[data-motion="full"] .system-canvas .system-block { animation:system-block-enter .52s var(--ease-standard) both; }
-
 @media (prefers-reduced-motion:reduce) {
-  .route-transition::after { animation:none; }
+  html:not([data-motion="full"]) .route-transition,
+  html:not([data-motion="full"]) .route-transition::after,
+  html:not([data-motion="full"]) .home-operations .operations-item,
+  html:not([data-motion="full"]) .home-operations .operations-result,
+  html:not([data-motion="full"]) .home-operations .live-dot::before,
+  html:not([data-motion="full"]) .flow-live::before,
+  html:not([data-motion="full"]) .method-signal::after,
+  html:not([data-motion="full"]) .flow-stage,
+  html:not([data-motion="full"]) .flow-stage > :not(.flow-heading),
+  html:not([data-motion="full"]) .flow-progress button.active > span,
+  html:not([data-motion="full"]) .recorder-card.recording .record-button,
+  html:not([data-motion="full"]) .recorder-card.recording .transcript-box,
+  html:not([data-motion="full"]) .system-canvas .system-block { animation:none; }
+  html:not([data-motion="full"]) .motion-reveal,
+  html:not([data-motion="full"]) .motion-reveal.is-visible {
+    opacity:1;
+    transform:none;
+    transition:none;
+  }
 }

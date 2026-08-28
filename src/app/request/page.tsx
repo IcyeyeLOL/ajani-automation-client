@@ -1,6 +1,5 @@
-import { BuildRequestFlow } from "@/components/build-request-flow";
-import { SiteHeader } from "@/components/site-header";
+import { redirect } from "next/navigation";
 
 export default function RequestPage() {
-  return <main className="app-shell"><SiteHeader /><BuildRequestFlow /></main>;
+  redirect("/record");
 }

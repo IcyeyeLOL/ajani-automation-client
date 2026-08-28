@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   createExperimentAction,
   createOutreachBatchAction,
+  logExperimentMetricsAction,
   logoutAdminAction,
 } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
@@ -18,8 +19,18 @@ import type {
 } from "@/lib/admin/types";
 
 type Section = "overview" | "outreach" | "experiments" | "website" | "operations";
-type MetricKey = "connectionRequests" | "connectionsAccepted" | "initialDms" | "f1Sent" | "f2Sent" | "replies" | "positiveReplies" | "callsBooked";
+type MetricKey = "connectionRequests" | "connectionsAccepted" | "initialDms" | "f1Sent" | "f2Sent" | "customSent" | "replies" | "attributedReplies" | "positiveReplies" | "callsBooked";
 type MetricRow = Record<MetricKey, number> & { variantId: string | null; variantLabel: string };
+type ExperimentMetricRow = {
+  variantId: string;
+  variantLabel: string;
+  sent: number;
+  replies: number;
+  positiveReplies: number;
+  callsBooked: number;
+  connectionRequests: number;
+  connectionsAccepted: number;
+};
 
 const sections: Array<{ id: Section; label: string; number: string }> = [
   { id: "overview", label: "Overview", number: "01" },
@@ -35,7 +46,9 @@ const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
   { key: "initialDms", short: "INITIAL", label: "Initial DMs" },
   { key: "f1Sent", short: "F1", label: "First follow-ups" },
   { key: "f2Sent", short: "F2", label: "Second follow-ups" },
+  { key: "customSent", short: "CUSTOM", label: "Custom-step sends" },
   { key: "replies", short: "REPLIES", label: "Unique replies" },
+  { key: "attributedReplies", short: "ATTR.", label: "Replies attributed to the tested step" },
   { key: "positiveReplies", short: "POSITIVE", label: "Positive replies" },
   { key: "callsBooked", short: "CALLS", label: "Calls booked" },
 ];
@@ -44,17 +57,23 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
   const [isRefreshing, startRefresh] = useTransition();
+  const lastAutomaticRefreshAt = useRef(0);
 
   const refreshDashboard = () => startRefresh(() => router.refresh());
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") startRefresh(() => router.refresh());
+      if (document.visibilityState !== "visible") return;
+
+      const now = Date.now();
+      if (now - lastAutomaticRefreshAt.current < 15_000) return;
+      lastAutomaticRefreshAt.current = now;
+      startRefresh(() => router.refresh());
     };
     const interval = window.setInterval(refreshWhenVisible, 60_000);
-    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [router]);
 
@@ -217,7 +236,8 @@ function Experiments({ data }: { data: AdminDashboardData }) {
   const performance = experiment ? data.experimentPerformance[experiment.id] ?? [] : [];
   return <div className="admin-section-stack">
     <section className="admin-two-column admin-experiment-layout"><ExperimentForm enabled={data.outreachSchemaReady} /><ExperimentComparison experiment={experiment} experiments={data.experiments} performance={performance} selectedId={selectedId} setSelectedId={setSelectedId} /></section>
-    <article className="admin-panel admin-rules-panel"><header className="admin-panel-head"><div><p>MEASUREMENT RULES</p><h2>Signals without false certainty.</h2></div></header><div>{[["01","Same denominator","Each variant uses unique initial DMs as the reply-rate denominator."],["02","Absolute + relative","A 5% to 8% move is +3 points and +60% relative lift."],["03","Cohort aware","Results stay attached to the experiment instead of dividing today’s replies by today’s sends."],["04","No forced winner","Small samples remain an early signal until enough volume accumulates."]].map(([number,title,copy]) => <section key={number}><b>{number}</b><h3>{title}</h3><p>{copy}</p></section>)}</div></article>
+    <ExperimentMetricEntry enabled={data.outreachSchemaReady} experiment={experiment} key={experiment?.id ?? "no-experiment"} />
+    <article className="admin-panel admin-rules-panel"><header className="admin-panel-head"><div><p>MEASUREMENT RULES</p><h2>Signals without false certainty.</h2></div></header><div>{[["01","Matched denominator","Each experiment uses exposure at its selected message step."],["02","Absolute + relative","A 5% to 8% move is +3 points and +60% relative lift."],["03","Cohort aware","Attributed replies stay attached to the tested step and variant."],["04","No forced winner","Expected-cell and multiple-variant safeguards prevent premature winners."]].map(([number,title,copy]) => <section key={number}><b>{number}</b><h3>{title}</h3><p>{copy}</p></section>)}</div></article>
   </div>;
 }
 
@@ -227,10 +247,10 @@ function ExperimentForm({ enabled }: { enabled: boolean }) {
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.status]);
   return <article className="admin-panel admin-experiment-form"><header className="admin-panel-head"><div><p>NEW EXPERIMENT</p><h2>Create a flexible comparison.</h2></div><span>A / B / CUSTOM</span></header><form action={action} key={state.entityId ?? "new-experiment"}>
     <Field label="Experiment title"><input maxLength={120} name="title" placeholder="TCPA angle vs speed-to-lead" required /></Field>
-    <div className="admin-form-pair"><Field label="Audience"><input maxLength={120} name="audience" placeholder="Insurance agency owners" required /></Field><Field label="Created by"><input maxLength={100} name="createdBy" placeholder="Team member" required /></Field></div>
+    <Field label="Audience"><input maxLength={120} name="audience" placeholder="Insurance agency owners" required /></Field>
     <Field label="Campaign, optional"><input maxLength={120} name="campaign" placeholder="August manual outreach" /></Field>
     <div className="admin-form-pair"><Field label="Channel"><select defaultValue="linkedin" name="channel"><option value="linkedin">LinkedIn</option><option value="reddit">Reddit</option><option value="youtube">YouTube</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option></select></Field><Field label="Method"><select defaultValue="manual" name="method"><option value="manual">Manual</option><option value="dripify">Dripify</option><option value="organic">Organic</option></select></Field></div>
-    <Field label="Primary metric"><select defaultValue="reply_rate" name="primaryMetric"><option value="reply_rate">Reply rate</option><option value="positive_reply_rate">Positive reply rate</option><option value="booking_rate">Booking rate</option><option value="acceptance_rate">Connection acceptance</option></select></Field>
+    <div className="admin-form-pair"><Field label="Message step"><select defaultValue="initial_dm" name="messageStep"><option value="connection_request">Connection request</option><option value="initial_dm">Initial DM</option><option value="follow_up_1">Follow-up 1</option><option value="follow_up_2">Follow-up 2</option><option value="custom">Custom step</option></select></Field><Field label="Primary metric"><select defaultValue="reply_rate" name="primaryMetric"><option value="reply_rate">Reply rate</option><option value="positive_reply_rate">Positive reply rate</option><option value="booking_rate">Booking rate</option><option value="acceptance_rate">Connection acceptance</option></select></Field></div>
     <Field hint="Comma-separated. Labels A, B, C are assigned automatically." label="Variant titles"><input maxLength={500} name="variants" placeholder="TCPA hook, Speed-to-lead hook" required /></Field>
     {state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : null}
     <button disabled={!enabled || pending} type="submit">{pending ? "CREATING" : enabled ? "CREATE EXPERIMENT" : "STORAGE NOT READY"}<b>→</b></button>
@@ -240,16 +260,64 @@ function ExperimentForm({ enabled }: { enabled: boolean }) {
 function ExperimentComparison({ experiment, experiments, performance, selectedId, setSelectedId }: { experiment: OutreachExperiment | null; experiments: OutreachExperiment[]; performance: VariantPerformance[]; selectedId: string; setSelectedId: (id: string) => void }) {
   const maxRate = Math.max(1, ...performance.map((item) => item.primaryRate ?? 0));
   return <article className="admin-panel admin-comparison-panel"><header className="admin-panel-head"><div><p>VARIANT COMPARISON</p><h2>{experiment?.title ?? "No experiment yet"}</h2></div>{experiments.length ? <select aria-label="Select experiment" onChange={(event) => setSelectedId(event.target.value)} value={selectedId || experiment?.id}>{experiments.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select> : null}</header>
-    {experiment ? <><div className="admin-experiment-meta"><span>{experiment.audience}</span><span>{titleCase(experiment.channel)}</span><span>{titleCase(experiment.method)}</span><span>{titleCase(experiment.primaryMetric)}</span></div><div className="admin-variant-list">{performance.map((variant) => <section key={variant.id}><header><b>{variant.label}</b><p><strong>{variant.title}</strong><span>{variant.status.toUpperCase()}</span></p><em>{variant.primaryRate === null ? "N/A" : `${variant.primaryRate.toFixed(1)}%`}</em></header><div className="admin-variant-track"><span style={{ width: `${((variant.primaryRate ?? 0) / maxRate) * 100}%` }} /></div><footer><span>{variant.primaryMetricLabel}</span><span>{variant.sent} sent</span><span>{variant.replies} replies</span><span>{variant.callsBooked} calls</span></footer></section>)}</div></> : <EmptyState title="Create the first experiment" copy="Variants remain optional and receive their labels automatically. Your team controls every title and audience." />}
+    {experiment ? <><div className="admin-experiment-meta"><span>{experiment.audience}</span><span>{titleCase(experiment.channel)}</span><span>{titleCase(experiment.method)}</span><span>{titleCase(experiment.messageStep)}</span><span>{titleCase(experiment.primaryMetric)}</span></div><div className="admin-variant-list">{performance.map((variant) => <section key={variant.id}><header><b>{variant.label}</b><p><strong>{variant.title}</strong><span>{variant.status.toUpperCase()}</span></p><em>{variant.primaryRate === null ? "N/A" : `${variant.primaryRate.toFixed(1)}%`}</em></header><div className="admin-variant-track"><span style={{ width: `${((variant.primaryRate ?? 0) / maxRate) * 100}%` }} /></div><footer><span>{variant.primaryMetricLabel}</span><span>{variant.sent} sent</span><span>{variant.replies} replies</span><span>{variant.positiveReplies} positive</span><span>{variant.callsBooked} booked</span><span>{variant.connectionsAccepted}/{variant.connectionRequests} connections</span></footer></section>)}</div></> : <EmptyState title="Create the first experiment" copy="Variants remain optional and receive their labels automatically. Your team controls every title and audience." />}
   </article>;
 }
 
+function ExperimentMetricEntry({ experiment, enabled }: { experiment: OutreachExperiment | null; enabled: boolean }) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(logExperimentMetricsAction, initialAdminActionState);
+  const [rows, setRows] = useState<ExperimentMetricRow[]>(() => experimentRows(experiment));
+  const isConnectionTest = experiment?.messageStep === "connection_request";
+  const sentLabel = isConnectionTest ? "Requests sent" : `${messageStepLabel(experiment?.messageStep)} sent`;
+
+  useEffect(() => {
+    if (state.status !== "success") return;
+    router.refresh();
+  }, [router, state.entityId, state.status]);
+
+  const updateMetric = (index: number, key: keyof Omit<ExperimentMetricRow, "variantId" | "variantLabel">, rawValue: string) => {
+    const nextValue = Math.max(0, Number.parseInt(rawValue || "0", 10) || 0);
+    setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: nextValue } : row));
+  };
+
+  return <article className="admin-panel admin-experiment-metrics">
+    <header className="admin-panel-head"><div><p>ENTER PERFORMANCE</p><h2>Update every variant in one pass.</h2></div><span>{experiment ? titleCase(experiment.primaryMetric) : "SELECT A TEST"}</span></header>
+    {experiment ? <form action={action}>
+      <input name="experimentId" type="hidden" value={experiment.id} />
+      <input name="messageStep" type="hidden" value={experiment.messageStep} />
+      <input name="metrics" type="hidden" value={JSON.stringify(rows)} />
+      <div className="admin-experiment-entry-context">
+        <Field label="Activity date"><input defaultValue={new Date().toISOString().slice(0, 10)} name="activityDate" required type="date" /></Field>
+        <Field label="Team member"><input defaultValue="Ajani team" maxLength={100} name="teamMember" required /></Field>
+        <Field hint="Optional context for this update." label="Notes"><input maxLength={1000} name="notes" placeholder="Campaign or reporting period" /></Field>
+      </div>
+      <div className="admin-experiment-entry-grid">{rows.map((row, index) => <section key={row.variantId}>
+        <header><b>{row.variantLabel}</b><div><strong>{experiment.variants[index]?.title}</strong><span>{titleCase(experiment.messageStep)} exposure</span></div></header>
+        <div className="admin-experiment-input-grid">
+          <ExperimentCountInput label={sentLabel} onChange={(value) => updateMetric(index, "sent", value)} value={row.sent} />
+          <ExperimentCountInput label="Replies" onChange={(value) => updateMetric(index, "replies", value)} value={row.replies} />
+          <ExperimentCountInput label="Positive replies" onChange={(value) => updateMetric(index, "positiveReplies", value)} value={row.positiveReplies} />
+          <ExperimentCountInput label="Calls booked" onChange={(value) => updateMetric(index, "callsBooked", value)} value={row.callsBooked} />
+          {!isConnectionTest ? <ExperimentCountInput label="Connection requests" onChange={(value) => updateMetric(index, "connectionRequests", value)} value={row.connectionRequests} /> : null}
+          <ExperimentCountInput label="Connections accepted" onChange={(value) => updateMetric(index, "connectionsAccepted", value)} value={row.connectionsAccepted} />
+        </div>
+      </section>)}</div>
+      <div className="admin-form-footer"><div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>All counts are stored. The primary metric only decides how variants are ranked.</p>}</div><button disabled={!enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
+    </form> : <EmptyState title="Select or create an experiment" copy="Once a comparison exists, its variants and performance fields will appear here automatically." />}
+  </article>;
+}
+
+function ExperimentCountInput({ label, value, onChange }: { label: string; value: number; onChange: (value: string) => void }) {
+  return <label><span>{label}</span><input inputMode="numeric" min="0" onChange={(event) => onChange(event.target.value)} type="number" value={value} /></label>;
+}
+
 function WebsiteFunnel({ data }: { data: AdminDashboardData }) {
-  return <div className="admin-section-stack"><section className="admin-two-column admin-website-layout"><FunnelCard data={data} /><article className="admin-panel admin-demand-panel"><header className="admin-panel-head"><div><p>REQUEST DEMAND</p><h2>What businesses are asking for.</h2></div><span>AI EXTRACTED</span></header>{data.contentDemand.length ? <div>{data.contentDemand.map((item, index) => <p key={item.label}><b>{String(index + 1).padStart(2,"0")}</b><span>{item.label}</span><strong>{item.value}</strong></p>)}</div> : <EmptyState title="No structured demand yet" copy="Business verticals appear here as saved briefs complete the private intake analysis." />}</article></section><WebsiteMetricExplanation /></div>;
+  return <div className="admin-section-stack"><section className="admin-two-column admin-website-layout"><FunnelCard data={data} /><article className="admin-panel admin-demand-panel"><header className="admin-panel-head"><div><p>REQUEST DEMAND</p><h2>What businesses are asking for.</h2></div><span>AI EXTRACTED</span></header>{data.contentDemand.length ? <div>{data.contentDemand.map((item, index) => <p key={item.label}><b>{String(index + 1).padStart(2,"0")}</b><span>{item.label}</span><strong>{item.value}</strong></p>)}</div> : <EmptyState title="No AI-classified demand yet" copy="Automation needs appear here after saved briefs complete the private AI demand extraction." />}</article></section><WebsiteMetricExplanation /></div>;
 }
 
 function WebsiteMetricExplanation() {
-  const rows = [["Saved briefs","The first durable website intent signal. Anonymous page views are not counted."],["AI processed","The brief produced a structured extraction with goals, tools, constraints, and vertical."],["Scope approved","The visitor approved a specific system definition."],["Account claimed","The anonymous draft was attached to a signed-in business workspace."],["Build submitted","The approved request entered the private build pipeline."]];
+  const rows = [["Saved briefs","The first durable website intent signal. Anonymous page views are not counted."],["AI processed","The brief produced an auditable AI classification for business vertical and requested automation outcome."],["Scope approved","The visitor approved a specific system definition."],["Account claimed","The anonymous draft was attached to a signed-in business workspace."],["Build submitted","The approved request entered the private build pipeline."]];
   return <article className="admin-panel admin-definition-panel"><header className="admin-panel-head"><div><p>STATISTIC DEFINITIONS</p><h2>Every number has a durable meaning.</h2></div></header><div>{rows.map(([label,copy],index) => <section key={label}><b>0{index+1}</b><h3>{label}</h3><p>{copy}</p></section>)}</div></article>;
 }
 
@@ -266,7 +334,31 @@ function EmptyState({ title, copy }: { title: string; copy: string }) {
 }
 
 function rowsForVariants(variants: Array<Pick<OutreachVariant, "id" | "label" | "title">>): MetricRow[] {
-  return variants.map((variant) => ({ variantId: variant.id || null, variantLabel: variant.label === "NONE" ? "No variant" : variant.label, connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, replies: 0, positiveReplies: 0, callsBooked: 0 }));
+  return variants.map((variant) => ({ variantId: variant.id || null, variantLabel: variant.label === "NONE" ? "No variant" : variant.label, connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, customSent: 0, replies: 0, attributedReplies: 0, positiveReplies: 0, callsBooked: 0 }));
+}
+
+function experimentRows(experiment: OutreachExperiment | null): ExperimentMetricRow[] {
+  return experiment?.variants.map((variant) => ({
+    variantId: variant.id,
+    variantLabel: variant.label,
+    sent: 0,
+    replies: 0,
+    positiveReplies: 0,
+    callsBooked: 0,
+    connectionRequests: 0,
+    connectionsAccepted: 0,
+  })) ?? [];
+}
+
+function messageStepLabel(step: OutreachExperiment["messageStep"] | undefined) {
+  if (!step) return "Messages";
+  return ({
+    connection_request: "Requests",
+    initial_dm: "Initial DMs",
+    follow_up_1: "Follow-up 1",
+    follow_up_2: "Follow-up 2",
+    custom: "Custom messages",
+  } as const)[step];
 }
 
 function chartPoints(points: TrendPoint[], range: number) {

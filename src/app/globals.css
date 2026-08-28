@@ -64,6 +64,23 @@
 @media (max-width:1040px) { .proof-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.proof-intro { grid-template-columns:1fr; align-items:start; gap:21px; min-height:0; }.proof-intro-route { padding:17px 0 0; border-top:1px solid rgba(53,39,30,.34); border-left:0; } }
 @media (max-width:690px) { .proof-grid { grid-template-columns:1fr; }.proof-intro { padding:24px; }.proof-intro h2 { font-size:33px; }.proof-intro-route > div { flex-wrap:wrap; row-gap:5px; }.proof-card { min-height:178px; } }
 
+/* Approach keeps the desktop editorial layout, then becomes a dedicated mobile
+   reading flow with one message and one stage per screen-sized card. */
+@media (max-width:760px) {
+  .marketing-shell .page-intro,
+  .marketing-shell .approach-grid { width:min(100% - 32px,1700px); }
+  .marketing-shell .page-intro { min-height:0; padding:42px 0 34px; }
+  .marketing-shell .page-intro h1 { max-width:10ch; font-size:clamp(43px,12vw,54px); line-height:.96; letter-spacing:-.065em; }
+  .marketing-shell .page-intro .lede { max-width:34ch; margin:0; font-size:16px; }
+  .marketing-shell .approach-grid { gap:29px; padding:34px 0 58px; }
+  .marketing-shell .approach-grid aside h2 { margin-top:14px; font-size:29px; }
+  .marketing-shell .approach-cards { grid-template-columns:1fr; gap:10px; }
+  .marketing-shell .approach-cards article { min-height:0; padding:20px; border-radius:14px; }
+  .marketing-shell .approach-cards article:hover { transform:none; }
+  .marketing-shell .approach-cards article h3 { margin-top:20px; font-size:22px; }
+  .marketing-shell .approach-cards article span { font-size:14px; line-height:1.5; }
+}
+
 /* Client-facing labels should read comfortably without competing with the main message. */
 .eyebrow { font-size:12px; letter-spacing:.05em; }.operations-head,.operations-item > span { font-size:12px; }.operations-item i,.operations-result span { font-size:11px; }.proof-card-head > p,.proof-card-head > span { font-size:11px; }.proof-card .proof-route { font-size:10px; }.proof-intro-route > span { font-size:11px; }.proof-intro-route > div { font-size:11px; }.approach-cards article > p { font-size:11px; }.flow-meta,.flow-progress button,.recorder-top { font-size:12px; }.flow-progress button > span { font-size:10px; }.recorder-center small,.transcript-box > span,.note-guide li b,.source-card > div span,.question-card > span,.scope-card > span,.submission-card > span,.next-timeline > span,.route-review header span { font-size:11px; }.note-guide li span { font-size:13px; }.flow-actions button { font-size:12px; }.source-card footer span { font-size:10px; }.build-save-modal > small,.account-access-preview b,.modal-config-note b { font-size:12px; }
 

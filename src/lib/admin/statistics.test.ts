@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { relativeGrowth, relativeLift, safeRate, twoProportionZScore, weightedRate } from "@/lib/admin/statistics";
+import {
+  hasAdequateProportionSample,
+  multipleComparisonCriticalZ,
+  relativeGrowth,
+  relativeLift,
+  safeRate,
+  twoProportionZScore,
+  weightedRate,
+} from "@/lib/admin/statistics";
 
 describe("admin statistics", () => {
   it("uses the correct denominators and handles zero", () => {
@@ -20,5 +28,12 @@ describe("admin statistics", () => {
     expect(twoProportionZScore(40, 300, 20, 300)).toBeGreaterThan(1.96);
     expect(Math.abs(twoProportionZScore(24, 300, 15, 300) ?? 0)).toBeLessThan(1.96);
     expect(twoProportionZScore(0, 0, 1, 10)).toBeNull();
+  });
+
+  it("requires usable cells and tightens the threshold for multiple variants", () => {
+    expect(hasAdequateProportionSample(5, 10)).toBe(true);
+    expect(hasAdequateProportionSample(4, 100)).toBe(false);
+    expect(multipleComparisonCriticalZ(3)).toBeGreaterThan(1.96);
+    expect(multipleComparisonCriticalZ(8)).toBeGreaterThan(multipleComparisonCriticalZ(3));
   });
 });

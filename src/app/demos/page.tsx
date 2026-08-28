@@ -1,13 +1,21 @@
-import Link from "next/link";
+import type { Metadata } from "next";
 import { DemoGrid } from "@/components/demo-grid";
 import { Reveal } from "@/components/home/reveal";
+import { RecordNoteAction } from "@/components/record-note-action";
 import { SiteFoot, SiteTop } from "@/components/site/chrome";
 import styles from "./demos.module.css";
 
+export const metadata: Metadata = {
+  title: "Automation demos | Ajani Automation",
+  description: "Run interactive examples of the business systems Ajani Automation designs and builds.",
+};
+
 export default function DemosPage() {
   return (
-    <main className={styles.shell}>
+    <div className={styles.shell}>
       <SiteTop active="demos" />
+
+      <main id="main-content" tabIndex={-1}>
 
       <section className={styles.hero}>
         <div className={styles.heroInner}>
@@ -44,9 +52,9 @@ export default function DemosPage() {
               Record the moment that keeps slipping. You do not need to describe
               the automation—working out the route is our job.
             </p>
-            <Link className={styles.primaryCta} href="/record">
+            <RecordNoteAction className={styles.primaryCta}>
               Record a note <span aria-hidden="true">→</span>
-            </Link>
+            </RecordNoteAction>
           </Reveal>
 
           <Reveal as="aside" className={styles.promise} delay={130}>
@@ -64,7 +72,9 @@ export default function DemosPage() {
         </div>
       </section>
 
+      </main>
+
       <SiteFoot />
-    </main>
+    </div>
   );
 }

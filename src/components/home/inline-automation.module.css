@@ -52,7 +52,7 @@
   transition: border-color .3s ease, background .3s ease, transform .3s var(--ease-standard);
 }
 
-.node:hover { border-color: var(--sand); transform: translateY(-3px); }
+.node:hover { border-color: var(--sand); }
 .node:focus-visible { outline: 3px solid var(--sand); outline-offset: 3px; }
 
 .node[data-state="active"] {
@@ -181,8 +181,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artifact { animation: none; }
-  .node { transition: none; }
+  :global(html:not([data-motion="full"])) .artifact { animation: none; }
+  :global(html:not([data-motion="full"])) .node { transition: none; }
 }
 
 @media (max-width: 900px) {

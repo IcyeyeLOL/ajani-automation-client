@@ -4,6 +4,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccountAccess } from "@/components/account-access-dialog";
+import { HeaderUserMenu } from "@/components/header-user-menu";
 
 const links = [
   { href: "/", label: "Home" },
@@ -39,8 +40,8 @@ export function SiteHeader() {
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-        <button className="header-sign-in" onClick={() => openAccountAccess("sign-in")} type="button">Sign in</button>
-        <Link className="header-action" href="/request">
+        <HeaderUserMenu signedOutFallback={<button className="header-sign-in" onClick={() => openAccountAccess("sign-in")} type="button">Sign in</button>} />
+        <Link className="header-action" href="/record">
           REQUEST A BUILD
         </Link>
       </nav>

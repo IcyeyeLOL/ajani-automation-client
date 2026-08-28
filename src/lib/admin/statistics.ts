@@ -22,3 +22,14 @@ export function twoProportionZScore(successA: number, totalA: number, successB: 
   if (standardError === 0) return null;
   return ((successA / totalA) - (successB / totalB)) / standardError;
 }
+
+export function hasAdequateProportionSample(successes: number, total: number) {
+  return successes >= 5 && total - successes >= 5;
+}
+
+// Two-sided 95% family-wise thresholds using a Bonferroni correction across
+// every pair of variants. Experiment creation currently caps variants at eight.
+export function multipleComparisonCriticalZ(variantCount: number) {
+  const thresholds = [1.96, 1.96, 1.96, 2.394, 2.638, 2.807, 2.935, 3.038, 3.124];
+  return thresholds[Math.min(8, Math.max(2, Math.trunc(variantCount)))] ?? 3.124;
+}

@@ -1,0 +1,78 @@
+.page {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  color: #f8f4f1;
+  background:
+    radial-gradient(circle at 50% 16%, rgb(167 43 38 / 18%), transparent 34%),
+    #171515;
+}
+
+.card {
+  width: min(620px, 100%);
+  padding: clamp(28px, 6vw, 56px);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 24px;
+  background: rgb(25 22 22 / 88%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 32%);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: #e0786f;
+  font: 700 0.75rem/1.2 var(--font-mono), monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.card h1 {
+  margin: 0;
+  max-width: 12ch;
+  font-size: clamp(2.2rem, 7vw, 4.8rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+
+.card > p:not(.eyebrow) {
+  max-width: 52ch;
+  margin: 22px 0 0;
+  color: #c6bbb6;
+  line-height: 1.65;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.actions a,
+.actions button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid #b84840;
+  border-radius: 999px;
+  color: #fff;
+  background: #a1322c;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.actions a + a,
+.actions button + a {
+  border-color: rgb(255 255 255 / 18%);
+  background: transparent;
+}
+
+.actions a:focus-visible,
+.actions button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}

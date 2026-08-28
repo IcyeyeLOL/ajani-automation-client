@@ -29,8 +29,9 @@ export async function hasAdminSession() {
 }
 
 export async function requireAdminSession() {
-  await requireAdminClerkUser();
+  const userId = await requireAdminClerkUser();
   if (!(await hasAdminSession())) redirect("/admin/login");
+  return userId;
 }
 
 export async function setAdminSessionCookie(secret: string) {

@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useRef, useState } from "react";
+import { RecordNoteAction } from "@/components/record-note-action";
 import styles from "./audience-picker.module.css";
 
 type Direction = "forward" | "backward";
@@ -17,6 +17,9 @@ type Audience = {
   /** Intrinsic dimensions preserve each card's intended framing. */
   photoWidth?: number;
   photoHeight?: number;
+  /** Visible artwork bounds when the exported canvas includes transparent padding. */
+  frameWidth?: number;
+  frameHeight?: number;
   /** Alt text for that workspace card. Required whenever `photo` is set. */
   photoAlt?: string;
   /**
@@ -38,28 +41,30 @@ const audiences: Audience[] = [
   {
     id: "home-services",
     tab: "Home services",
-    headline: "The quote that never got followed up.",
+    headline: "The lead that became a ready-to-send contract.",
     problem:
-      "Someone asks for a price on a Friday afternoon. You mean to chase it Monday, the week fills up, and the job quietly goes to whoever answered first.",
-    photo: "/audiences/home-services.png",
-    photoWidth: 1008,
-    photoHeight: 687,
+      "A new lead lands while you are on a job. Ajani captures what they need, pulls the right details together, and prepares the contract before the follow-up slips.",
+    photo: "/audiences/workspace-code-plumber-v2.png",
+    photoWidth: 1200,
+    photoHeight: 902,
+    frameWidth: 1008,
+    frameHeight: 687,
     photoAlt: "Home services workspace showing a new lead becoming a prepared contract",
     thread: {
       stamp: "Fri 16:52",
-      source: "Website form",
+      source: "New website lead",
       kind: "message",
-      inbound: "Hi, can you give me a price for a new boiler? Semi-detached, 3 bed.",
-      out: "Thanks for getting in touch. That’ll be a straight swap or a combi — which is it? Either way I can get you a figure today.",
-      outTo: "Sent to the customer · 16:52",
+      inbound: "Need a replacement boiler for a three-bed semi. Straight swap, ideally next week.",
+      out: "Lead details captured, job terms inserted, and a customer-ready contract prepared for review.",
+      outTo: "Contract ready for approval · 16:53",
     },
   },
   {
     id: "clinics",
     tab: "Clinics & practices",
-    headline: "The appointment nobody confirmed.",
+    headline: "The cancellation that reopened its own slot.",
     problem:
-      "Bookings come in across phone, email and the website. Reminders go out when someone remembers, and the no-shows are the ones that never got a second touch.",
+      "A cancelled appointment should not leave a quiet hole in the diary. Ajani reopens the time and offers it to the right patients while the slot is still useful.",
     photo: "/audiences/clinics-practices.png",
     photoWidth: 1296,
     photoHeight: 667,
@@ -68,85 +73,85 @@ const audiences: Audience[] = [
       stamp: "Tue 19:20",
       source: "Missed call",
       kind: "message",
-      inbound: "Trying to move my Thursday appointment, is there anything next week?",
-      out: "No problem. Thursday 10:15 and Friday 14:00 are both free — reply with one and I’ll move it.",
-      outTo: "Sent to the patient · 19:21",
+      inbound: "I need to cancel my Thursday 10:15 appointment. Sorry for the late notice.",
+      out: "The appointment was cancelled, Thursday 10:15 reopened, and matching waitlist patients were offered the slot.",
+      outTo: "Slot offered automatically · 19:21",
     },
   },
   {
     id: "salons",
     tab: "Salons & studios",
-    headline: "The client who just stopped coming.",
+    headline: "The booking that handled its own follow-up.",
     problem:
-      "A regular drifts off after eight weeks. There is no list of who is overdue, so the rebooking depends on whether someone happens to notice.",
+      "Every booking can trigger the follow-up your team usually has to remember. Ajani sends the right aftercare and nudges the client when it is time to rebook.",
     photo: "/audiences/salons-studios-v2.png",
     photoWidth: 1296,
     photoHeight: 667,
     photoAlt: "Salon workspace showing a booking, automated follow-up, and rebooking reminder",
     thread: {
-      stamp: "Week nine",
-      source: "No booking since 12 June",
+      stamp: "Thu 18:00",
+      source: "Client booking",
       kind: "signal",
-      inbound: "Rebooks every six weeks. Nine have passed with no appointment and no contact.",
-      out: "It’s been a while. Your usual Thursday 6pm is free next week if you’d like it.",
-      outTo: "Sent to the client · 09:10",
+      inbound: "Maya books her usual colour appointment for Thursday at 6pm.",
+      out: "Confirmation sent now, aftercare queued for Thursday evening, and a six-week rebooking nudge scheduled.",
+      outTo: "Follow-up sequence scheduled",
     },
   },
   {
     id: "agencies",
     tab: "Agencies & consultants",
-    headline: "The kickoff that started from scratch.",
+    headline: "The approved scope that invoiced itself.",
     problem:
-      "You had the whole conversation in the sales call. Then delivery asks the client the same questions again, and the relationship starts on the back foot.",
+      "Once a piece of work clears the agreed scope check, billing should not wait for someone to rebuild the details. Ajani turns that approval into the right invoice automatically.",
     photo: "/audiences/agencies-consultants.png",
     photoWidth: 1008,
     photoHeight: 692,
     photoAlt: "Consulting workspace showing a scope check becoming an automated invoice",
     thread: {
       stamp: "Mon 11:04",
-      source: "Proposal accepted",
+      source: "Scope approved",
       kind: "signal",
-      inbound: "Northgate signed. Everything agreed on the sales calls is spread across one thread and three emails.",
-      out: "Brief built: scope, the decisions already made, and the two things they said were non-negotiable.",
-      outTo: "Sent to your delivery team · 11:05",
+      inbound: "Northgate approves phase one. The deliverables and payment milestone match the signed scope.",
+      out: "Scope verified, billing details pulled from the project, and the phase-one invoice created and sent.",
+      outTo: "Invoice sent automatically · 11:05",
     },
   },
   {
     id: "real-estate",
     tab: "Property & real estate",
-    headline: "The enquiry answered four hours late.",
+    headline: "The request that found the right person automatically.",
     problem:
-      "Portal leads arrive in bulk at all hours. The first agent to reply usually gets the viewing, and by the evening the good ones are already booked elsewhere.",
+      "A tenant request should not sit in a shared inbox waiting to be interpreted. Ajani identifies the property, the issue, and the right person to handle it, then routes it instantly.",
     photo: "/audiences/trades-field-work.png",
     photoWidth: 1008,
     photoHeight: 692,
     photoAlt: "Property workspace showing a service request being automatically routed",
     thread: {
-      stamp: "Sat 07:41",
-      source: "Portal enquiry",
+      stamp: "Tue 08:12",
+      source: "Tenant portal",
       kind: "message",
-      inbound: "Is the Elm Road flat still available? Could I see it this weekend?",
-      out: "Still available. Sunday 11:00 and 14:30 are open — which suits? Floorplan and EPC attached.",
-      outTo: "Sent to the buyer · 07:41",
+      inbound: "The kitchen tap at Elm Road is leaking badly and the cabinet underneath is getting wet.",
+      out: "Tagged as urgent plumbing, matched to Elm Road, and assigned to the approved maintenance contractor.",
+      outTo: "Routed to maintenance · 08:13",
     },
   },
   {
     id: "trades",
     tab: "Trades & field work",
-    headline: "The day that got rearranged by phone.",
+    headline: "The lead source you can finally tie to revenue.",
     problem:
-      "A job overruns, two customers need moving, and the whole afternoon becomes a string of calls made from a van between sites.",
+      "Calls, ads, and referrals all create work, but most trade businesses cannot see which source actually pays. Ajani tags every lead, tracks the job, and keeps the ROI report current.",
     photo: "/audiences/property-real-estate.png",
     photoWidth: 1296,
     photoHeight: 667,
     photoAlt: "Field-work workspace showing a lead being tagged, tracked, and reported",
     thread: {
-      stamp: "Wed 14:15",
-      source: "Job overran",
-      kind: "signal",
-      inbound: "The morning call took three hours. Two afternoon appointments can no longer be met.",
-      out: "Running behind today, sorry. I can come at 16:30, or first thing tomorrow — reply 1 or 2.",
-      outTo: "Sent to both customers · 14:16",
+      stamp: "Mon 09:06",
+      source: "Google Ads lead",
+      kind: "message",
+      inbound: "New boiler enquiry from a paid-search campaign becomes a quoted job, then a completed installation.",
+      out: "Tagged as Paid Search, tracked from quote to completion, and the £3,200 job attributed to the campaign.",
+      outTo: "ROI report updated automatically",
     },
   },
 ];
@@ -154,6 +159,7 @@ const audiences: Audience[] = [
 export function AudiencePicker() {
   const [active, setActive] = useState(0);
   const [direction, setDirection] = useState<Direction>("forward");
+  const [loadedPhotos, setLoadedPhotos] = useState<Set<string>>(() => new Set());
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const select = (index: number, nextDirection: Direction) => {
@@ -177,6 +183,15 @@ export function AudiencePicker() {
   };
 
   const current = audiences[active];
+
+  const markPhotoLoaded = (id: string) => {
+    setLoadedPhotos((loaded) => {
+      if (loaded.has(id)) return loaded;
+      const next = new Set(loaded);
+      next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className={styles.picker}>
@@ -206,33 +221,49 @@ export function AudiencePicker() {
         data-direction={direction}
         data-photo={current.photo ? "yes" : "no"}
         id="audience-panel"
-        key={current.id}
         role="tabpanel"
         tabIndex={0}
       >
-        {/* Intrinsic sizing keeps the complete workspace card large and uncropped. */}
         {current.photo ? (
-          <figure className={styles.shotPhoto}>
-            <Image
-              alt={current.photoAlt ?? ""}
-              height={current.photoHeight ?? 1}
-              sizes="(max-width: 620px) calc(100vw - 32px), (max-width: 900px) calc(100vw - 48px), 46vw"
-              src={current.photo}
-              width={current.photoWidth ?? 1}
-            />
-          </figure>
+          <div
+            className={styles.shotStage}
+            data-ready={loadedPhotos.has(current.id)}
+            style={{ aspectRatio: `${current.frameWidth ?? current.photoWidth ?? 1} / ${current.frameHeight ?? current.photoHeight ?? 1}` }}
+          >
+            {audiences.map((audience, index) => audience.photo ? (
+              <figure
+                aria-hidden={index !== active}
+                className={styles.shotPhoto}
+                data-active={index === active}
+                data-audience={audience.id}
+                data-ready={loadedPhotos.has(audience.id)}
+                key={audience.id}
+              >
+                <Image
+                  alt={audience.photoAlt ?? ""}
+                  height={audience.photoHeight ?? 1}
+                  loading="eager"
+                  onLoad={() => markPhotoLoaded(audience.id)}
+                  sizes="(max-width: 620px) calc(100vw - 32px), (max-width: 900px) calc(100vw - 48px), 46vw"
+                  src={audience.photo}
+                  width={audience.photoWidth ?? 1}
+                />
+              </figure>
+            ) : null)}
+          </div>
         ) : (
           <Example thread={current.thread} />
         )}
 
-        <div className={styles.copy}>
+        <div className={styles.copy} data-audience-copy data-direction={direction} key={current.id}>
           <h3>{current.headline}</h3>
           <p className={styles.problem}>{current.problem}</p>
-          {current.photo ? <Example thread={current.thread} /> : null}
-          <Link className={styles.panelCta} href="/record">
+          <RecordNoteAction className={styles.panelCta}>
             Record a note about this <span aria-hidden="true">→</span>
-          </Link>
+          </RecordNoteAction>
         </div>
+
+        {current.photo ? <Example key={`proof-${current.id}`} thread={current.thread} /> : null}
       </div>
     </div>
   );
@@ -240,18 +271,29 @@ export function AudiencePicker() {
 
 function Example({ thread }: { thread: Audience["thread"] }) {
   return (
-    <figure className={styles.example}>
+    <figure className={styles.example} data-testid="audience-proof">
       <figcaption>
-        <b>Example</b>
+        <b><i /> Automation in practice</b>
         <span>{thread.stamp} · {thread.source}</span>
       </figcaption>
-      <p className={styles.exampleIn}>
-        {thread.kind === "message" ? `\u201c${thread.inbound}\u201d` : thread.inbound}
-      </p>
-      <p className={styles.exampleOut}>
-        {thread.out}
-        <span>{thread.outTo}</span>
-      </p>
+      <div className={styles.exampleRoute}>
+        <div className={styles.exampleStep}>
+          <b>01</b>
+          <div>
+            <small>{thread.kind === "message" ? "New input" : "Trigger detected"}</small>
+            <p>{thread.inbound}</p>
+          </div>
+        </div>
+        <div className={styles.exampleConnector}><i /><span>Ajani handles the next step</span></div>
+        <div className={`${styles.exampleStep} ${styles.exampleAction}`}>
+          <b>02</b>
+          <div>
+            <small>Automated action</small>
+            <p>{thread.out}</p>
+          </div>
+        </div>
+      </div>
+      <footer><i />{thread.outTo}</footer>
     </figure>
   );
 }

@@ -7,6 +7,7 @@ import type { AdminActionState } from "@/app/admin/action-state";
 import { requireAdminClerkUser } from "@/lib/admin/clerk";
 import {
   adminLoginSchema,
+  experimentMetricEntrySchema,
   outreachBatchSchema,
   outreachExperimentSchema,
   type OutreachMetricInput,
@@ -29,7 +30,10 @@ export async function unlockAdminAction(_state: AdminActionState, formData: Form
   if (!parsed.success) return { status: "error", message: "Enter the team access key." };
 
   const requestHeaders = await headers();
-  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || "local";
+  const ip = requestHeaders.get("x-vercel-forwarded-for")
+    || requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || requestHeaders.get("x-real-ip")
+    || "local";
   const fingerprint = fingerprintRequest(ip, requestHeaders.get("user-agent") || "unknown", configuration.sessionSecret);
   if (await isBlocked(fingerprint)) return { status: "error", message: "Access is temporarily locked. Try again in 15 minutes." };
 
@@ -49,7 +53,7 @@ export async function logoutAdminAction() {
 }
 
 export async function createExperimentAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const parsed = outreachExperimentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the experiment details." };
   const variantTitles = parsed.data.variants.split(",").map((variant) => variant.trim()).filter(Boolean);
@@ -64,8 +68,9 @@ export async function createExperimentAction(_state: AdminActionState, formData:
       p_campaign: parsed.data.campaign,
       p_channel: parsed.data.channel,
       p_method: parsed.data.method,
+      p_message_step: parsed.data.messageStep,
       p_primary_metric: parsed.data.primaryMetric,
-      p_created_by: parsed.data.createdBy,
+      p_created_by: actor,
       p_variants: variants,
     });
     if (error) throw error;
@@ -77,7 +82,7 @@ export async function createExperimentAction(_state: AdminActionState, formData:
 }
 
 export async function createOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   let metrics: unknown;
   try {
     metrics = JSON.parse(String(formData.get("metrics") || "[]"));
@@ -111,6 +116,7 @@ export async function createOutreachBatchAction(_state: AdminActionState, formDa
       p_experiment_id: parsed.data.experimentId,
       p_notes: parsed.data.notes,
       p_metrics: parsed.data.metrics,
+      p_actor: actor,
     });
     if (error) throw error;
     revalidatePath("/admin");
@@ -120,8 +126,48 @@ export async function createOutreachBatchAction(_state: AdminActionState, formDa
   }
 }
 
+export async function logExperimentMetricsAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const actor = await requireAdminSession();
+  let metrics: unknown;
+  try {
+    metrics = JSON.parse(String(formData.get("metrics") || "[]"));
+  } catch {
+    return { status: "error", message: "The experiment counts could not be read." };
+  }
+
+  const parsed = experimentMetricEntrySchema.safeParse({
+    experimentId: formData.get("experimentId"),
+    messageStep: formData.get("messageStep"),
+    activityDate: formData.get("activityDate"),
+    teamMember: formData.get("teamMember"),
+    notes: formData.get("notes"),
+    metrics,
+  });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the experiment counts." };
+  if (!parsed.data.metrics.some((metric) => metric.sent + metric.replies + metric.positiveReplies + metric.callsBooked + metric.connectionRequests + metric.connectionsAccepted > 0)) {
+    return { status: "error", message: "Enter at least one experiment activity or outcome count." };
+  }
+
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.rpc("create_experiment_metric_snapshot", {
+      p_experiment_id: parsed.data.experimentId,
+      p_activity_date: parsed.data.activityDate,
+      p_team_member: parsed.data.teamMember,
+      p_notes: parsed.data.notes,
+      p_metrics: parsed.data.metrics,
+      p_actor: actor,
+    });
+    if (error) throw error;
+    revalidatePath("/admin");
+    return { status: "success", message: "Experiment counts saved. Every rate and comparison has been recalculated.", entityId: String(data) };
+  } catch {
+    return { status: "error", message: "These experiment counts could not be saved. Apply the latest database migration and retry." };
+  }
+}
+
 function hasActivity(metric: OutreachMetricInput) {
-  return metric.connectionRequests + metric.connectionsAccepted + metric.initialDms + metric.f1Sent + metric.f2Sent + metric.replies + metric.positiveReplies + metric.callsBooked > 0;
+  return metric.connectionRequests + metric.connectionsAccepted + metric.initialDms + metric.f1Sent + metric.f2Sent + metric.customSent + metric.replies + metric.attributedReplies + metric.positiveReplies + metric.callsBooked > 0;
 }
 
 function labelForIndex(index: number) {
@@ -134,23 +180,15 @@ async function isBlocked(fingerprint: string) {
     const { data } = await admin.from("admin_login_attempts").select("blocked_until").eq("fingerprint", fingerprint).maybeSingle();
     return Boolean(data?.blocked_until && Date.parse(data.blocked_until) > Date.now());
   } catch {
-    return false;
+    return true;
   }
 }
 
 async function recordFailedLogin(fingerprint: string) {
   try {
     const admin = createSupabaseAdminClient();
-    const { data } = await admin.from("admin_login_attempts").select("failed_attempts,window_started_at").eq("fingerprint", fingerprint).maybeSingle();
-    const now = Date.now();
-    const withinWindow = data?.window_started_at && now - Date.parse(data.window_started_at) < 15 * 60 * 1000;
-    const failedAttempts = withinWindow ? Number(data.failed_attempts) + 1 : 1;
-    await admin.from("admin_login_attempts").upsert({
-      fingerprint,
-      failed_attempts: failedAttempts,
-      window_started_at: withinWindow ? data.window_started_at : new Date(now).toISOString(),
-      blocked_until: failedAttempts >= 5 ? new Date(now + 15 * 60 * 1000).toISOString() : null,
-      last_attempt_at: new Date(now).toISOString(),
+    await admin.rpc("register_admin_login_failure", {
+      p_fingerprint: fingerprint,
     });
   } catch {
     // Authentication still uses constant-time verification if persistence is unavailable.

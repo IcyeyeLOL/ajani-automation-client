@@ -1,36 +1,629 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { mockAutomationBrief } from "./helpers/mock-automation-brief";
 
-test("a visitor can complete the public funnel and open account access without losing progress", async ({ page }) => {
+test.beforeEach(async ({ page }) => mockAutomationBrief(page));
+
+async function finishClarifications(page: Page) {
+  const nextQuestion = page.getByRole("button", { name: "Next question" });
+  while (await nextQuestion.isVisible()) {
+    if (await page.getByRole("radio", { checked: true }).count() === 0) {
+      await page.getByRole("radio").first().check();
+    }
+    await page.waitForTimeout(450);
+    await nextQuestion.click();
+  }
+  if (await page.getByRole("radio", { checked: true }).count() === 0) {
+    await page.getByRole("radio").first().check();
+  }
+  await page.getByRole("button", { name: "Build the first route" }).click();
+}
+
+test("a new record flow starts empty and only advances with user data", async ({ page }) => {
   await page.goto("/record");
 
-  await page.getByRole("button", { name: "Rather type it than say it?" }).click();
-  await page.getByRole("textbox", { name: "Describe the work in writing" }).fill(
+  await expect(page.getByText(/Preview mode|After-hours website leads/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeDisabled();
+  await expect(page.getByRole("group", { name: "Choose how to share your note" })).toHaveCSS("animation-name", /stage-control-in/);
+  await expect(page.getByRole("region", { name: "Voice note recorder" })).toHaveCSS("animation-name", /recorder-panel-in/);
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
+    "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
+  );
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await expect(page.getByRole("heading", { name: "Clarify the details that change the route." })).toBeVisible();
+  const clarificationNote = page.getByRole("textbox", { name: "Add or confirm the written version" });
+  await expect(clarificationNote).toHaveValue(/After-hours website leads wait until morning/);
+  await expect(clarificationNote.locator("..")).toHaveCSS("animation-name", /clarify-note-in/);
+  const clarificationGroup = page.getByRole("group", { name: "When should the follow-up leave automation and reach a person?" });
+  await expect(clarificationGroup.locator("..")).toHaveCSS("animation-name", /clarify-question-in/);
+  await expect(page.getByRole("radio", { name: /When the lead asks about price or availability/ }).locator("..")).toHaveCSS("animation-name", /clarify-option-in/);
+  await expect(page.getByText("What Ajani heard", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel(/Clarification question 1 of/)).toBeVisible();
+  await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
+
+  await finishClarifications(page);
+  const systemCanvas = page.getByRole("list", { name: "Editable system route" });
+  const systemBlocks = systemCanvas.getByRole("listitem");
+  await expect(systemBlocks).toHaveCount(4);
+  await expect(systemCanvas).toHaveCSS("animation-name", /stage-surface-in/);
+  await expect(systemBlocks.first()).toHaveCSS("animation-name", /stage-card-in/);
+  await expect(systemCanvas.getByRole("button", { name: /^Drag .+ to reorder$/ })).toHaveCount(0);
+  await systemCanvas.getByRole("button", { name: "Move A new enquiry arrives right" }).click();
+  await systemCanvas.getByRole("button", { name: "Move A new enquiry arrives right" }).click();
+  await expect(systemCanvas.getByRole("textbox", { name: "Step name" }).first()).toHaveValue("Acknowledge it promptly");
+  expect(await systemBlocks.first().evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBeLessThan(330);
+  await page.getByRole("button", { name: "Check this route" }).click();
+  await expect(page.locator("article").filter({ hasText: "Development brief editable" }).first()).toHaveCSS("animation-name", /stage-card-in/);
+  await expect(page.getByRole("tabpanel", { name: /Source note/ })).toHaveCSS("animation-name", /review-file-in/);
+  await page.getByRole("button", { name: "Approve this route" }).click();
+  await expect(page.getByRole("heading", { name: "Your build brief is ready." })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: "Approved build brief" }).first()).toHaveCSS("animation-name", /stage-card-in/);
+  await expect(page.getByRole("complementary").filter({ hasText: "Handoff summary" })).toHaveCSS("animation-name", /stage-card-in/);
+  await expect(page.getByText("You are sending exactly this.", { exact: true })).toBeVisible();
+});
+
+test("every development brief file can be edited without leaving check", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/record");
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
+    "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
+  );
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await finishClarifications(page);
+  await page.getByRole("button", { name: "Check this route" }).click();
+
+  const checkHeading = page.getByRole("heading", { name: "Confirm the system you want built." });
+  const briefFiles = page.getByRole("navigation", { name: "Development brief files" });
+  const edit = () => page.getByRole("button", { name: "Edit this file" });
+  const save = () => page.getByRole("button", { name: "Save changes" });
+
+  const maximumSourceNote = `${"A detailed source-note sentence with the workflow context and expected handoff. ".repeat(300).slice(0, 19_999)}Z`;
+  await edit().click();
+  await page.getByRole("textbox", { name: "Source note" }).fill(maximumSourceNote);
+  await save().click();
+  const transcriptReader = page.getByLabel("Full source note. Scroll to read all.");
+  await expect(page.getByText("20,000 characters", { exact: false })).toBeVisible();
+  expect(await transcriptReader.evaluate((node) => ({ clientHeight: node.clientHeight, scrollHeight: node.scrollHeight }))).toMatchObject({ clientHeight: 280 });
+  expect(await transcriptReader.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+
+  await edit().click();
+  await page.getByRole("textbox", { name: "Source note" }).fill("Appointment changes arrive after hours and need a confirmed calendar response by morning.");
+  await save().click();
+  await expect(checkHeading).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Give every enquiry a timely response and a clear human handoff." })).toBeVisible();
+
+  await briefFiles.getByRole("tab", { name: /Problem/ }).click();
+  await edit().click();
+  await page.getByRole("textbox", { name: "Work that slips" }).fill("Qualified evening enquiries wait too long for ownership.");
+  await page.getByRole("textbox", { name: "When it happens" }).fill("Between the first message and the morning sales queue review.");
+  await page.getByRole("textbox", { name: "Success looks like" }).fill("Every qualified evening enquiry reaches an owner with context intact.");
+  await save().click();
+  await expect(page.getByRole("tabpanel", { name: /Problem/ }).getByText("Every qualified evening enquiry reaches an owner with context intact.", { exact: true })).toBeVisible();
+
+  await briefFiles.getByRole("tab", { name: /Decisions/ }).click();
+  await edit().click();
+  await page.getByRole("textbox", { name: "Confirmed answer" }).first().fill("Escalate once timing and service fit are confirmed.");
+  await save().click();
+  await expect(page.getByText("Escalate once timing and service fit are confirmed.", { exact: true })).toBeVisible();
+
+  await briefFiles.getByRole("tab", { name: /Route/ }).click();
+  await edit().click();
+  await page.getByRole("textbox", { name: "Card 01 title" }).fill("Capture the evening enquiry");
+  await save().click();
+  await expect(page.getByText("Capture the evening enquiry", { exact: true })).toBeVisible();
+
+  await briefFiles.getByRole("tab", { name: /Protection/ }).click();
+  await edit().click();
+  await page.getByRole("textbox", { name: "Protection statement" }).fill("Protect response speed without hiding judgment calls from the team.");
+  await save().click();
+  await expect(page.getByText("Protect response speed without hiding judgment calls from the team.", { exact: true })).toBeVisible();
+
+  await page.waitForTimeout(450);
+  await page.reload();
+  await expect(checkHeading).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: /Source note/ })).toContainText("Appointment changes arrive after hours");
+  await briefFiles.getByRole("tab", { name: /Route/ }).click();
+  await expect(page.getByText("Capture the evening enquiry", { exact: true })).toBeVisible();
+  await briefFiles.getByRole("tab", { name: /Protection/ }).click();
+  await expect(page.getByText("Protect response speed without hiding judgment calls from the team.", { exact: true })).toBeVisible();
+});
+
+test("the voice recorder captures, pauses, resumes, and finishes a note", async ({ page }) => {
+  await page.goto("/record");
+  await page.context().grantPermissions(["microphone"], { origin: new URL(page.url()).origin });
+
+  await expect(page.getByText("Ready to record", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Start recording your voice note" }).click();
+  await expect(page.getByText("Recording", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Pause & edit", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Voice note recorder" }).getByRole("status")).toHaveText("Recording paused");
+  await expect(page.getByText("Edit the note before you continue", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeDisabled();
+  const editableTranscript = page.getByRole("textbox", { name: "Edit your voice note transcript" });
+  await editableTranscript.fill("After-hours leads wait until the next morning.");
+  await page.getByRole("button", { name: "Continue recording", exact: true }).click();
+  await expect(page.getByText("Recording", { exact: true })).toBeVisible();
+  await page.waitForTimeout(1_100);
+  await page.getByRole("button", { name: "Pause & edit", exact: true }).click();
+  await expect(editableTranscript).toHaveValue("After-hours leads wait until the next morning.");
+  await editableTranscript.fill("After-hours leads wait until the next morning. The sales queue should receive qualified replies.");
+  await page.getByRole("button", { name: "Use this note" }).click();
+
+  await expect(page.getByText("Voice note ready", { exact: true })).toBeVisible();
+  await expect(page.getByText("Voice note saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await expect(page.getByRole("textbox", { name: "Add or confirm the written version" })).toHaveValue(/sales queue should receive qualified replies/);
+});
+
+test("privacy policy stays aligned with the implementation", async ({ page }) => {
+  await page.goto("/privacy");
+
+  await expect(page.getByRole("heading", { name: "Scope of this policy" })).toBeVisible();
+  await expect(page.locator("#use").getByText(/does not sell personal information or customer submissions/i)).toBeVisible();
+  await expect(page.getByText(/before a request is saved.+suggest clarification questions/i)).toBeVisible();
+  await expect(page.getByText(/Deepgram.+editable transcript/i)).toBeVisible();
+  await expect(page.getByText(/bucket.+explicitly configured as private/i)).toBeVisible();
+  await expect(page.getByText(/voice uploads expire after 30 days/i)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Privacy policy" }).last()).toHaveAttribute("href", "/privacy");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+});
+
+test("the public footer stays focused on verified social and legal destinations", async ({ page }) => {
+  for (const path of ["/", "/demos", "/stories", "/record", "/terms"]) {
+    await page.goto(path);
+    const footer = page.getByRole("contentinfo");
+
+    await expect(footer).toHaveCount(1);
+    await expect(footer.getByRole("link", { name: "Ajani Automation home" })).toHaveAttribute("href", "/");
+    await expect(footer.getByRole("link", { name: "YouTube" })).toHaveAttribute("href", "https://youtu.be/upEkMB8pYRA");
+    await expect(footer.getByRole("link", { name: "LinkedIn" })).toHaveAttribute("href", "https://www.linkedin.com/in/olakunleajani/");
+    await expect(footer.getByRole("img", { name: "Instagram — coming soon" })).toBeVisible();
+    await expect(footer.getByRole("img", { name: "Facebook — coming soon" })).toBeVisible();
+    await expect(footer.getByRole("link", { name: "Terms of service" })).toHaveAttribute("href", "/terms");
+    await expect(footer.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "/privacy");
+    await expect(footer.getByRole("link", { name: /^(Home|Stories|Demos|Client portal|Record a note)$/ })).toHaveCount(0);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const mobileFooter = page.getByRole("contentinfo");
+  expect(await mobileFooter.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+});
+
+test("a visitor can complete the public funnel and open account access without losing progress", async ({ page }) => {
+  let draftRequests = 0;
+  let submittedBrief: unknown;
+  await page.route("**/api/request-drafts", async (route) => {
+    draftRequests += 1;
+    submittedBrief = (await route.request().postDataJSON()).draft.developmentBrief;
+    await route.fulfill({
+      contentType: "application/json",
+      status: 201,
+      body: JSON.stringify({
+        draft: { id: "bfa16669-b62c-49e5-a356-9ac634a969bb", status: "ready_to_submit", updated_at: new Date().toISOString() },
+        draftToken: "deterministic-browser-test-capability-token",
+      }),
+    });
+  });
+  await page.goto("/record");
+
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  const writtenBrief = page.getByRole("textbox", { name: "Tell us where the work gets stuck" });
+  await writtenBrief.fill(
     "Website enquiries arrive after hours and our team misses the follow-up.",
   );
-  await page.getByRole("button", { name: /^Continue/ }).click();
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
 
-  await page.getByRole("button", { name: "When they ask about price or availability" }).click();
-  await page.getByRole("button", { name: /save answer/i }).click();
-  await page.getByRole("button", { name: /ready for review/i }).click();
-  await page.getByRole("button", { name: /approve this route/i }).click();
-  await page.getByRole("button", { name: /send the request/i }).click();
+  const clarifyHeading = page.getByRole("heading", { name: "Clarify the details that change the route." });
+  await expect(clarifyHeading).toBeFocused();
+  await expect(clarifyHeading).toBeInViewport();
+  await expect(page.getByRole("group", {
+    name: "When should the follow-up leave automation and reach a person?",
+  })).toBeVisible();
+
+  const suggestedAnswer = page.getByRole("radio", {
+    name: /When the lead shares a real date, budget, or project detail/,
+  });
+  await expect(suggestedAnswer).toHaveAttribute("type", "radio");
+  await expect(suggestedAnswer).not.toBeChecked();
+  await expect(suggestedAnswer.locator("..")).toContainText("Suggested");
+  await finishClarifications(page);
+
+  const shapeHeading = page.getByRole("heading", { name: "Shape the route before we build it." });
+  await expect(shapeHeading).toBeFocused();
+  await expect(shapeHeading).toBeInViewport();
+  const routeEditor = page.getByRole("list", { name: "Editable system route" });
+  await expect(routeEditor.getByRole("listitem")).toHaveCount(4);
+  await expect(routeEditor.getByRole("textbox", { name: "Step name" }).first()).toHaveValue("A new enquiry arrives");
+  const replyName = routeEditor.getByRole("textbox", { name: "Step name" }).nth(1);
+  await replyName.click();
+  await expect(replyName).toHaveCSS("outline-style", "none");
+  await expect(replyName).toHaveCSS("box-shadow", /0px 0px 0px 1px/);
+  await expect(routeEditor.getByRole("button", { name: /^Drag .+ to reorder$/ })).toHaveCount(0);
+  await routeEditor.getByRole("button", { name: "Move Acknowledge it promptly right" }).click();
+  await routeEditor.getByRole("button", { name: "Move Acknowledge it promptly right" }).click();
+  await expect(routeEditor.getByRole("listitem").last()).toHaveAttribute("aria-label", "System block 4: Acknowledge it promptly");
+  await page.getByRole("button", { name: "Reset suggestion" }).click();
+  await expect.poll(() => routeEditor.getByRole("listitem").first().evaluate((node) =>
+    node.getAnimations().every((animation) => animation.playState === "finished"),
+  )).toBe(true);
+  await expect(routeEditor.locator('[data-kind="trigger"]')).toHaveCSS("border-top-color", "rgb(189, 150, 112)");
+  await expect(routeEditor.locator('[data-kind="reply"]')).toHaveCSS("border-top-color", "rgb(121, 0, 24)");
+  await expect(routeEditor.locator('[data-kind="qualify"]')).toHaveCSS("border-top-color", "rgb(122, 92, 67)");
+  await expect(routeEditor.locator('[data-kind="handoff"]')).toHaveCSS("border-top-color", "rgb(37, 92, 81)");
+  const dragCard = routeEditor.getByRole("listitem").first();
+  const destination = routeEditor.getByRole("listitem").last();
+  const reconsideredDestination = routeEditor.getByRole("listitem").nth(2);
+  const dragSurface = await dragCard.boundingBox();
+  const destinationCard = await destination.boundingBox();
+  const reconsideredCard = await reconsideredDestination.boundingBox();
+  expect(dragSurface).not.toBeNull();
+  expect(destinationCard).not.toBeNull();
+  expect(reconsideredCard).not.toBeNull();
+  await dragCard.hover({ position: { x: 30, y: 12 } });
+  await page.mouse.down();
+  await expect(routeEditor).toHaveAttribute("data-reordering", "true");
+  await page.mouse.move(destinationCard!.x + destinationCard!.width * .75, destinationCard!.y + destinationCard!.height / 2, { steps: 10 });
+  await expect(routeEditor.getByRole("listitem").last()).toHaveAttribute("aria-label", "System block 4: A new enquiry arrives");
+  await page.mouse.move(
+    reconsideredCard!.x + reconsideredCard!.width / 2 - dragSurface!.width / 2 + 30,
+    reconsideredCard!.y + reconsideredCard!.height / 2,
+    { steps: 8 },
+  );
+  await expect(routeEditor.getByRole("listitem").nth(2)).toHaveAttribute("aria-label", "System block 3: A new enquiry arrives");
+  await page.mouse.up();
+  await expect(routeEditor).toHaveAttribute("data-reordering", "false");
+  await expect(routeEditor.locator('[data-dragging="true"]')).toHaveCount(0);
+  await expect(routeEditor.getByRole("listitem").nth(2)).toHaveAttribute("aria-label", "System block 3: A new enquiry arrives");
+  expect(await routeEditor.getByRole("listitem").nth(2).evaluate((node) => ({
+    x: node.style.getPropertyValue("--drag-x"),
+    y: node.style.getPropertyValue("--drag-y"),
+  }))).toEqual({ x: "", y: "" });
+  await page.getByRole("button", { name: "Reset suggestion" }).click();
+  const interruptedCard = routeEditor.getByRole("listitem").first();
+  const interruptedSurface = await interruptedCard.boundingBox();
+  expect(interruptedSurface).not.toBeNull();
+  await interruptedCard.hover({ position: { x: 30, y: 12 } });
+  await page.mouse.down();
+  await page.mouse.move(interruptedSurface!.x + 30, interruptedSurface!.y + interruptedSurface!.height / 2, { steps: 4 });
+  await expect(routeEditor).toHaveAttribute("data-reordering", "true");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(routeEditor).toHaveAttribute("data-reordering", "false");
+  await expect(routeEditor.locator('[data-dragging="true"]')).toHaveCount(0);
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Check this route" }).click();
+
+  const checkHeading = page.getByRole("heading", { name: "Confirm the system you want built." });
+  await expect(checkHeading).toBeFocused();
+  await expect(checkHeading).toBeInViewport();
+  await expect(page.getByText("Based on your budget", { exact: true })).toBeVisible();
+  await expect(page.getByText("7–10 days", { exact: true })).toBeVisible();
+  await expect(page.getByText("After you approve", { exact: true })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: "Development brief editable" }).first()).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expect(page.getByRole("heading", { name: /Give every enquiry a timely response/ })).toHaveCSS("font-weight", "600");
+  expect(Number(await page.locator("blockquote").first().evaluate((node) => getComputedStyle(node).fontWeight))).toBeGreaterThanOrEqual(450);
+  await expect(page.getByRole("complementary").getByRole("listitem").filter({ hasText: "Intake from the channels you already use" }).locator("i")).toHaveCSS("color", "rgb(45, 120, 103)");
+  const briefFiles = page.getByRole("navigation", { name: "Development brief files" });
+  await expect(briefFiles.getByRole("tab")).toHaveCount(5);
+  await expect(briefFiles.getByRole("tab", { name: /Source note/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: /Source note/ })).toContainText(/Website enquiries arrive after hours/);
+  await page.getByRole("button", { name: "Next file" }).click();
+  await expect(briefFiles.getByRole("tab", { name: /Problem/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("The workflow we are solving", { exact: true })).toBeVisible();
+  await briefFiles.getByRole("tab", { name: /Decisions/ }).click();
+  await expect(page.getByRole("list", { name: "Confirmed build decisions" }).getByRole("listitem")).toHaveCount(2);
+  await briefFiles.getByRole("tab", { name: /Route/ }).click();
+  const approvedRouteCards = page.getByRole("list", { name: "Approved route cards" });
+  await expect(approvedRouteCards.getByRole("listitem")).toHaveCount(4);
+  await expect(approvedRouteCards.getByText("Capture the enquiry from the channel where it was received.", { exact: true })).toBeVisible();
+  await briefFiles.getByRole("tab", { name: /Protection/ }).click();
+  await expect(page.getByText("What this protects", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Approve this route" }).click();
+
+  const sendHeading = page.getByRole("heading", { name: "Your build brief is ready." });
+  await expect(sendHeading).toBeFocused();
+  await expect(sendHeading).toBeInViewport();
+  await expect(page.getByText("You are sending exactly this.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Handoff preview", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "4 steps in build order" })).toBeVisible();
+  await expect(page.getByText("1 day", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("3 days", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Send to Ajani" }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Add the Clerk publishable and secret keys to activate account access here.");
+  await expect(dialog).toContainText(/Add the Clerk publishable and secret keys to activate account access here|Create (?:your workspace|an Ajani Automation account)/);
+  await expect.poll(() => draftRequests).toBe(1);
+  expect(submittedBrief).toMatchObject({
+    workThatSlips: expect.any(String),
+    momentItHappens: expect.any(String),
+    desiredOutcome: expect.any(String),
+    protection: expect.any(String),
+  });
 
   await page.getByRole("button", { name: "Close account access" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("heading", { name: /Everything is clear. Send the request./i })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to account" }).click();
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => draftRequests).toBe(1);
 });
 
-test("the header sign-in entry leads to the protected portal", async ({ page }) => {
+test("the recorder keeps compact progress, focus, and motion safe at narrow widths", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/record");
+  await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+
+  await expect(page.getByText("Step 1 of 5", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("list")).toBeHidden();
+  await expect(page.getByRole("group", { name: "Choose how to share your note" })).toHaveCSS("animation-name", "none");
+  await expect(page.getByRole("region", { name: "Voice note recorder" })).toHaveCSS("animation-name", "none");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+  const firstStage = page.getByRole("heading", { name: "Tell us where the work gets stuck." });
+  const firstStageSection = firstStage.locator("../..");
+  await expect(firstStageSection).toHaveCSS("animation-name", "none");
+
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  const mobileStressNote = "After-hours leads arrive from several channels, but the follow-up waits until the next morning and nobody can see whether a colleague already replied. ".repeat(12);
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(mobileStressNote);
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+
+  const clarifyHeading = page.getByRole("heading", {
+    name: "Clarify the details that change the route.",
+  });
+  await expect(clarifyHeading).toBeFocused();
+  await expect(clarifyHeading).toBeInViewport();
+  await expect(page.getByText("Step 2 of 5", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Add or confirm the written version" }).locator("..")).toHaveCSS("animation-name", "none");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+  await page.getByRole("radio", {
+    name: /When the lead shares a real date, budget, or project detail/,
+  }).check();
+  await finishClarifications(page);
+  await expect(page.getByRole("heading", { name: "Shape the route before we build it." })).toBeFocused();
+  await expect(page.getByText("Step 3 of 5", { exact: true })).toBeVisible();
+
+  const routeEditor = page.getByRole("region", { name: "Mobile system editor" });
+  const routeMap = routeEditor.getByRole("navigation", { name: "Choose a route step" });
+  await expect(routeMap.getByRole("button")).toHaveCount(4);
+  const stepTitle = routeEditor.getByRole("textbox", { name: "Step name" });
+  await stepTitle.fill("Capture the new enquiry from every active customer channel");
+  await expect(stepTitle).toHaveAttribute("maxlength", "120");
+  expect(await stepTitle.evaluate((node) => ({
+    clientWidth: node.clientWidth,
+    height: node.getBoundingClientRect().height,
+    scrollWidth: node.scrollWidth,
+    tag: node.tagName,
+  }))).toMatchObject({ height: expect.any(Number), tag: "TEXTAREA" });
+  expect(await stepTitle.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(70);
+  expect(await stepTitle.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+
+  const touchControls = [
+    routeEditor.getByRole("button", { name: "Reorder" }),
+    page.getByRole("button", { name: "+ Add step" }),
+    page.getByRole("button", { name: "Reset suggestion" }),
+    routeMap.getByRole("button").first(),
+  ];
+  for (const control of touchControls) {
+    const size = await control.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return { height: rect.height, width: rect.width };
+    });
+    expect(size.height).toBeGreaterThanOrEqual(44);
+    expect(size.width).toBeGreaterThanOrEqual(44);
+  }
+
+  await routeEditor.getByRole("button", { name: "Reorder" }).click();
+  const reorderList = routeEditor.getByRole("list", { name: "Reorder system route" });
+  const firstReorderRow = reorderList.getByRole("listitem").first();
+  await expect(firstReorderRow).toHaveCSS("touch-action", "pan-y");
+  await expect(firstReorderRow.locator("span[aria-hidden='true']").first()).toHaveCSS("touch-action", "none");
+  const reorderArrow = firstReorderRow.getByRole("button", { name: /down/ });
+  expect(await reorderArrow.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await routeEditor.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("button", { name: "+ Add step" }).click();
+  await expect(routeMap.getByRole("button")).toHaveCount(5);
+  await expect(routeEditor.getByRole("textbox", { name: "Step name" })).toHaveValue("New step");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+  await page.getByRole("button", { name: "Check this route" }).click();
+  await expect(page.getByText("Step 4 of 5", { exact: true })).toBeVisible();
+  await expect(page.getByText("Development brief editable", { exact: true })).toBeVisible();
+  const fileNav = page.getByRole("navigation", { name: "Development brief files" });
+  for (let fileIndex = 0; fileIndex < 3; fileIndex += 1) {
+    await page.getByRole("button", { name: "Next file →" }).click();
+  }
+  await expect.poll(() => fileNav.evaluate((nav) => {
+    const active = nav.querySelector<HTMLElement>("[aria-selected='true']");
+    if (!active) return false;
+    const navBounds = nav.getBoundingClientRect();
+    const activeBounds = active.getBoundingClientRect();
+    return activeBounds.left >= navBounds.left - 1 && activeBounds.right <= navBounds.right + 1;
+  })).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+  await page.getByRole("button", { name: "Approve this route" }).click();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Build request progress" })
+      .getByText("Step 5 of 5", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your build brief is ready." })).toBeVisible();
+  const mobileReceipt = page.getByRole("article", { name: "Mobile handoff receipt" });
+  await expect(mobileReceipt.getByText("Handoff preview", { exact: true })).toBeVisible();
+  await expect(mobileReceipt.locator("summary").filter({ hasText: "Approved route" })).toBeVisible();
+  await mobileReceipt.locator("details").last().locator("summary").click();
+  const receiptSource = mobileReceipt.getByLabel("Full source note. Scroll to read all.");
+  await expect(receiptSource).toHaveCSS("max-height", "300px");
+  await expect(receiptSource).toHaveCSS("overflow-y", "auto");
+  expect(await receiptSource.evaluate((node) => node.scrollHeight)).toBeGreaterThan(
+    await receiptSource.evaluate((node) => node.clientHeight),
+  );
+  expect(await page.getByRole("button", { name: "Back to check" }).evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test("the recorder remains usable at 320 by 800", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/record");
+
+  await expect(page.getByText("Step 1 of 5", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("list")).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
+    "After-hours leads arrive, but the follow-up waits until the next morning.",
+  );
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+
+  const clarifyHeading = page.getByRole("heading", {
+    name: "Clarify the details that change the route.",
+  });
+  await expect(clarifyHeading).toBeFocused();
+  await expect(clarifyHeading).toBeInViewport();
+  await expect(page.getByText("Step 2 of 5", { exact: true })).toBeVisible();
+  const overflowingElements = await page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+    return Array.from(document.body.querySelectorAll<HTMLElement>("*"))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          className: element.className,
+          right: Math.round(rect.right),
+          tag: element.tagName,
+          text: element.textContent?.trim().slice(0, 80),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter((element) => element.width > 0 && element.right > viewportWidth + 1);
+  });
+  expect(overflowingElements).toEqual([]);
+});
+
+test("a failed recorder save is announced and can be retried", async ({ page }) => {
+  let draftRequests = 0;
+  await page.route("**/api/request-drafts", async (route) => {
+    draftRequests += 1;
+    if (draftRequests === 1) {
+      await route.fulfill({
+        contentType: "application/json",
+        status: 503,
+        body: JSON.stringify({ error: "The request service is temporarily unavailable. Please retry." }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      status: 201,
+      body: JSON.stringify({
+        draft: { id: "d353cff7-9863-40e5-8b57-8ac3d6c9a5cb", status: "ready_to_submit", updated_at: new Date().toISOString() },
+        draftToken: "deterministic-browser-test-capability-token",
+      }),
+    });
+  });
+  await page.goto("/record");
+
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
+    "After-hours leads arrive, but the follow-up waits until the next morning.",
+  );
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await page.getByRole("radio", {
+    name: /When the lead shares a real date, budget, or project detail/,
+  }).check();
+  await finishClarifications(page);
+  await page.getByRole("button", { name: "Check this route" }).click();
+  await page.getByRole("button", { name: "Approve this route" }).click();
+  await page.getByRole("button", { name: "Send to Ajani" }).click();
+
+  const saveAlert = page.getByRole("alert").filter({ hasText: "temporarily unavailable" });
+  await expect(saveAlert).toContainText("temporarily unavailable");
+  await saveAlert.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect.poll(() => draftRequests).toBe(2);
+});
+
+test("recording a note opens account access instead of showing a separate sign-in link", async ({ page }) => {
   await page.goto("/");
 
-  const signIn = page.getByRole("link", { name: "Sign in" });
-  await expect(signIn).toHaveAttribute("href", "/portal");
-  await signIn.click();
-  await expect(page).toHaveURL(/\/portal$/);
+  const header = page.locator("header").first();
+  await expect(header.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+  const record = header.getByRole("link", { name: "Record a note" });
+  await expect(record).toHaveAttribute("href", "/sign-in?redirect_url=%2Frecord");
+  await record.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText(/Continue to Ajani Automation|Sign in to Ajani|Clerk connection needed/i);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("the homepage explains the Ajani workflow in an accessible tutorial", async ({ page }) => {
+  await page.goto("/");
+
+  const trigger = page.getByRole("button", { name: "See how it works" });
+  const dialog = page.getByRole("dialog");
+  await expect(async () => {
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+  }).toPass();
+
+  await expect(dialog).toContainText("Step 1 of 6");
+  await expect(dialog).toContainText("Ajani tutorial");
+  expect(await dialog.evaluate((node) => getComputedStyle(node).animationName)).toContain("dialogIn");
+  await expect(dialog.getByRole("heading", { name: "Tell Ajani what keeps wasting time." })).toBeVisible();
+  await dialog.getByRole("button", { name: /^Next/ }).click();
+  await expect(dialog.getByRole("heading", { name: "Your note becomes a clear working brief." })).toBeVisible();
+  expect(await dialog.locator("[data-direction]").evaluate((node) => getComputedStyle(node).animationName)).toContain("stageForward");
+  await dialog.getByRole("button", { name: "Back" }).click();
+  expect(await dialog.locator("[data-direction]").evaluate((node) => getComputedStyle(node).animationName)).toContain("stageBackward");
+
+  await dialog.getByRole("button", { name: "Go to step 3: Only what matters" }).click();
+  const defaultAnswer = dialog.getByRole("button", { name: "B After every first reply" });
+  await expect(defaultAnswer).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog.getByText("Every replied-to lead is routed to the team.")).toBeVisible();
+  const answer = dialog.getByRole("button", { name: "A When they ask about price or availability" });
+  await answer.click();
+  await expect(answer).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog.getByText("Handoff starts when buying intent is clear.")).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Go to step 4: See the route" }).click();
+  await expect(dialog).toContainText("Proposed lead-response route");
+  await expect(dialog).toContainText("Approved system route");
+
+  await dialog.getByRole("button", { name: "Go to step 5: One workspace" }).click();
+  await expect(dialog).toContainText("Audio + transcript");
+  await expect(dialog).toContainText("Ready to build");
+
+  await dialog.getByRole("button", { name: "Go to step 6: Built and visible" }).click();
+  await expect(dialog).toContainText("Your team gets hours back and increases revenue.");
+  await expect(dialog.getByRole("link", { name: /Record your note/ })).toHaveAttribute("href", "/sign-in?redirect_url=%2Frecord");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveCSS("max-height", "824px");
+  expect(await dialog.evaluate((node) => Array.from(node.querySelectorAll("*")).flatMap((child) => {
+    const element = child as HTMLElement;
+    return element.scrollWidth > element.clientWidth + 1
+      ? [{ tag: element.tagName, className: element.className, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }]
+      : [];
+  }))).toEqual([]);
+  await expect(dialog.getByRole("button", { name: /^Next/ })).toBeVisible();
 });
 
 test("automation theatre runs play by play with accessible controls", async ({ page }) => {
@@ -40,16 +633,36 @@ test("automation theatre runs play by play with accessible controls", async ({ p
   await expect(page.getByRole("link", { name: "Demos" }).first()).toHaveAttribute("aria-current", "page");
   const theatre = page.getByRole("region", { name: "Automation theatre" });
   await expect(theatre.getByRole("tab", { name: /After-hours leads/i })).toHaveAttribute("aria-selected", "true");
-  await theatre.getByRole("button", { name: "Run After-hours leads automation" }).press("Enter");
-  await expect(theatre.getByRole("button", { name: "Pause After-hours leads automation" })).toBeVisible();
+  const runAutomation = theatre.getByRole("button", { name: "Run After-hours leads automation" });
+  const pauseAutomation = theatre.getByRole("button", { name: "Pause After-hours leads automation" });
+  await expect(async () => {
+    await runAutomation.press("Enter");
+    await expect(pauseAutomation).toBeVisible();
+  }).toPass();
   await expect(theatre.getByRole("status")).toContainText("Playing automation: Lead signal");
-  await theatre.getByRole("button", { name: "Pause After-hours leads automation" }).press("Enter");
+  await pauseAutomation.press("Enter");
   await theatre.getByRole("button", { name: "Advance one automation step" }).press("Enter");
   await expect(theatre.getByRole("status")).toContainText("Paused at Intent scan");
   await expect(theatre.getByRole("list", { name: "Automation event ledger" }).getByText("Intent mapped")).toBeVisible();
   await theatre.getByRole("tab", { name: /Client intake/i }).press("Enter");
   await expect(theatre.getByRole("status")).toContainText("Ready to trace the system");
-  expect(await theatre.getByRole("button", { name: "Inspect step 1: Context arrives" }).evaluate((node) => getComputedStyle(node).animationName)).toContain("graph-node-enter");
+  expect(await theatre.getByRole("button", { name: "Run from step 1: Context arrives" }).evaluate((node) => getComputedStyle(node).animationName)).toContain("graph-node-enter");
+});
+
+test("automation boxes start and pause the selected route", async ({ page }) => {
+  await page.goto("/demos");
+
+  const theatre = page.getByRole("region", { name: "Automation theatre" });
+  const status = theatre.getByRole("status");
+
+  await theatre.getByRole("button", { name: "Run from step 2: Intent scan" }).click();
+  await expect(status).toContainText("Playing automation: Intent scan");
+
+  await theatre.getByRole("button", { name: "Pause at step 2: Intent scan" }).click();
+  await expect(status).toContainText("Paused at Intent scan");
+
+  await theatre.getByRole("button", { name: "Run from step 3: Personal reply" }).click();
+  await expect(status).toContainText("Playing automation: Personal reply");
 });
 
 test("each automation route has its own step icon set", async ({ page }) => {
@@ -59,50 +672,93 @@ test("each automation route has its own step icon set", async ({ page }) => {
   const icons = () => theatre.locator("span[data-icon]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-icon")));
 
   await expect.poll(icons).toEqual(["sun", "intent", "reply", "handoff"]);
-  await theatre.getByRole("tab", { name: /Client intake/i }).click();
-  await expect.poll(icons).toEqual(["inbox", "magnify", "brief", "alignment"]);
-  await theatre.getByRole("tab", { name: /Returning clients/i }).click();
-  await expect.poll(icons).toEqual(["spark", "relationship", "nudge", "owner"]);
+  await expect(async () => {
+    await theatre.getByRole("tab", { name: /Client intake/i }).click();
+    await expect.poll(icons).toEqual(["inbox", "magnify", "brief", "alignment"]);
+  }).toPass();
+  await expect(async () => {
+    await theatre.getByRole("tab", { name: /Returning clients/i }).click();
+    await expect.poll(icons).toEqual(["spark", "relationship", "nudge", "owner"]);
+  }).toPass();
 });
 
-test("automation theatre plays through reduced motion preferences after user intent", async ({ page }) => {
+test("automation theatre stays manual under reduced motion preferences", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/demos");
 
   const theatre = page.getByRole("region", { name: "Automation theatre" });
+  const status = theatre.getByRole("status");
+  await expect(status).toContainText("Motion is simplified for this device");
   await theatre.getByRole("button", { name: "Run After-hours leads automation" }).click();
-  await expect(theatre.getByRole("status")).toContainText("Playing automation: Lead signal");
+  await expect(status).toContainText("Paused at Lead signal");
   await page.waitForTimeout(3_100);
-  await expect(theatre.getByRole("status")).toContainText("Playing automation: Intent scan");
-  await page.waitForTimeout(9_300);
-  await expect(theatre.getByRole("status")).toContainText("Playing automation: Lead signal");
+  await expect(status).toContainText("Paused at Lead signal");
 });
 
 test("stories presents visual system narratives instead of a placeholder", async ({ page }) => {
   await page.goto("/stories");
 
   await expect(page.getByRole("heading", { name: /The work is the proof/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The 7am portal lead that got the viewing." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Different trades, the same shape/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Hear it from someone who hired us/i })).toBeVisible();
+  await expect(page.getByText("Karol · Granker's Team", { exact: true })).toBeVisible();
+  await expect(page.getByText("Verified testimonial", { exact: true })).toHaveCount(0);
+  await expect(page.locator('iframe[title*="Karol"]')).toHaveAttribute("src", /youtube-nocookie\.com\/embed\/upEkMB8pYRA/);
+  await expect(page.getByRole("link", { name: /Watch the client story on YouTube/i })).toHaveAttribute("href", "https://youtu.be/upEkMB8pYRA");
+  const proofTags = page.getByLabel("What the testimonial verifies").locator("span");
+  expect(new Set(await proofTags.evaluateAll((tags) => tags.map((tag) => Math.round(tag.getBoundingClientRect().top)))).size).toBe(1);
+  await expect(page.getByText(/Every story that follows comes from a real client system/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Inside Frederick's after-hours route/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The same 35 leads that started booking calls." })).toBeVisible();
+  await expect(page.getByText(/Worked example/i)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Different trades, the same shape/i })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Record a note/i }).first()).toBeVisible();
+
+  const storyGrid = page.getByRole("region", { name: "More real client systems" });
+  const storyImages = storyGrid.getByRole("img");
+  await expect(storyImages).toHaveCount(6);
+  await expect.poll(() => storyImages.evaluateAll((images) => images.every((image) => {
+    const artwork = image as HTMLImageElement;
+    return artwork.complete && artwork.naturalWidth > 0 && artwork.naturalHeight > 0;
+  }))).toBe(true);
+  const storyRoutes = storyGrid.getByRole("list", { name: / route$/ });
+  await expect(storyRoutes).toHaveCount(6);
+  for (let index = 0; index < 6; index += 1) {
+    const steps = storyRoutes.nth(index).getByRole("listitem");
+    await expect(steps).toHaveCount(3);
+    expect(new Set(await steps.evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)))).size).toBe(1);
+  }
+  for (const label of ["Before", "Now"]) {
+    const comparisonLabel = storyGrid.getByText(label, { exact: true }).first();
+    expect(await comparisonLabel.evaluate((node) => {
+      const copy = node.nextElementSibling;
+      if (!(copy instanceof HTMLElement)) return 0;
+      return Math.round(copy.getBoundingClientRect().left - node.getBoundingClientRect().right);
+    })).toBeGreaterThanOrEqual(12);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const clientStory = page.locator('[aria-labelledby="client-story-heading"]');
+  expect(await clientStory.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  expect(new Set(await proofTags.evaluateAll((tags) => tags.map((tag) => Math.round(tag.getBoundingClientRect().top)))).size).toBe(1);
+  await expect(clientStory.locator('iframe[title*="Karol"]')).toBeVisible();
+  expect(await storyGrid.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  expect(await storyRoutes.evaluateAll((routes) => routes.every((route) => route.scrollWidth <= route.clientWidth))).toBe(true);
 });
 
-test("full motion is the default site experience", async ({ page }) => {
+test("the site honors the operating-system reduced-motion preference", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
+  await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
   await expect(page.getByRole("button", { name: /motion/i })).toHaveCount(0);
   const systemPreview = page.locator('svg[role="presentation"]').first();
-  await expect(systemPreview.locator("rect").first()).not.toHaveCSS("display", "none");
-  await expect(systemPreview.locator("g").first()).toHaveCSS("animation-name", /waveform/);
-  await expect(systemPreview.locator("line").first()).toHaveCSS("animation-name", /draw/);
-  await expect(systemPreview.locator("circle").first()).toHaveCSS("animation-duration", "7.2s");
+  await expect(systemPreview.locator("g").first()).toHaveCSS("animation-name", "none");
+  await expect(systemPreview.locator("line").first()).toHaveCSS("animation-name", "none");
   await Promise.all([
     page.waitForURL("**/stories"),
     page.getByRole("link", { name: "Stories" }).first().click(),
   ]);
-  await expect(page.locator(".route-transition")).toHaveCSS("animation-name", "route-enter");
+  await expect(page.locator(".route-transition")).toHaveCSS("animation-name", "none");
   await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
 });
 
@@ -113,30 +769,95 @@ test("internal navigation does not show a floating opening notice", async ({ pag
   await expect(page.getByText(/Opening demos/i)).toHaveCount(0);
 });
 
+test("homepage keeps the review in one session and sets clear commercial expectations", async ({ page }) => {
+  await page.goto("/");
+
+  const timeline = page.locator("#how");
+  await expect(timeline.getByText("Same session", { exact: true })).toHaveCount(2);
+  await expect(timeline.getByText("1 day", { exact: true })).toHaveCount(0);
+  await expect(timeline.getByText("3 days", { exact: true })).toHaveCount(0);
+  await expect(timeline.getByText("7–10 days", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ready when you are", { exact: true })).toBeVisible();
+  await expect(page.getByText("Based on your budget", { exact: true })).toBeVisible();
+  await expect(page.getByText("After you approve", { exact: true })).toBeVisible();
+  await expect(page.getByText("Start here", { exact: true })).toHaveCount(0);
+});
+
 test("audience tabs animate their content and keep supplied imagery contained", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("tab", { name: "Clinics & practices" }).click();
+  await expect(page.getByRole("heading", { name: /Three places good work/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Different businesses, the same gap/i })).toBeVisible();
+  const clinics = page.getByRole("tab", { name: "Clinics & practices" });
+  await expect(async () => {
+    await clinics.click();
+    await expect(clinics).toHaveAttribute("aria-selected", "true");
+  }).toPass();
   const panel = page.getByRole("tabpanel");
+  const audienceImages = panel.locator("img");
+  await expect(audienceImages).toHaveCount(6);
+  await expect.poll(() => audienceImages.evaluateAll((images) => images.every((image) => {
+    const photo = image as HTMLImageElement;
+    return photo.complete && photo.naturalWidth > 0;
+  }))).toBe(true);
   await expect(panel).toHaveAttribute("data-direction", "forward");
-  await expect(panel).toHaveCSS("animation-name", /panel-in-forward/);
-  await expect(page.getByRole("heading", { name: "The appointment nobody confirmed." })).toBeVisible();
+  await expect(panel.locator("[data-audience-copy]")).toHaveCSS("animation-name", /panel-copy-in-forward/);
+  await expect(panel.locator('figure[data-active="true"]')).toHaveAttribute("data-ready", "true");
+  await expect(panel.locator('figure[data-active="true"]')).toHaveCSS("opacity", "1");
+  await expect(page.getByRole("heading", { name: "The cancellation that reopened its own slot." })).toBeVisible();
+  const proof = panel.getByTestId("audience-proof");
+  await expect(proof).toHaveCount(1);
+  expect(await panel.evaluate((node) => {
+    const panelRect = node.getBoundingClientRect();
+    const proofRect = node.querySelector<HTMLElement>('[data-testid="audience-proof"]')!.getBoundingClientRect();
+    return Math.abs(panelRect.width - proofRect.width);
+  })).toBeLessThanOrEqual(1);
 
   await page.getByRole("tab", { name: "Home services" }).click();
   await expect(page.getByRole("tabpanel")).toHaveAttribute("data-direction", "backward");
-  await expect(page.getByRole("tabpanel").locator("img")).toHaveCSS("object-fit", "contain");
+  await expect(panel.locator("[data-audience-copy]")).toHaveCSS("animation-name", /panel-copy-in-backward/);
+  await expect(panel.locator('figure[data-active="true"] img')).toHaveCSS("object-fit", "contain");
+
+  const audienceStories = [
+    ["Home services", "The lead that became a ready-to-send contract.", "Contract ready for approval"],
+    ["Clinics & practices", "The cancellation that reopened its own slot.", "Slot offered automatically"],
+    ["Salons & studios", "The booking that handled its own follow-up.", "Follow-up sequence scheduled"],
+    ["Agencies & consultants", "The approved scope that invoiced itself.", "Invoice sent automatically"],
+    ["Property & real estate", "The request that found the right person automatically.", "Routed to maintenance"],
+    ["Trades & field work", "The lead source you can finally tie to revenue.", "ROI report updated automatically"],
+  ] as const;
+  for (const [tabName, heading, result] of audienceStories) {
+    await page.getByRole("tab", { name: tabName }).click();
+    await expect(panel.locator("[data-audience-copy]")).toHaveCount(1);
+    await expect(panel.getByTestId("audience-proof")).toHaveCount(1);
+    await expect(panel.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(panel.getByText(new RegExp(result, "i"))).toBeVisible();
+  }
+  await expect(page.getByRole("tab", { name: "Trades & field work" })).toHaveAttribute("aria-selected", "true");
+  await expect(panel.locator('figure[data-active="true"]')).toHaveAttribute("data-ready", "true");
+  await expect(panel.locator('figure[data-active="true"]')).toHaveCSS("opacity", "1");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test("mobile navigation fits the viewport and keeps every destination available", async ({ page }) => {
+test("mobile navigation fits the viewport and keeps every primary destination available", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
   const header = page.locator("header").first();
   const headerOverflows = await header.evaluate((node) => node.scrollWidth > node.clientWidth);
   expect(headerOverflows).toBe(false);
-  await expect(header.getByRole("link", { name: "Demos" })).toBeVisible();
-  await expect(header.getByRole("link", { name: "Stories" })).toBeVisible();
-  await expect(header.getByRole("link", { name: "Sign in" })).toBeVisible();
+  const menuTrigger = header.locator('summary[aria-label="Open navigation menu"]');
+  await expect(menuTrigger).toBeVisible();
+  expect(await menuTrigger.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await menuTrigger.click();
+
+  const mobileNavigation = header.getByRole("navigation", { name: "Mobile navigation" });
+  await expect(header.locator('a[href="/"]').first()).toBeVisible();
+  await expect(mobileNavigation.getByRole("link", { name: /Demos/ })).toBeVisible();
+  await expect(mobileNavigation.getByRole("link", { name: /Stories/ })).toBeVisible();
+  await expect(header.getByRole("navigation", { name: "Legal" }).getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
   await expect(header.getByRole("link", { name: "Record a note" })).toBeVisible();
 
   await page.goto("/demos");

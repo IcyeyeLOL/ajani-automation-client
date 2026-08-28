@@ -1,11 +1,19 @@
-import { SignUp } from "@clerk/nextjs";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { AjaniAuthModule } from "@/components/ajani-auth-module";
 import { AuthSurface } from "@/components/auth-surface";
-import { ajaniClerkAppearance } from "@/lib/clerk/appearance";
 import { hasClerkCredentials } from "@/lib/clerk/config";
+import { authPageUrl, resolveAuthRedirect } from "@/lib/clerk/redirect";
 
-export default function SignUpPage() {
+export const metadata: Metadata = { title: "Create an account | Ajani Automation" };
+
+type SignUpPageProps = {
+  searchParams: Promise<{ redirect_url?: string | string[] }>;
+};
+
+export default async function SignUpPage({ searchParams }: SignUpPageProps) {
   const configured = hasClerkCredentials();
+  const redirectTo = resolveAuthRedirect((await searchParams).redirect_url);
 
-  return <AuthSurface label="Create an Ajani Automation account">{configured ? <SignUp appearance={ajaniClerkAppearance} fallbackRedirectUrl="/portal" path="/sign-up" routing="path" signInUrl="/sign-in" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live account creation experience.</p><Link href="/sign-in">BACK TO SIGN IN →</Link></div>}</AuthSurface>;
+  return <AuthSurface label="Create an Ajani Automation account">{configured ? <AjaniAuthModule mode="sign-up" path="/sign-up" redirectTo={redirectTo} routing="path" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live account creation experience.</p><Link href={authPageUrl("/sign-in", redirectTo)}>BACK TO SIGN IN →</Link></div>}</AuthSurface>;
 }

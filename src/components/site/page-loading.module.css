@@ -56,9 +56,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .desk,
-  .route::after,
-  .route i { animation: none; }
-  .route::after { width: calc(100% - 10px); }
-  .route i { background: #75aa9b; }
+  :global(html:not([data-motion="full"])) .desk,
+  :global(html:not([data-motion="full"])) .route::after,
+  :global(html:not([data-motion="full"])) .route i { animation: none; }
+  :global(html:not([data-motion="full"])) .route::after { width: calc(100% - 10px); }
+  :global(html:not([data-motion="full"])) .route i { background: #75aa9b; }
 }

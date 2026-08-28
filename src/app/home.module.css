@@ -68,7 +68,6 @@
 .primaryCta:hover {
   background: #d3ab82;
   box-shadow: 0 12px 26px rgba(189, 150, 112, .22);
-  transform: translateY(-2px);
 }
 .primaryCta:active { transform: translateY(1px); }
 .primaryCta:focus-visible { outline: 3px solid var(--sand); outline-offset: 4px; }
@@ -80,12 +79,15 @@
   padding: 0 20px;
   border: 1px solid #5a4d48;
   border-radius: 11px;
+  background: transparent;
   color: #d6cac4;
+  cursor: pointer;
   font-size: 15px;
   font-weight: 500;
   transition: border-color .18s ease, color .18s ease;
 }
 .secondaryCta:hover { border-color: var(--sand); color: var(--pearl); }
+.secondaryCta:focus-visible { outline: 3px solid var(--sand); outline-offset: 4px; }
 
 /* the assembling route, now the hero's own visual */
 .heroVisual {
@@ -225,79 +227,7 @@
 .headAside { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-bottom: 5px; }
 .headAside p { max-width: 46ch; margin: 0; color: var(--quiet); font-size: 16.5px; line-height: 1.5; }
 
-/* ---------- band 2: routes ---------- */
-.routes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 13px;
-  margin-top: 38px;
-}
-
-.route {
-  display: flex;
-  flex-direction: column;
-  min-height: 186px;
-  padding: 22px 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--paper);
-  transition: border-color .24s ease, transform .24s var(--ease-standard), box-shadow .24s ease;
-}
-.route:hover {
-  border-color: var(--crimson);
-  box-shadow: 0 14px 30px rgba(121, 0, 24, .09);
-  transform: translateY(-4px);
-}
-
-.routeHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.routeHead .label { color: var(--crimson); }
-.routeHead b { font-family: var(--font-mono), ui-monospace, monospace; font-size: 11px; color: var(--sand-deep); }
-
-.route h3 {
-  margin: 22px 0 0;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -.025em;
-}
-.route p { margin: 11px 0 0; color: var(--quiet); font-size: 14.5px; line-height: 1.45; }
-
-.routeFlow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10.5px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--quiet);
-}
-/* the arrow sits inside its span, so the flex gap does not separate it from
-   the word it follows — it needs its own margin */
-.routeFlow span { display: inline-flex; align-items: center; }
-.routeFlow i { margin-left: 8px; color: var(--sand-deep); font-style: normal; }
-
-.ghostCta {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 46px;
-  padding: 0 20px;
-  border: 1px solid var(--crimson);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--crimson);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -.01em;
-  transition: background .18s ease, color .18s ease, transform .18s var(--ease-standard);
-}
-.ghostCta:hover { background: var(--crimson); color: #fff; transform: translateY(-2px); }
-
-/* ---------- band 4: process ---------- */
+/* ---------- process ---------- */
 .steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -331,6 +261,7 @@
   margin: 0 auto;
   padding: 74px 0;
 }
+.closeInner > * { min-width: 0; }
 .closeCopy .label { color: var(--sand); }
 .closeCopy h2 {
   margin: 15px 0 0;
@@ -346,6 +277,7 @@
 .closeCopy .primaryCta { margin-top: 30px; }
 
 .priceCard {
+  min-width: 0;
   padding: 26px 28px 24px;
   border: 1px solid var(--panel-edge);
   border-radius: 20px;
@@ -372,16 +304,39 @@
   .shell { --shell-width: min(100% - 48px, 1240px); }
   .heroInner, .closeInner { grid-template-columns: 1fr; gap: 40px; }
   .sectionHead { grid-template-columns: 1fr; align-items: start; gap: 18px; }
-  .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
   .shell { --shell-width: min(100% - 32px, 1240px); }
-  .hero { padding: 40px 0 48px; }
+  .hero { padding: 34px 0 44px; }
+  .heroInner { gap: 34px; }
+  .heroCopy h1 { font-size: clamp(42px, 12vw, 52px); line-height: .97; }
+  .heroCopy > p { margin-top: 18px; font-size: 16.5px; line-height: 1.48; }
+  .heroActions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 25px; }
+  .primaryCta,
+  .secondaryCta { justify-content: center; width: 100%; }
+  .heroMeta { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 20px; }
+  .heroVisual { border-radius: 17px; box-shadow: 0 18px 40px rgba(0, 0, 0, .28); }
+  .heroVisualHead { min-height: 48px; padding: 12px 15px; font-size: 9px; }
+  .heroVisualBody { padding: 28px 15px 23px; }
   .section { padding: 34px 0; }
   .sectionEnd { padding-bottom: 54px; }
   .closeInner { padding: 48px 0; }
   .sectionHead { padding-top: 24px; }
-  .routes, .steps { grid-template-columns: 1fr; }
+  .headMain h2 { font-size: 34px; line-height: 1.02; }
+  .headAside p { font-size: 15.5px; }
+  .steps { grid-template-columns: 1fr; gap: 10px; margin-top: 28px; }
+  .step { padding: 19px 18px 20px; }
+  .closeInner { gap: 30px; }
+  .closeCopy h2 { font-size: 38px; }
+  .closeCopy > p { font-size: 15.5px; }
+  .closeCopy .primaryCta { margin-top: 24px; }
+  .priceCard { padding: 22px 20px; border-radius: 16px; }
+  .priceItem { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .priceItem b { font-size: 18px; white-space: normal; }
+}
+
+@media (max-width: 360px) {
+  .heroCopy h1 { font-size: 40px; }
 }

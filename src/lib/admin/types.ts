@@ -28,6 +28,8 @@ export type OutreachVariant = {
   title: string;
 };
 
+export type OutreachMessageStep = "connection_request" | "initial_dm" | "follow_up_1" | "follow_up_2" | "custom";
+
 export type OutreachExperiment = {
   id: string;
   title: string;
@@ -35,6 +37,7 @@ export type OutreachExperiment = {
   campaign: string | null;
   channel: string;
   method: string;
+  messageStep: OutreachMessageStep;
   primaryMetric: string;
   status: string;
   variants: OutreachVariant[];
@@ -68,6 +71,7 @@ export type OutreachTotals = {
   initialDms: number;
   f1Sent: number;
   f2Sent: number;
+  customSent: number;
   replies: number;
   positiveReplies: number;
   callsBooked: number;

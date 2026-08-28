@@ -205,8 +205,9 @@
   :global(html:not([data-motion="full"])) .wave,
   :global(html:not([data-motion="full"])) .pulse,
   :global(html:not([data-motion="full"])) .packet,
-  :global(html:not([data-motion="full"])) .packetTrail { display: none; }
-  :global(html:not([data-motion="full"])) .link { animation: none; stroke-dashoffset: 0; }
+  :global(html:not([data-motion="full"])) .packetTrail { display: none; animation: none; }
+  :global(html:not([data-motion="full"])) .link,
+  :global(html:not([data-motion="full"])) .link[data-step] { animation: none; stroke-dashoffset: 0; }
   :global(html:not([data-motion="full"])) .node { animation: none; opacity: 1; }
   :global(html:not([data-motion="full"])) .core { animation: none; opacity: 1; }
   :global(html:not([data-motion="full"])) .tag { animation: none; opacity: 1; }
