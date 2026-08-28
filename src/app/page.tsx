@@ -1,88 +1,137 @@
-import Link from "next/link";
-import { MotionReveal } from "@/components/motion-reveal";
-import { SiteHeader } from "@/components/site-header";
+import { AudiencePicker } from "@/components/home/audience-picker";
+import { HowItWorksDialog } from "@/components/home/how-it-works-dialog";
+import { Reveal } from "@/components/home/reveal";
+import { RecordNoteAction } from "@/components/record-note-action";
+import { SystemAnimation } from "@/components/home/system-animation";
+import { SiteFoot, SiteTop } from "@/components/site/chrome";
+import styles from "./home.module.css";
 
-const systems = [
-  ["01", "Lead response", "Reply while intent is still alive."],
-  ["02", "Client handoff", "Keep the right context attached to the work."],
-  ["03", "Returning clients", "Make follow-up feel timely and considered."],
+const stages = [
+  { when: "Now", title: "You talk", detail: "Two minutes about the work that keeps slipping. No forms, no brief to write." },
+  { when: "Same session", title: "One question", detail: "Ajani reviews your note and asks the single thing that changes the system — nothing else." },
+  { when: "Same session", title: "You approve", detail: "Your answer updates the route automatically. You review it and give the go-ahead." },
+  { when: "7–10 days", title: "It runs", detail: "The route goes live in your real channels, and we tune it for a month." },
 ];
 
 export default function Home() {
   return (
-    <main className="marketing-shell">
-      <SiteHeader />
-      <section className="hero-grid">
-        <MotionReveal as="div" className="hero-copy">
-          <p className="eyebrow">AUTOMATION, MADE PERSONAL</p>
-          <h1>
-            Make the work move before it needs <em>your memory.</em>
-          </h1>
-          <p className="lede">
-            Ajani designs the operational systems that keep good leads, client
-            handoffs, and repeat work from quietly slipping through the cracks.
-          </p>
-          <div className="hero-actions">
-            <Link className="button button-primary" href="/request">
-              REQUEST A BUILD <span>→</span>
-            </Link>
-            <Link className="button button-quiet" href="/demos">
-              VIEW DEMOS
-            </Link>
-          </div>
-        </MotionReveal>
+    <div className={styles.shell}>
+      <SiteTop active="home" />
 
-        <MotionReveal as="aside" className="operations-panel home-operations" delay={120}>
-          <div className="operations-head">
-            <span>AJANI / OPERATIONS DESK</span>
-            <span className="live-dot">LISTENING</span>
-          </div>
-          <div className="operations-list">
-            {systems.map(([number, title, description]) => (
-              <div className="operations-item" key={number}>
-                <span>{number}</span>
-                <div>
-                  <strong>{title}</strong>
-                  <small>{description}</small>
-                </div>
-                <i>ROUTE</i>
-              </div>
-            ))}
-          </div>
-          <div className="operations-result">
-            <span>WHAT AJANI BUILDS</span>
-            <strong>The handoff your business should have had all along.</strong>
-          </div>
-        </MotionReveal>
+      <main id="main-content" tabIndex={-1}>
+
+      {/* Band 1 — dark. The proposition, with the system assembling beside it. */}
+      <section className={styles.hero}>
+        <div className={styles.heroInner}>
+          <Reveal className={styles.heroCopy}>
+            <p className={styles.label}>Done-for-you automation</p>
+            <h1>Tell us where the work sucks. <em>We build the system that fixes it.</em></h1>
+            <p>
+              Show us what is wasting time, losing leads, or making your team chase work.
+              Ajani turns that mess into an automation system that handles it for you,
+              so your team gets hours back and increases revenue.
+            </p>
+            <div className={styles.heroActions}>
+              <RecordNoteAction className={styles.primaryCta}>
+                Record a note <span aria-hidden="true">→</span>
+              </RecordNoteAction>
+              <HowItWorksDialog triggerClassName={styles.secondaryCta} />
+            </div>
+            <div className={styles.heroMeta}>
+              <span><i>✓</i> Takes two minutes</span>
+              <span><i>✓</i> Secure account access</span>
+              <span><i>✓</i> Built around your business</span>
+            </div>
+          </Reveal>
+          <Reveal className={styles.heroVisual} delay={140}>
+            <div className={styles.heroVisualHead}>
+              <span>Ajani / system preview</span>
+              <em aria-label="System preview running">
+                <i aria-hidden="true" />
+                <span aria-hidden="true" className={styles.previewStatus}>
+                  <b className={styles.statusListening}>Listening</b>
+                  <b className={styles.statusMapping}>Mapping</b>
+                  <b className={styles.statusRouting}>Routing</b>
+                  <b className={styles.statusReady}>System ready</b>
+                </span>
+              </em>
+            </div>
+            <div className={styles.heroVisualBody}>
+              <SystemAnimation />
+            </div>
+          </Reveal>
+        </div>
       </section>
 
-      <section className="proof-grid">
-        <MotionReveal as="article" className="proof-intro">
-          <div className="proof-intro-copy">
-            <p className="eyebrow">NOT ANOTHER SOFTWARE LAYER</p>
-            <h2>We make the work behind your business feel less dependent on you.</h2>
+      {/* Bands 2 and 3 share one light ground, so scrolling never flips between
+          grounds. Each opens with the same two-column head — title left, the
+          supporting line and any action right — so the page keeps using its
+          full width instead of narrowing into a left-hand column. */}
+
+      {/* Band 2 — one selector covering every kind of business, no extra links */}
+      <section className={styles.section}>
+        <Reveal className={styles.sectionHead}>
+          <div className={styles.headMain}>
+            <p className={styles.label}>Who this is for</p>
+            <h2>Different businesses, <em>the same gap.</em></h2>
           </div>
-          <div className="proof-intro-route">
-            <span>WHAT A USEFUL SYSTEM HOLDS</span>
-            <div aria-label="Signal, context, and follow-through">
-              <b>SIGNAL</b><i>→</i><b>CONTEXT</b><i>→</i><b>FOLLOW-THROUGH</b>
-            </div>
-            <small>The detail needed for good work stays with the work.</small>
+          <div className={styles.headAside}>
+            <p>Pick the one closest to yours. The work is different; the moment it slips is not.</p>
           </div>
-        </MotionReveal>
-        {systems.map(([number, title, description], index) => (
-          <MotionReveal as="article" className="proof-card" delay={index * 90} key={number}>
-            <div className="proof-card-head">
-              <p>{title.toUpperCase()}</p>
-              <span>{number}</span>
-            </div>
-            <h3>{description}</h3>
-            <small className="proof-route">
-              <span>UNDERSTAND</span><i>→</i><span>ROUTE</span><i>→</i><span>RESOLVE</span>
-            </small>
-          </MotionReveal>
-        ))}
+        </Reveal>
+        <Reveal delay={110}>
+          <AudiencePicker />
+        </Reveal>
       </section>
-    </main>
+
+      {/* Band 3 — what happens after the memo */}
+      <section className={`${styles.section} ${styles.sectionEnd}`} id="how">
+        <Reveal className={styles.sectionHead}>
+          <div className={styles.headMain}>
+            <p className={styles.label}>After you send it</p>
+            <h2>You will know exactly <em>what happens next.</em></h2>
+          </div>
+          <div className={styles.headAside}>
+            <p>No black box, no long discovery process. Four steps, and you can stop at any of them.</p>
+          </div>
+        </Reveal>
+        <div className={styles.steps}>
+          {stages.map((stage, index) => (
+            <Reveal as="article" className={styles.step} delay={index * 85} key={stage.title}>
+              <p className={styles.stepWhen}>{stage.when}</p>
+              <h3>{stage.title}</h3>
+              <p>{stage.detail}</p>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* Band 4 — dark again. The close mirrors the hero. */}
+      <section className={styles.close}>
+        <div className={styles.closeInner}>
+          <Reveal className={styles.closeCopy}>
+            <p className={styles.label}>Ready when you are</p>
+            <h2>The system you keep meaning to build. <em>Just say it out loud.</em></h2>
+            <p>You do not need to know what the automation should be. That is the part we work out for you.</p>
+            <RecordNoteAction className={styles.primaryCta}>
+              Record a note <span aria-hidden="true">→</span>
+            </RecordNoteAction>
+          </Reveal>
+          <Reveal as="aside" className={styles.priceCard} delay={130}>
+            <p className={styles.label}>What it costs</p>
+            <div className={styles.priceRow}>
+              <div className={styles.priceItem}><span>Typical build</span><b>Based on your budget</b></div>
+              <div className={styles.priceItem}><span>Time to live</span><b>7–10 days</b></div>
+              <div className={styles.priceItem}><span>You pay</span><b>After you approve</b></div>
+            </div>
+            <small>You approve the build and budget before anything is charged.</small>
+          </Reveal>
+        </div>
+      </section>
+
+      </main>
+
+      <SiteFoot />
+    </div>
   );
 }

@@ -1,0 +1,270 @@
+.picker { margin-top: 32px; }
+
+/* ---------- the selector ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  min-height: 44px;
+  padding: 0 17px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--quiet);
+  cursor: pointer;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s var(--ease-standard);
+}
+
+.tab:hover { border-color: var(--sand-deep); color: var(--ink); }
+.tab:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
+
+.tab[aria-selected="true"] {
+  border-color: var(--crimson);
+  background: var(--crimson);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* ---------- the panel ---------- */
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  grid-template-areas:
+    "media intro"
+    "proof proof";
+  align-items: center;
+  column-gap: 40px;
+  row-gap: 28px;
+  padding-top: 34px;
+}
+.panel:focus-visible { outline: 3px solid var(--crimson); outline-offset: 6px; }
+
+.copy > * {
+  animation: panel-detail-in .5s var(--ease-standard) both;
+}
+.copy > :nth-child(1) { animation-delay: 80ms; }
+.copy > :nth-child(2) { animation-delay: 125ms; }
+.copy > :nth-child(3) { animation-delay: 170ms; }
+.copy > :nth-child(4) { animation-delay: 215ms; }
+
+/* All exports stay mounted so a tab switch never destroys one image and waits
+   for the next 1–2 MB source to download and decode. The stage crossfades the
+   already-prepared cards while preserving the active card's intrinsic ratio. */
+.shotStage {
+  grid-area: media;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  transition: aspect-ratio .42s var(--ease-standard);
+}
+.shotStage::before {
+  position: absolute;
+  inset: 8% 4%;
+  border-radius: 18px;
+  background: linear-gradient(105deg, #e7e0da 25%, #f3efeb 42%, #e7e0da 60%);
+  background-size: 220% 100%;
+  content: "";
+  opacity: 1;
+  animation: photo-loading 1.15s linear infinite;
+  transition: opacity .28s ease;
+}
+.shotStage[data-ready="true"]::before { opacity: 0; }
+.shotPhoto {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(7px) scale(.992);
+  transition: opacity .42s ease, transform .52s var(--ease-standard);
+}
+.shotPhoto[data-active="true"][data-ready="true"] { z-index: 1; opacity: 1; transform: translateY(0) scale(1); }
+.shotPhoto img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+/* Plumber V2 was exported from a larger transparent Figma canvas. Scale and
+   offset the untouched source so its actual 1008 × 687 artwork fills the same
+   responsive frame as the tightly exported audience cards. */
+.shotPhoto[data-audience="home-services"] {
+  display: block;
+  overflow: hidden;
+  place-items: normal;
+}
+.shotPhoto[data-audience="home-services"] img {
+  width: 119.047619%;
+  max-width: none;
+  height: 131.295487%;
+  transform: translate(-10.166667%, -4.43459%);
+}
+
+/* ---------- copy ---------- */
+.copy {
+  grid-area: intro;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  animation-duration: .46s;
+  animation-timing-function: var(--ease-standard);
+  animation-fill-mode: both;
+}
+.copy[data-direction="forward"] { animation-name: panel-copy-in-forward; }
+.copy[data-direction="backward"] { animation-name: panel-copy-in-backward; }
+
+.copy h3 {
+  margin: 0;
+  font-size: clamp(24px, 2.5vw, 33px);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+}
+
+.problem { margin: 16px 0 0; color: var(--quiet); font-size: 16px; line-height: 1.5; }
+
+/* ---------- automation proof ---------- */
+.example {
+  grid-area: proof;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: 0 12px 26px rgba(54, 39, 32, .07);
+  color: var(--ink);
+}
+
+.example figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 0 17px;
+  border-bottom: 1px solid var(--line);
+  background: #f5f1ed;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.example figcaption b { display: flex; align-items: center; gap: 8px; color: var(--crimson); font-weight: 400; }
+.example figcaption b i { width: 6px; height: 6px; border-radius: 50%; background: var(--crimson); box-shadow: 0 0 0 4px rgba(121, 0, 24, .07); }
+.example figcaption span { color: var(--sand-deep); text-align: right; }
+
+.exampleRoute { display: grid; grid-template-columns: minmax(0, 1fr) 164px minmax(0, 1fr); align-items: stretch; gap: 0; padding: 15px 17px 13px; }
+.exampleStep { display: grid; grid-template-columns: 32px 1fr; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.exampleStep > b { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 7px; color: var(--sand-deep); background: #f3eee9; font: 9.5px var(--font-mono), ui-monospace, monospace; }
+.exampleStep small { display: block; color: var(--quiet); font: 9px var(--font-mono), ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.exampleStep p { margin: 7px 0 0; color: var(--ink); font-size: 13.5px; line-height: 1.43; }
+.exampleAction { border-color: rgba(121, 0, 24, .24); background: #fff8f7; }
+.exampleAction > b { border-color: var(--crimson); background: var(--crimson); color: #fff; }
+.exampleAction small { color: var(--crimson); }
+.exampleConnector { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; padding: 0 12px; }
+.exampleConnector::before { position: absolute; top: 50%; right: 0; left: 0; height: 1px; background: var(--sand); content: ""; }
+.exampleConnector i { position: absolute; z-index: 1; left: 8px; width: 8px; height: 8px; border: 2px solid var(--paper); border-radius: 50%; background: var(--sand); box-shadow: 0 0 0 1px var(--sand); }
+.exampleConnector span { position: relative; z-index: 1; padding: 5px 8px; background: var(--paper); color: var(--quiet); font: 9px var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
+.example > footer { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 17px; border-top: 1px solid var(--line); background: #f5f1ed; color: var(--success); font: 9.5px var(--font-mono), ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.example > footer i { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+/* ---------- the way out of the panel ---------- */
+.panelCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  margin-top: 22px;
+  padding: 0 20px;
+  border: 1px solid var(--crimson);
+  border-radius: 10px;
+  color: var(--crimson);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  transition: background .18s ease, color .18s ease, transform .18s var(--ease-standard);
+}
+.panelCta:hover { background: var(--crimson); color: #fff; }
+.panelCta:focus-visible { outline: 3px solid var(--crimson); outline-offset: 3px; }
+
+@keyframes panel-copy-in-forward {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes panel-copy-in-backward {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes panel-detail-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes photo-loading {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .copy,
+  :global(html:not([data-motion="full"])) .copy > * { animation: none; }
+  :global(html:not([data-motion="full"])) .shotPhoto,
+  :global(html:not([data-motion="full"])) .shotStage { transition: none; }
+  :global(html:not([data-motion="full"])) .shotStage::before { animation: none; }
+  :global(html:not([data-motion="full"])) .tab { transition: none; }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "media"
+      "intro"
+      "proof";
+    align-items: start;
+    gap: 26px;
+  }
+  .exampleRoute { grid-template-columns: 1fr; }
+  .exampleConnector { justify-content: flex-start; min-height: 34px; padding-left: 18px; }
+  .exampleConnector::before { top: 0; right: auto; bottom: 0; left: 31px; width: 1px; height: auto; }
+  .exampleConnector i { position: relative; left: auto; margin-left: 9px; }
+  .exampleConnector span { margin-left: 21px; padding: 0; background: transparent; text-align: left; }
+}
+
+@media (max-width: 620px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 20px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab { flex: 0 0 auto; scroll-snap-align: start; font-size: 13.5px; }
+  .panel { padding-top: 26px; }
+  .panelCta { width: 100%; justify-content: center; }
+}

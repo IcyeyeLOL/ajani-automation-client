@@ -1,0 +1,24 @@
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity .62s var(--ease-standard) var(--reveal-delay, 0ms),
+    transform .62s var(--ease-standard) var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.shown {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Reduced motion: the component sets shown immediately, and this removes the
+   transition entirely so nothing eases in. */
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+}

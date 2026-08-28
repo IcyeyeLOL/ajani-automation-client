@@ -1,0 +1,214 @@
+.wrap {
+  --cycle: 7.2s;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.svg { width: 100%; max-width: 100%; height: auto; overflow: visible; }
+
+/* One shared clock coordinates every stage of the story. */
+.wave {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: waveform var(--cycle) cubic-bezier(.22, .8, .28, 1) infinite;
+}
+
+.bar {
+  fill: var(--sand);
+  opacity: .9;
+}
+
+.link {
+  stroke: #6a5b55;
+  stroke-width: 1.8;
+  stroke-dasharray: 72;
+  stroke-dashoffset: 72;
+  animation-duration: var(--cycle);
+  animation-timing-function: cubic-bezier(.22, .8, .28, 1);
+  animation-iteration-count: infinite;
+}
+.link[data-step="1"] { animation-name: drawOne; }
+.link[data-step="2"] { animation-name: drawTwo; }
+.link[data-step="3"] { animation-name: drawThree; }
+
+.node {
+  fill: #2b2523;
+  stroke: #7a6a62;
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation-duration: var(--cycle);
+  animation-timing-function: cubic-bezier(.22, .8, .28, 1);
+  animation-iteration-count: infinite;
+}
+[data-step="1"] .node { animation-name: nodeOne; }
+[data-step="2"] .node { animation-name: nodeTwo; }
+[data-step="3"] .node { animation-name: nodeThree; }
+[data-step="4"] .node { animation-name: nodeFour; }
+
+.core {
+  fill: url(#ajaniActive);
+  opacity: 0;
+  animation-duration: var(--cycle);
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+[data-step="1"] .core { animation-name: coreOne; }
+[data-step="2"] .core { animation-name: coreTwo; }
+[data-step="3"] .core { animation-name: coreThree; }
+[data-step="4"] .core { animation-name: coreFour; }
+
+.pulse {
+  fill: none;
+  stroke: url(#ajaniActive);
+  stroke-width: 2.2;
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation-duration: var(--cycle);
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+[data-step="1"] .pulse { animation-name: ringOne; }
+[data-step="2"] .pulse { animation-name: ringTwo; }
+[data-step="3"] .pulse { animation-name: ringThree; }
+[data-step="4"] .pulse { animation-name: ringFour; }
+
+.packet,
+.packetTrail {
+  fill: var(--sand);
+  opacity: 0;
+  animation: travel var(--cycle) linear infinite;
+}
+
+.packetTrail {
+  fill: #c8865f;
+  animation-name: travelTrail;
+}
+
+.tag {
+  fill: #a2958f;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-anchor: middle;
+  text-transform: uppercase;
+  opacity: 0;
+  animation-duration: var(--cycle);
+  animation-timing-function: ease;
+  animation-iteration-count: infinite;
+}
+[data-step="1"] .tag { animation-name: tagOne; }
+[data-step="2"] .tag { animation-name: tagTwo; }
+[data-step="3"] .tag { animation-name: tagThree; }
+[data-step="4"] .tag { animation-name: tagFour; }
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #a2958f;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.caption i { color: var(--sand); font-style: normal; }
+
+@keyframes waveform {
+  0%       { opacity: 1; transform: scaleX(.96) scaleY(.78); }
+  6%       { opacity: 1; transform: scaleX(1) scaleY(1); }
+  12%      { opacity: 1; transform: scaleX(.99) scaleY(.72); }
+  17%      { opacity: 1; transform: scaleX(1) scaleY(.92); }
+  25%      { opacity: 0; transform: scaleX(.26) scaleY(.18); }
+  93%      { opacity: 0; transform: scaleX(.26) scaleY(.18); }
+  100%     { opacity: 1; transform: scaleX(.96) scaleY(.78); }
+}
+
+@keyframes drawOne {
+  0%, 18%  { opacity: 0; stroke-dashoffset: 72; }
+  19%      { opacity: 1; }
+  24%, 92% { opacity: 1; stroke-dashoffset: 0; }
+  100%     { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes drawTwo {
+  0%, 23%  { opacity: 0; stroke-dashoffset: 72; }
+  24%      { opacity: 1; }
+  29%, 92% { opacity: 1; stroke-dashoffset: 0; }
+  100%     { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes drawThree {
+  0%, 28%  { opacity: 0; stroke-dashoffset: 72; }
+  29%      { opacity: 1; }
+  34%, 92% { opacity: 1; stroke-dashoffset: 0; }
+  100%     { opacity: 0; stroke-dashoffset: 0; }
+}
+
+@keyframes nodeOne {
+  0%, 17%  { opacity: 0; transform: scale(.72); }
+  22%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
+  100%     { opacity: 0; transform: scale(.92); }
+}
+@keyframes nodeTwo {
+  0%, 21%  { opacity: 0; transform: scale(.72); }
+  26%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
+  100%     { opacity: 0; transform: scale(.92); }
+}
+@keyframes nodeThree {
+  0%, 25%  { opacity: 0; transform: scale(.72); }
+  30%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
+  100%     { opacity: 0; transform: scale(.92); }
+}
+@keyframes nodeFour {
+  0%, 29%  { opacity: 0; transform: scale(.72); }
+  34%, 71% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
+  76%, 92% { opacity: 1; transform: scale(1); fill: #352a25; stroke: #c99e75; }
+  100%     { opacity: 0; transform: scale(.92); }
+}
+
+@keyframes travel {
+  0%, 33%   { opacity: 0; transform: translateX(0); }
+  34%       { opacity: 1; transform: translateX(0); }
+  72%, 92%  { opacity: 1; transform: translateX(309px); }
+  100%      { opacity: 0; transform: translateX(309px); }
+}
+@keyframes travelTrail {
+  0%, 34%   { opacity: 0; transform: translateX(0); }
+  36%       { opacity: .16; transform: translateX(0); }
+  74%, 91%  { opacity: .16; transform: translateX(309px); }
+  100%      { opacity: 0; transform: translateX(309px); }
+}
+
+@keyframes coreOne { 0%, 33% { opacity: 0; } 35%, 43% { opacity: 1; } 47%, 92% { opacity: .42; } 100% { opacity: 0; } }
+@keyframes coreTwo { 0%, 45% { opacity: 0; } 47%, 55% { opacity: 1; } 59%, 92% { opacity: .42; } 100% { opacity: 0; } }
+@keyframes coreThree { 0%, 58% { opacity: 0; } 60%, 68% { opacity: 1; } 72%, 92% { opacity: .42; } 100% { opacity: 0; } }
+@keyframes coreFour { 0%, 70% { opacity: 0; } 72%, 92% { opacity: 1; } 100% { opacity: 0; } }
+
+@keyframes ringOne { 0%, 33% { opacity: 0; transform: scale(.92); } 35% { opacity: .62; } 44%, 100% { opacity: 0; transform: scale(1.46); } }
+@keyframes ringTwo { 0%, 45% { opacity: 0; transform: scale(.92); } 47% { opacity: .62; } 56%, 100% { opacity: 0; transform: scale(1.46); } }
+@keyframes ringThree { 0%, 58% { opacity: 0; transform: scale(.92); } 60% { opacity: .62; } 69%, 100% { opacity: 0; transform: scale(1.46); } }
+@keyframes ringFour { 0%, 70% { opacity: 0; transform: scale(.92); } 72% { opacity: .72; } 82%, 100% { opacity: 0; transform: scale(1.46); } }
+
+@keyframes tagOne { 0%, 18% { opacity: 0; } 23%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tagTwo { 0%, 22% { opacity: 0; } 27%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tagThree { 0%, 26% { opacity: 0; } 31%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tagFour { 0%, 30% { opacity: 0; } 35%, 92% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Reduced motion keeps the finished route on screen unless the site has
+   explicitly selected its full-motion presentation. */
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .bar,
+  :global(html:not([data-motion="full"])) .wave,
+  :global(html:not([data-motion="full"])) .pulse,
+  :global(html:not([data-motion="full"])) .packet,
+  :global(html:not([data-motion="full"])) .packetTrail { display: none; animation: none; }
+  :global(html:not([data-motion="full"])) .link,
+  :global(html:not([data-motion="full"])) .link[data-step] { animation: none; stroke-dashoffset: 0; }
+  :global(html:not([data-motion="full"])) .node { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .core { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .tag { animation: none; opacity: 1; }
+}

@@ -3,7 +3,7 @@ import "server-only";
 import type { BuildRequestDraft } from "@/lib/domain/types";
 
 export interface TranscriptResult {
-  provider: "whisper" | "elevenlabs";
+  provider: "deepgram" | "whisper" | "elevenlabs";
   text: string;
   durationSeconds: number;
   language?: string;

@@ -1,21 +1,19 @@
-import { SignIn } from "@clerk/nextjs";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { AjaniAuthModule } from "@/components/ajani-auth-module";
+import { AuthSurface } from "@/components/auth-surface";
 import { hasClerkCredentials } from "@/lib/clerk/config";
+import { authPageUrl, resolveAuthRedirect } from "@/lib/clerk/redirect";
 
-const clerkAppearance = {
-  variables: {
-    colorPrimary: "#790018",
-    colorBackground: "#fbfaf7",
-    colorInputBackground: "#ffffff",
-    colorInputText: "#171515",
-    colorText: "#171515",
-    borderRadius: "0.7rem",
-    fontFamily: '"Aptos", "Segoe UI Variable", "Trebuchet MS", sans-serif',
-  },
+export const metadata: Metadata = { title: "Sign in | Ajani Automation" };
+
+type SignInPageProps = {
+  searchParams: Promise<{ redirect_url?: string | string[] }>;
 };
 
-export default function SignInPage() {
+export default async function SignInPage({ searchParams }: SignInPageProps) {
   const configured = hasClerkCredentials();
+  const redirectTo = resolveAuthRedirect((await searchParams).redirect_url);
 
-  return <main className="auth-shell"><Link className="brand" href="/">ajani<i>.</i></Link><section><p className="eyebrow">SAVE YOUR BUILD</p><h1>Sign in to track your <em>systems.</em></h1><p>Your request, build history, billing, and active automations live in one private portal.</p>{configured ? <SignIn appearance={clerkAppearance} fallbackRedirectUrl="/portal" signUpUrl="/sign-up" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live sign-in experience.</p><Link href="/sign-up">CREATE YOUR ACCOUNT →</Link></div>}</section></main>;
+  return <AuthSurface label="Sign in to Ajani Automation">{configured ? <AjaniAuthModule mode="sign-in" path="/sign-in" redirectTo={redirectTo} routing="path" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live sign-in experience.</p><Link href={authPageUrl("/sign-up", redirectTo)}>CREATE YOUR ACCOUNT →</Link></div>}</AuthSurface>;
 }

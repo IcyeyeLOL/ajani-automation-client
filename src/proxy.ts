@@ -1,15 +1,25 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { hasClerkCredentials } from "@/lib/clerk/config";
+import { hasClerkCredentials, shouldFailClosedForClerk } from "@/lib/clerk/config";
 
-const isProtectedRoute = createRouteMatcher(["/portal(.*)", "/api/build-requests(.*)"]);
 const clerkIsConfigured = hasClerkCredentials();
+const clerkMustFailClosed = shouldFailClosedForClerk();
+const clerkDevelopmentOptions = process.env.NODE_ENV === "development"
+  ? { clockSkewInMs: 5 * 60 * 1000 }
+  : undefined;
 
 export default clerkIsConfigured
-  ? clerkMiddleware(async (auth, request) => {
-      if (isProtectedRoute(request)) await auth.protect();
-    })
+  ? clerkMiddleware(clerkDevelopmentOptions)
   : function proxy() {
+      if (clerkMustFailClosed) {
+        return new NextResponse("Service temporarily unavailable.", {
+          status: 503,
+          headers: {
+            "cache-control": "no-store",
+            "content-type": "text/plain; charset=utf-8",
+          },
+        });
+      }
       return NextResponse.next();
     };
 

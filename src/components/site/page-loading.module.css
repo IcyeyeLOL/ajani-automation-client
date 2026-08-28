@@ -1,0 +1,64 @@
+.screen {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 70% at 18% 10%, rgba(189, 150, 112, .1), transparent 62%),
+    #171515;
+  color: var(--pearl);
+}
+
+.desk {
+  display: grid;
+  justify-items: center;
+  width: min(340px, 100%);
+  padding: 28px;
+  border: 1px solid #403735;
+  border-radius: 18px;
+  background: linear-gradient(150deg, #241f1e, #191616);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, .3);
+  animation: loading-desk-in .48s var(--ease-standard) both;
+}
+
+.brand { color: var(--pearl); font-size: 22px; font-weight: 700; letter-spacing: -.07em; }
+.brand i { color: var(--sand); font-style: normal; }
+
+.copy { display: grid; justify-items: center; gap: 6px; margin-top: 24px; text-align: center; }
+.copy b { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.copy span { color: #a99c96; font-family: var(--font-mono), ui-monospace, monospace; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+
+.route { position: relative; display: flex; justify-content: space-between; width: 188px; margin-top: 27px; }
+.route::before,
+.route::after { position: absolute; top: 50%; right: 5px; left: 5px; height: 1px; content: ""; transform: translateY(-50%); }
+.route::before { background: #514641; }
+.route::after { width: 0; background: linear-gradient(90deg, var(--sand), #d99072); animation: loading-route 2.1s var(--ease-standard) infinite; }
+.route i { position: relative; z-index: 1; width: 11px; height: 11px; border: 3px solid #241f1e; border-radius: 50%; background: #70584b; box-shadow: 0 0 0 1px #6f5d54; animation: loading-node 2.1s ease-in-out infinite; }
+.route i:nth-child(2) { animation-delay: .18s; }
+.route i:nth-child(3) { animation-delay: .36s; }
+.route i:nth-child(4) { animation-delay: .54s; }
+
+@keyframes loading-desk-in {
+  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes loading-route {
+  0%, 12% { width: 0; }
+  76%, 100% { width: calc(100% - 10px); }
+}
+
+@keyframes loading-node {
+  38% { background: #70584b; box-shadow: 0 0 0 1px #6f5d54; transform: scale(1); }
+  55%, 70% { background: #efc39f; box-shadow: 0 0 0 6px rgba(239, 195, 159, .08); transform: scale(1.12); }
+  88%, 100% { background: #75aa9b; box-shadow: 0 0 0 1px #75aa9b; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .desk,
+  :global(html:not([data-motion="full"])) .route::after,
+  :global(html:not([data-motion="full"])) .route i { animation: none; }
+  :global(html:not([data-motion="full"])) .route::after { width: calc(100% - 10px); }
+  :global(html:not([data-motion="full"])) .route i { background: #75aa9b; }
+}

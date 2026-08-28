@@ -1,21 +1,19 @@
-import { SignUp } from "@clerk/nextjs";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { AjaniAuthModule } from "@/components/ajani-auth-module";
+import { AuthSurface } from "@/components/auth-surface";
 import { hasClerkCredentials } from "@/lib/clerk/config";
+import { authPageUrl, resolveAuthRedirect } from "@/lib/clerk/redirect";
 
-const clerkAppearance = {
-  variables: {
-    colorPrimary: "#790018",
-    colorBackground: "#fbfaf7",
-    colorInputBackground: "#ffffff",
-    colorInputText: "#171515",
-    colorText: "#171515",
-    borderRadius: "0.7rem",
-    fontFamily: '"Aptos", "Segoe UI Variable", "Trebuchet MS", sans-serif',
-  },
+export const metadata: Metadata = { title: "Create an account | Ajani Automation" };
+
+type SignUpPageProps = {
+  searchParams: Promise<{ redirect_url?: string | string[] }>;
 };
 
-export default function SignUpPage() {
+export default async function SignUpPage({ searchParams }: SignUpPageProps) {
   const configured = hasClerkCredentials();
+  const redirectTo = resolveAuthRedirect((await searchParams).redirect_url);
 
-  return <main className="auth-shell"><Link className="brand" href="/">ajani<i>.</i></Link><section><p className="eyebrow">PRIVATE BUILD DESK</p><h1>Create your Ajani <em>account.</em></h1><p>Keep your approved systems, active automation health, and billing details in one secure place.</p>{configured ? <SignUp appearance={clerkAppearance} fallbackRedirectUrl="/portal" signInUrl="/sign-in" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live account creation experience.</p><Link href="/sign-in">BACK TO SIGN IN →</Link></div>}</section></main>;
+  return <AuthSurface label="Create an Ajani Automation account">{configured ? <AjaniAuthModule mode="sign-up" path="/sign-up" redirectTo={redirectTo} routing="path" /> : <div className="auth-config-card"><b>CLERK IS READY TO CONNECT</b><p>Add the Clerk publishable key and secret key to <code>.env.local</code>, then this screen becomes the live account creation experience.</p><Link href={authPageUrl("/sign-in", redirectTo)}>BACK TO SIGN IN →</Link></div>}</AuthSurface>;
 }
