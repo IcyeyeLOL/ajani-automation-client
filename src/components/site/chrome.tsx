@@ -39,10 +39,10 @@ export function SiteTop({ active = null }: { active?: Nav }) {
               Stories
             </Link>
             <RecordNoteAction className={styles.cta}>Record a note</RecordNoteAction>
-            <HeaderUserMenu />
+            <HeaderUserMenu signedOutFallback={null} />
           </nav>
           <div className={styles.mobileControls}>
-            <HeaderUserMenu className={styles.mobileAccount} />
+            <HeaderUserMenu className={styles.mobileAccount} signedOutFallback={null} />
             <details className={styles.mobileMenu}>
               <summary aria-label="Open navigation menu" className={styles.mobileMenuTrigger}>
                 <span aria-hidden="true" className={styles.menuIcon}><i /><i /><i /></span>
