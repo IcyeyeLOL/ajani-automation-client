@@ -1,7 +1,13 @@
 {
   "name": "ajani-automation",
   "version": "0.1.0",
+  "description": "Voice-first intake and delivery platform for done-for-you business automation systems.",
   "private": true,
+  "homepage": "https://ajaniflow.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IcyeyeLOL/ajani-automation-client.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
