@@ -25,13 +25,16 @@ test("a new record flow starts empty and only advances with user data", async ({
   await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeDisabled();
   await expect(page.getByRole("group", { name: "Choose how to share your note" })).toHaveCSS("animation-name", /stage-control-in/);
   await expect(page.getByRole("region", { name: "Voice note recorder" })).toHaveCSS("animation-name", /recorder-panel-in/);
+  await expect(page.getByRole("heading", { name: "Tell us where the work gets stuck." }).locator("../../..")).toHaveAttribute("data-direction", "forward");
   await page.getByRole("button", { name: "Type", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).locator("../..")).toHaveCSS("animation-name", /input-surface-in/);
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
     "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
   );
   await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Continue to clarify" }).click();
   await expect(page.getByRole("heading", { name: "Clarify the details that change the route." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clarify the details that change the route." }).locator("../../..")).toHaveAttribute("data-direction", "forward");
   const clarificationNote = page.getByRole("textbox", { name: "Add or confirm the written version" });
   await expect(clarificationNote).toHaveValue(/After-hours website leads wait until morning/);
   await expect(clarificationNote.locator("..")).toHaveCSS("animation-name", /clarify-note-in/);
@@ -698,9 +701,12 @@ test("each automation route has its own step icon set", async ({ page }) => {
   }).toPass();
 });
 
-test("automation theatre stays manual under reduced motion preferences", async ({ page }) => {
+test("automation theatre fallback stays manual when the full-motion override is absent", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/demos");
+  await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
 
   const theatre = page.getByRole("region", { name: "Automation theatre" });
   const status = theatre.getByRole("status");
@@ -761,20 +767,20 @@ test("stories presents visual system narratives instead of a placeholder", async
   expect(await storyRoutes.evaluateAll((routes) => routes.every((route) => route.scrollWidth <= route.clientWidth))).toBe(true);
 });
 
-test("the site honors the operating-system reduced-motion preference", async ({ page }) => {
+test("the site keeps motion on by default", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
-  await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
   await expect(page.getByRole("button", { name: /motion/i })).toHaveCount(0);
   const systemPreview = page.locator('svg[role="presentation"]').first();
-  await expect(systemPreview.locator("g").first()).toHaveCSS("animation-name", "none");
-  await expect(systemPreview.locator("line").first()).toHaveCSS("animation-name", "none");
+  await expect(systemPreview.locator("g").first()).not.toHaveCSS("animation-name", "none");
+  await expect(systemPreview.locator("line").first()).not.toHaveCSS("animation-name", "none");
   await Promise.all([
     page.waitForURL("**/stories"),
     page.getByRole("link", { name: "Stories" }).first().click(),
   ]);
-  await expect(page.locator(".route-transition")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".route-transition")).not.toHaveCSS("animation-name", "none");
   await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
 });
 

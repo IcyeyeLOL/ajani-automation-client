@@ -1,15 +1,18 @@
 .reveal {
   opacity: 0;
-  transform: translateY(18px);
+  filter: blur(7px);
+  transform: translate3d(0, 32px, 0);
   transition:
-    opacity .62s var(--ease-standard) var(--reveal-delay, 0ms),
-    transform .62s var(--ease-standard) var(--reveal-delay, 0ms);
-  will-change: opacity, transform;
+    opacity var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms),
+    filter var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms),
+    transform var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms);
+  will-change: opacity, filter, transform;
 }
 
 .shown {
   opacity: 1;
-  transform: translateY(0);
+  filter: blur(0);
+  transform: translate3d(0, 0, 0);
 }
 
 /* Reduced motion: the component sets shown immediately, and this removes the
@@ -17,6 +20,7 @@
 @media (prefers-reduced-motion: reduce) {
   :global(html:not([data-motion="full"])) .reveal {
     opacity: 1;
+    filter: none;
     transform: none;
     transition: none;
     will-change: auto;

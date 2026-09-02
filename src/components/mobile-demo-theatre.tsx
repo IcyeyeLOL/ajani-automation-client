@@ -106,8 +106,9 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const updatePreference = () => {
-      setReducedMotion(preference.matches);
-      if (preference.matches && !autoCycleRef.current) setMode((current) => current === "playing" ? "paused" : current);
+      const shouldReduceMotion = preference.matches && document.documentElement.dataset.motion !== "full";
+      setReducedMotion(shouldReduceMotion);
+      if (shouldReduceMotion && !autoCycleRef.current) setMode((current) => current === "playing" ? "paused" : current);
     };
     updatePreference();
     preference.addEventListener("change", updatePreference);
@@ -160,7 +161,10 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const chooseScenario = (index: number) => {
-    const shouldReduceMotion = reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const shouldReduceMotion = reducedMotion || (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      && document.documentElement.dataset.motion !== "full"
+    );
     setAutoCycle(false);
     setScenarioIndex(index);
     setActiveStep(1);

@@ -252,6 +252,7 @@ function readStoredFlow(): StoredFlow | null {
 }
 
 type ClerkSetActive = ReturnType<typeof useClerk>["setActive"];
+type StageDirection = "forward" | "backward";
 
 export function RecordFlow() {
   const { clerkEnabled } = useAccountAccess();
@@ -280,6 +281,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   const { openAccountAccess } = useAccountAccess();
   const router = useRouter();
   const [stage, setStage] = useState(0);
+  const [stageDirection, setStageDirection] = useState<StageDirection>("forward");
   const [reached, setReached] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("speak");
   const [capture, setCapture] = useState<VoiceMemoCapture | null>(null);
@@ -603,6 +605,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       }));
       setClarificationIndex(0);
     }
+    if (target !== stage) setStageDirection(target > stage ? "forward" : "backward");
     setStage(target);
     setReached((high) => Math.max(high, target));
   };
@@ -1250,7 +1253,12 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   };
 
   return (
-    <div className={styles.flow}>
+    <div
+      aria-busy={!hydrated}
+      className={styles.flow}
+      data-hydrated={hydrated ? "true" : "false"}
+      inert={hydrated ? undefined : true}
+    >
       <nav aria-label="Build request progress" className={styles.steps}>
         <div className={styles.mobileProgress}>
           <span>{handoffComplete ? "Request complete" : `Step ${stage + 1} of ${stages.length}`}</span>
@@ -1264,7 +1272,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
               <li data-rail={index < reached ? "on" : "off"} data-state={state} key={name}>
                 <button
                   aria-current={index === stage ? "step" : undefined}
-                  disabled={savedDraftId ? index !== stage : index > reached}
+                  disabled={!hydrated || (savedDraftId ? index !== stage : index > reached)}
                   onClick={() => go(index)}
                   type="button"
                 >
@@ -1281,18 +1289,19 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       {stage === 0 ? (
         <Stage
           copy="Speak or type it exactly as it happens. Ajani will turn the messy part into a route you can review."
+          direction={stageDirection}
           eyebrow="01 / Tell us"
           headingRef={stageHeading}
           key="s0"
           title={<>Tell us where the work <em>gets stuck.</em></>}
         >
           <div className={styles.modeSwitch} role="group" aria-label="Choose how to share your note">
-            <button aria-pressed={inputMode === "speak"} onClick={() => chooseInputMode("speak")} type="button">Speak</button>
-            <button aria-pressed={inputMode === "type"} onClick={() => chooseInputMode("type")} type="button">Type</button>
+            <button aria-pressed={inputMode === "speak"} disabled={!hydrated} onClick={() => chooseInputMode("speak")} type="button">Speak</button>
+            <button aria-pressed={inputMode === "type"} disabled={!hydrated} onClick={() => chooseInputMode("type")} type="button">Type</button>
           </div>
 
           <div className={styles.split}>
-            <div>
+            <div className={styles.inputSurface} data-mode={inputMode} key={inputMode}>
               {inputMode === "speak" ? (
                 <>
                   <VoiceRecorder
@@ -1359,6 +1368,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       {stage === 1 ? (
         <Stage
           copy={`Answer only the details the route still needs. Ajani asks them one at a time and never asks more than ${MAX_CLARIFICATION_QUESTIONS}.`}
+          direction={stageDirection}
           eyebrow="02 / Clarify"
           headingRef={stageHeading}
           key="s1"
@@ -1447,6 +1457,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       {stage === 2 ? (
         <Stage
           copy="Edit any block, add a step, or move the sequence. This is the system you will approve."
+          direction={stageDirection}
           eyebrow="03 / System editor"
           headingRef={stageHeading}
           key="s2"
@@ -1669,6 +1680,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       {stage === 3 ? (
         <Stage
           copy="Review the outcome, route, launch window, and approval terms. Nothing is submitted yet."
+          direction={stageDirection}
           eyebrow="04 / Check"
           headingRef={stageHeading}
           key="s3"
@@ -1853,9 +1865,10 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       {stage === 4 ? (
         <Stage
           copy={handoffComplete ? "Your approved build brief and account contact are now in the Ajani build desk." : "Review the complete handoff below. This is exactly what Ajani will receive when you send it."}
+          direction={stageDirection}
           eyebrow="05 / Handoff"
           headingRef={stageHeading}
-          key="s4"
+          key={`s4-${handoffComplete ? "complete" : "preview"}`}
           title={handoffComplete ? <>Build brief <em>received.</em></> : <>Your build brief <em>is ready.</em></>}
         >
           {handoffComplete ? (
@@ -2005,15 +2018,16 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   );
 }
 
-function Stage({ eyebrow, title, copy, children, headingRef }: {
+function Stage({ eyebrow, title, copy, children, headingRef, direction }: {
   eyebrow: string;
   title: ReactNode;
   copy: string;
   children: ReactNode;
   headingRef: RefObject<HTMLHeadingElement | null>;
+  direction: StageDirection;
 }) {
   return (
-    <section className={styles.stage}>
+    <section className={styles.stage} data-direction={direction}>
       <header className={styles.stageHead}>
         <div><p className={styles.label}>{eyebrow}</p><h1 ref={headingRef} tabIndex={-1}>{title}</h1></div>
         <p>{copy}</p>

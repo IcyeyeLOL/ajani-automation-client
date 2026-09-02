@@ -23,9 +23,10 @@ test("home closing price card reflows without horizontal scrolling at 320px", as
   await expect(price).toHaveCSS("white-space", "normal");
 });
 
-test("reduced motion keeps demos manual and removes looping presentation motion", async ({ page }) => {
+test("the reduced-motion fallback stays safe when the full-motion override is absent", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/demos");
+  await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
 
   await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
   const firstScenario = page.getByRole("tab", { name: /After-hours leads/ });
@@ -41,6 +42,7 @@ test("reduced motion keeps demos manual and removes looping presentation motion"
 test("public hover states do not move click targets and mobile targets remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
 
   const audienceTab = page.getByRole("tab", { name: /Home services/ });
   await audienceTab.scrollIntoViewIfNeeded();

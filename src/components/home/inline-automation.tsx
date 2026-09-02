@@ -51,7 +51,9 @@ export function InlineAutomation() {
   // visitor prefers reduced motion — they can still step through by hand.
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReducedMotion(reduced.matches);
+    const apply = () => setReducedMotion(
+      reduced.matches && document.documentElement.dataset.motion !== "full",
+    );
     apply();
     reduced.addEventListener("change", apply);
     return () => reduced.removeEventListener("change", apply);

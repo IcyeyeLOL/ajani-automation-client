@@ -37,9 +37,12 @@ test.describe("phone-first automation demo", () => {
     await expect(page.getByRole("link", { name: /Use this route for my work/ })).toBeVisible();
   });
 
-  test("reduced motion is fully manual", async ({ page }) => {
+  test("reduced-motion fallback is fully manual when the full-motion override is absent", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
+    await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.getByRole("button", { name: "Change" }).click();
     await page.getByRole("button", { name: /After-hours leads/ }).click();
     await expect(page.getByRole("status")).toContainText("Paused. Step 1 of 4");

@@ -35,6 +35,7 @@
 }
 
 .steps li { position: relative; }
+.steps li:not(:last-child)::before,
 .steps li:not(:last-child)::after {
   position: absolute;
   top: 16px;
@@ -42,11 +43,16 @@
   width: calc(100% - 48px);
   height: 2px;
   border-radius: 99px;
-  background: #ddd6d0;
   content: "";
 }
-.steps li:not(:last-child)::after { transition: background-color .32s ease, transform .32s var(--ease-standard); transform-origin: left; }
-.steps li[data-rail="on"]:not(:last-child)::after { background: var(--crimson); }
+.steps li:not(:last-child)::before { background: #ddd6d0; }
+.steps li:not(:last-child)::after {
+  background: var(--crimson);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .52s var(--ease-enter);
+}
+.steps li[data-rail="on"]:not(:last-child)::after { transform: scaleX(1); }
 
 .steps li > button {
   position: relative;
@@ -94,7 +100,13 @@
 }
 .tabSaveStatus > i { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
 
-.stage { margin-top: 46px; animation: stage-in .3s var(--ease-standard) both; }
+.stage {
+  --stage-enter-x: 22px;
+  margin-top: 46px;
+  transform-origin: 50% 8%;
+  animation: stage-in var(--motion-enter) var(--ease-enter) both;
+}
+.stage[data-direction="backward"] { --stage-enter-x: -22px; }
 .stageHead {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(300px, .7fr);
@@ -116,8 +128,8 @@
 .stageHead h1:focus { outline: 0; }
 .stageHead h1 em { color: var(--crimson); font-style: normal; }
 .stageHead > p { max-width: 47ch; margin: 0 0 4px; color: var(--quiet); font-size: 17px; line-height: 1.5; }
-.stageHead > div { animation: stage-detail-in .38s .04s var(--ease-standard) both; }
-.stageHead > p { animation: stage-detail-in .38s .1s var(--ease-standard) both; }
+.stageHead > div { animation: stage-detail-in .54s .06s var(--ease-enter) both; }
+.stageHead > p { animation: stage-detail-in .54s .14s var(--ease-enter) both; }
 
 .stageHead h1,
 .stageHead > p,
@@ -165,6 +177,7 @@
 }
 .modeSwitch button:hover { box-shadow: 0 7px 16px rgba(54, 39, 30, .08); }
 .modeSwitch button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 3px 10px rgba(44, 31, 25, .08); }
+.modeSwitch button:disabled { cursor: wait; opacity: .7; }
 
 .split,
 .clarifyGrid,
@@ -191,6 +204,7 @@
 }
 
 .writingCard { padding: 26px; }
+.inputSurface { min-width: 0; animation: input-surface-in .5s var(--ease-enter) both; }
 .writingCard > label { display: block; color: var(--ink); font-size: 20px; font-weight: 650; letter-spacing: -.025em; }
 .writingCard textarea,
 .understood textarea,
@@ -215,8 +229,9 @@
 .writingCard footer b { color: var(--sand-deep); font-weight: 650; }
 
 .guide { padding: 25px 27px; }
-.split > :first-child { animation: stage-card-in .42s .15s var(--ease-standard) backwards; }
-.split > :last-child { animation: stage-card-in .42s .22s var(--ease-standard) backwards; }
+.split > :first-child { animation: stage-card-in .58s .16s var(--ease-enter) backwards; }
+.split > :last-child { animation: stage-card-in .58s .25s var(--ease-enter) backwards; }
+.split > .inputSurface { animation: input-surface-in .52s .12s var(--ease-enter) backwards; }
 .guide ol { margin: 18px 0 0; padding: 0; list-style: none; }
 .guide li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 11px; padding: 17px 0; border-bottom: 1px solid var(--line); }
 .guide li { animation: stage-list-in .34s var(--ease-standard) backwards; }
@@ -240,6 +255,7 @@
   border: 1px solid rgba(121, 0, 24, .16);
   border-radius: 12px;
   background: #fff5f4;
+  animation: stage-detail-in .48s .12s var(--ease-enter) both;
 }
 .voiceNotice b { color: var(--crimson); font-size: 14px; }
 .voiceNotice span { color: #665a55; font-size: 14px; line-height: 1.45; }
@@ -254,6 +270,7 @@
   border: 1px solid rgba(45, 120, 103, .2);
   border-radius: 10px;
   background: #f1f7f4;
+  animation: stage-detail-in .5s .18s var(--ease-enter) both;
 }
 .aiNotice b { color: #255c51; font-size: 13px; }
 .aiNotice span { color: #5f6b66; font-size: 13px; line-height: 1.45; }
@@ -806,9 +823,9 @@
   background: linear-gradient(145deg, #fff 0%, #fbf8f5 72%, #f3ece8 100%);
   box-shadow: 0 24px 64px rgba(54, 39, 30, .09);
   text-align: center;
-  animation: stage-card-in .46s var(--ease-standard) backwards;
+  animation: confirmation-in .72s var(--ease-enter) backwards;
 }
-.confirmationMark { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto; border-radius: 50%; background: #e8f1ed; color: var(--success); box-shadow: 0 0 0 9px rgba(37, 92, 81, .06); font-size: 27px; font-weight: 760; }
+.confirmationMark { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto; border-radius: 50%; background: #e8f1ed; color: var(--success); box-shadow: 0 0 0 9px rgba(37, 92, 81, .06); font-size: 27px; font-weight: 760; animation: confirmation-mark-in .58s .18s var(--ease-enter) backwards; }
 .handoffConfirmation > p { margin: 25px 0 0; color: var(--crimson); font: 700 10px var(--font-mono), ui-monospace, monospace; letter-spacing: .09em; text-transform: uppercase; }
 .handoffConfirmation h2 { max-width: 620px; margin: 10px auto 0; color: var(--ink); font-size: clamp(35px, 4.6vw, 54px); font-weight: 640; line-height: 1.02; letter-spacing: -.055em; text-wrap: balance; }
 .handoffConfirmation > span { display: block; max-width: 600px; margin: 17px auto 0; color: var(--quiet); font-size: 15px; line-height: 1.58; text-wrap: balance; }
@@ -1046,33 +1063,50 @@
   outline-offset: 0;
 }
 @keyframes stage-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; filter: blur(7px); transform: translate3d(var(--stage-enter-x), 26px, 0) scale(.985); }
+  to { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) scale(1); }
 }
 
 @keyframes stage-detail-in {
-  from { opacity: 0; transform: translateY(7px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 @keyframes stage-control-in {
-  from { opacity: 0; transform: translateY(5px) scale(.995); }
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes stage-surface-in {
-  from { opacity: 0; transform: translateY(9px); }
+  from { opacity: 0; transform: translateY(24px) scale(.99); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes stage-card-in {
-  from { opacity: 0; transform: translateY(11px) scale(.995); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; filter: blur(4px); transform: translateY(28px) scale(.975); }
+  70% { filter: blur(0); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
 }
 
 @keyframes stage-list-in {
-  from { opacity: 0; transform: translateX(-6px); }
+  from { opacity: 0; transform: translateX(-16px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes input-surface-in {
+  from { opacity: 0; filter: blur(5px); transform: translateY(18px) scale(.985); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+}
+
+@keyframes confirmation-in {
+  from { opacity: 0; filter: blur(8px); transform: translateY(32px) scale(.96); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+}
+
+@keyframes confirmation-mark-in {
+  from { opacity: 0; transform: scale(.45) rotate(-12deg); }
+  70% { transform: scale(1.08) rotate(2deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
 }
 
 @keyframes review-file-in {
@@ -1494,6 +1528,8 @@
   :global(html:not([data-motion="full"])) .reviewFileNav button,
   :global(html:not([data-motion="full"])) .reviewFilePanel,
   :global(html:not([data-motion="full"])) .sendGrid > *,
+  :global(html:not([data-motion="full"])) .handoffConfirmation,
+  :global(html:not([data-motion="full"])) .confirmationMark,
   :global(html:not([data-motion="full"])) .routeAttached,
   :global(html:not([data-motion="full"])) .ticket > p,
   :global(html:not([data-motion="full"])) .timeline li,

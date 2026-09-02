@@ -140,8 +140,9 @@ export function DemoGrid() {
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const updatePreference = () => {
-      setReducedMotion(mediaQuery.matches);
-      if (mediaQuery.matches) setMode((currentMode) => currentMode === "playing" ? "paused" : currentMode);
+      const shouldReduceMotion = mediaQuery.matches && document.documentElement.dataset.motion !== "full";
+      setReducedMotion(shouldReduceMotion);
+      if (shouldReduceMotion) setMode((currentMode) => currentMode === "playing" ? "paused" : currentMode);
     };
     updatePreference();
     mediaQuery.addEventListener("change", updatePreference);
@@ -189,7 +190,10 @@ export function DemoGrid() {
   };
 
   const runOrPause = () => {
-    const shouldReduceMotion = reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const shouldReduceMotion = reducedMotion || (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      && document.documentElement.dataset.motion !== "full"
+    );
     if (shouldReduceMotion) {
       const nextStep = mode === "complete" || activeStep === 0
         ? 1

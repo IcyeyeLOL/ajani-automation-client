@@ -15,7 +15,10 @@
   --focus-ring: rgba(121, 0, 24, 0.48);
   --motion-fast: 160ms;
   --motion-standard: 220ms;
+  --motion-enter: 560ms;
+  --motion-slow: 720ms;
   --ease-standard: cubic-bezier(.2, .78, .28, 1);
+  --ease-enter: cubic-bezier(.16, 1, .3, 1);
 }
 
 @theme inline {
