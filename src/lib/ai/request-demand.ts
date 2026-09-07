@@ -4,6 +4,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { shouldPreferDirectAnthropic } from "@/lib/ai/provider-order";
+import { containsHighRiskSensitiveInput } from "@/lib/ai/sensitive-input";
 import type { WebsiteRequestDraftInput } from "@/lib/validation/website-request-draft";
 
 export const REQUEST_DEMAND_PROMPT_VERSION = "request-demand-v1";
@@ -76,6 +77,22 @@ export async function extractRequestDemand(
     ];
   const routeReasons: string[] = [];
 
+  if (containsHighRiskSensitiveInput(input)) {
+    const fallback = classifyRequestDemandFallback(input);
+    return {
+      extraction: {
+        ...fallback,
+        method: "deterministic_fallback",
+        provider: "local_rules",
+        model: "request-demand-taxonomy-v1",
+        promptVersion: REQUEST_DEMAND_PROMPT_VERSION,
+      },
+      latencyMs: Date.now() - startedAt,
+      tokenUsage: {},
+      routeReasons: ["local:high_risk_sensitive_input"],
+    };
+  }
+
   for (const candidate of candidates) {
     try {
       const result = await generateStructuredDemand(candidate.languageModel, input);
@@ -142,8 +159,6 @@ async function generateStructuredDemand(
     ].join(" "),
     prompt: JSON.stringify({
       title: input.title,
-      writtenRequest: input.transcript,
-      confirmedAnswers: input.clarificationAnswers ?? [],
       developmentBrief: input.developmentBrief ?? null,
       proposedSteps: input.systemBlocks.map(({ kind, title, detail }) => ({ kind, title, detail })),
       allowedBusinessVerticals: businessVerticals,
@@ -154,6 +169,7 @@ async function generateStructuredDemand(
     abortSignal: AbortSignal.timeout(25_000),
     providerOptions: {
       anthropic: { thinking: { type: "disabled" } },
+      gateway: { disallowPromptTraining: true, only: ["anthropic"] },
     },
   });
 }

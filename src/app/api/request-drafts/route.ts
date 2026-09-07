@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { publicRequestFingerprint } from "@/lib/http/request-quota";
 import { after } from "next/server";
 import { extractRequestDemand } from "@/lib/ai/request-demand";
+import { createLegalAcceptanceEnvelope } from "@/lib/legal/handoff-acceptance";
+import { isCurrentHandoffPolicyVersion } from "@/lib/legal/policy-versions";
 import { recordRequestSaveDiagnostic } from "@/lib/operations/request-save-diagnostics";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -31,13 +34,19 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "Check the request details and retry." }, { status: 400 });
   }
+  if (!isCurrentHandoffPolicyVersion(parsed.data.legalAcceptanceVersions)) {
+    return Response.json(
+      { error: "The legal terms changed while this page was open. Refresh the page, review them, and retry." },
+      { status: 409 },
+    );
+  }
 
   let saveStage = "initialize";
   try {
     saveStage = "create_admin_client";
     const admin = createSupabaseAdminClient();
     saveStage = "consume_rate_limit";
-    const allowed = await consumePublicRequestAllowance(admin, requestFingerprint(request));
+    const allowed = await consumePublicRequestAllowance(admin, publicRequestFingerprint(request, "request-draft-save"));
     if (!allowed) {
       recordRequestSaveDiagnostic({ status: "rate_limited", stage: saveStage, errorCode: "request_limit_exceeded" });
       return Response.json({ error: "Too many requests. Please wait a few minutes and retry." }, { status: 429 });
@@ -63,6 +72,7 @@ export async function POST(request: Request) {
         token_hash: tokenHash,
         status: readyToSubmit ? "ready_to_submit" : "draft",
         payload: {
+          legalAcceptance: createLegalAcceptanceEnvelope(input.legalAcceptanceVersions),
           stage: 4,
           status: "draft",
           title: input.title,
@@ -269,17 +279,15 @@ export async function persistRequestDemandAnalysis(job: RequestDemandAnalysisJob
   });
   if (runError && runError.code !== "23505") throw runError;
 
-  const { error: stateError } = await admin
-    .from("request_draft_ai_states")
-    .update({
-      latest_extraction: {
-        ...job.latestExtraction,
-        demand: demandResult.extraction,
-      },
-      confidence: demandResult.extraction.confidence,
-    })
-    .eq("request_draft_id", job.draftId)
-    .eq("transcript_fingerprint", job.transcriptFingerprint);
+  const { error: stateError } = await admin.rpc("persist_request_demand_analysis", {
+    p_draft_id: job.draftId,
+    p_transcript_fingerprint: job.transcriptFingerprint,
+    p_latest_extraction: {
+      ...job.latestExtraction,
+      demand: demandResult.extraction,
+    },
+    p_confidence: demandResult.extraction.confidence,
+  });
   if (stateError) throw stateError;
 }
 
@@ -335,14 +343,6 @@ function isSameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-function requestFingerprint(request: Request) {
-  const forwarded = request.headers.get("x-vercel-forwarded-for")
-    || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || request.headers.get("x-real-ip") || "local";
-  const salt = process.env.REQUEST_RATE_LIMIT_SECRET || process.env.AJANI_ADMIN_SESSION_SECRET;
-  if (!salt && process.env.NODE_ENV === "production") throw new Error("request_rate_limit_secret_missing");
-  return createHash("sha256").update(`${address}:${salt}`).digest("hex");
-}
 
 export async function readLimitedJson(request: Request): Promise<
   | { status: "ok"; value: unknown }

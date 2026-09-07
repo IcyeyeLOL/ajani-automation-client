@@ -40,7 +40,7 @@ test.describe("phone-first automation demo", () => {
   test("reduced-motion fallback is fully manual when the full-motion override is absent", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
-    await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+    await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.getByRole("button", { name: "Change" }).click();

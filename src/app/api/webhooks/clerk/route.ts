@@ -20,13 +20,18 @@ export async function POST(request: NextRequest) {
     const admin = createSupabaseAdminClient();
     const eventId = request.headers.get("svix-id");
     if (!eventId) return Response.json({ error: "Webhook event ID is missing" }, { status: 400 });
-    const eventAt = deliveryTimestamp(request);
-    const { data: claimed, error: claimError } = await admin.rpc("claim_clerk_webhook_event", {
+    const eventAt = timestamp("timestamp" in event ? Number(event.timestamp) : undefined, deliveryTimestamp(request));
+    const { data: claimed, error: claimError } = await admin.rpc("claim_clerk_webhook_delivery_v2", {
       p_event_id: eventId,
       p_event_type: event.type,
     });
     if (claimError) throw claimError;
-    if (!claimed) return Response.json({ received: true, duplicate: true });
+    if (claimed?.state === "completed") return Response.json({ received: true, duplicate: true });
+    if (claimed?.state === "busy") return Response.json({ error: "Delivery is still being processed" }, { status: 503, headers: { "Retry-After": "60" } });
+    if (claimed?.state !== "claimed" || !Number.isSafeInteger(claimed.attempt) || claimed.attempt < 1) {
+      throw new Error("webhook_claim_invalid");
+    }
+    const attempt = claimed.attempt as number;
 
     try {
     if (event.type === "user.created" || event.type === "user.updated") {
@@ -58,21 +63,25 @@ export async function POST(request: NextRequest) {
     } else if (event.type === "organizationMembership.created" || event.type === "organizationMembership.updated") {
       await syncMembership(admin, event.data, timestamp(event.data.updated_at, eventAt));
     } else if (event.type === "organizationMembership.deleted") {
-      const { error } = await admin.from("organization_members")
-        .update({ deleted_at: eventAt, clerk_updated_at: eventAt })
-        .eq("clerk_membership_id", event.data.id)
-        .or(`clerk_updated_at.is.null,clerk_updated_at.lte.${eventAt}`);
+      const { error } = await admin.rpc("record_clerk_deletion", {
+        p_entity_kind: "membership",
+        p_provider_id: event.data.id,
+        p_event_at: eventAt,
+      });
       if (error) throw error;
     }
-    const { error: finishError } = await admin.rpc("finish_clerk_webhook_event", {
+    const { data: finished, error: finishError } = await admin.rpc("finish_clerk_webhook_delivery_v2", {
       p_event_id: eventId,
+      p_attempt: attempt,
       p_error: null,
     });
     if (finishError) throw finishError;
+    if (!finished) return Response.json({ error: "Delivery lease changed. Please retry." }, { status: 503 });
     return Response.json({ received: true });
     } catch (error) {
-      await admin.rpc("finish_clerk_webhook_event", {
+      await admin.rpc("finish_clerk_webhook_delivery_v2", {
         p_event_id: eventId,
+        p_attempt: attempt,
         p_error: safeError(error),
       });
       throw error;

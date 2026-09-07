@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { subscribeToMotionPreference } from "@/lib/motion/preference";
 import styles from "./inline-automation.module.css";
 
 const STEP_MS = 2600;
@@ -45,23 +46,22 @@ export function InlineAutomation() {
   const [inView, setInView] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [manuallyPaused, setManuallyPaused] = useState(false);
+  const [documentPaused, setDocumentPaused] = useState(true);
   const region = useRef<HTMLDivElement | null>(null);
 
   // Only run while the band is actually on screen, and stop entirely when the
   // visitor prefers reduced motion — they can still step through by hand.
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReducedMotion(
-      reduced.matches && document.documentElement.dataset.motion !== "full",
-    );
-    apply();
-    reduced.addEventListener("change", apply);
-    return () => reduced.removeEventListener("change", apply);
+    return subscribeToMotionPreference(setReducedMotion);
   }, []);
 
   useEffect(() => {
     const node = region.current;
     if (!node) return;
+    if (typeof IntersectionObserver !== "function") {
+      const frame = requestAnimationFrame(() => setInView(true));
+      return () => cancelAnimationFrame(frame);
+    }
     const observer = new IntersectionObserver(
       ([entry]) => setInView(entry.isIntersecting),
       { threshold: 0.3 },
@@ -71,13 +71,20 @@ export function InlineAutomation() {
   }, []);
 
   useEffect(() => {
-    const playing = inView && !reducedMotion && !manuallyPaused;
+    const sync = () => setDocumentPaused(document.hidden);
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  useEffect(() => {
+    const playing = inView && !reducedMotion && !manuallyPaused && !documentPaused;
     if (!playing) return;
     const timer = window.setInterval(() => {
       setActive((value) => (value + 1) % steps.length);
     }, STEP_MS);
     return () => window.clearInterval(timer);
-  }, [inView, manuallyPaused, reducedMotion]);
+  }, [documentPaused, inView, manuallyPaused, reducedMotion]);
 
   const current = steps[active];
 

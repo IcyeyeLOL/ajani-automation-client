@@ -18,6 +18,29 @@ async function finishClarifications(page: Page) {
   await page.getByRole("button", { name: "Build the first route" }).click();
 }
 
+async function acknowledgeRequestProcessing(page: Page) {
+  const acknowledgment = page.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
+  await expect(acknowledgment).not.toBeChecked();
+  await acknowledgment.check();
+}
+
+test("withdrawing the processing acknowledgment blocks a return to AI-assisted stages", async ({ page }) => {
+  await page.goto("/record");
+  await acknowledgeRequestProcessing(page);
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
+    "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
+  );
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await expect(page.getByRole("heading", { name: "Clarify the details that change the route." })).toBeVisible();
+
+  await page.getByRole("button", { name: /Tell us/ }).click();
+  const acknowledgment = page.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
+  await acknowledgment.uncheck();
+  await expect(page.getByRole("button", { name: /Clarify/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeDisabled();
+});
+
 test("a new record flow starts empty and only advances with user data", async ({ page }) => {
   await page.goto("/record");
 
@@ -26,6 +49,7 @@ test("a new record flow starts empty and only advances with user data", async ({
   await expect(page.getByRole("group", { name: "Choose how to share your note" })).toHaveCSS("animation-name", /stage-control-in/);
   await expect(page.getByRole("region", { name: "Voice note recorder" })).toHaveCSS("animation-name", /recorder-panel-in/);
   await expect(page.getByRole("heading", { name: "Tell us where the work gets stuck." }).locator("../../..")).toHaveAttribute("data-direction", "forward");
+  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).locator("../..")).toHaveCSS("animation-name", /input-surface-in/);
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
@@ -69,6 +93,7 @@ test("a new record flow starts empty and only advances with user data", async ({
 test("every development brief file can be edited without leaving check", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/record");
+  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
     "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
@@ -138,6 +163,8 @@ test("the voice recorder captures, pauses, resumes, and finishes a note", async 
   await page.context().grantPermissions(["microphone"], { origin: new URL(page.url()).origin });
 
   await expect(page.getByText("Ready to record", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start recording your voice note" })).toBeDisabled();
+  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Start recording your voice note" }).click();
   await expect(page.getByText("Recording", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pause & edit", exact: true }).click();
@@ -154,8 +181,8 @@ test("the voice recorder captures, pauses, resumes, and finishes a note", async 
   await editableTranscript.fill("After-hours leads wait until the next morning. The sales queue should receive qualified replies.");
   await page.getByRole("button", { name: "Use this note" }).click();
 
-  await expect(page.getByText("Voice note ready", { exact: true })).toBeVisible();
-  await expect(page.getByText("Voice note saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Voice note recorder" }).getByRole("status")).toHaveText("Voice note ready");
+  await expect(page.getByText("Voice note saved", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeEnabled();
   await page.getByRole("button", { name: "Continue to clarify" }).click();
   await expect(page.getByRole("textbox", { name: "Add or confirm the written version" })).toHaveValue(/sales queue should receive qualified replies/);
@@ -164,12 +191,12 @@ test("the voice recorder captures, pauses, resumes, and finishes a note", async 
 test("privacy policy stays aligned with the implementation", async ({ page }) => {
   await page.goto("/privacy");
 
-  await expect(page.getByRole("heading", { name: "Scope of this policy" })).toBeVisible();
-  await expect(page.locator("#use").getByText(/does not sell personal information or customer submissions/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who this policy covers and Ajani's role" })).toBeVisible();
+  await expect(page.locator("#state").getByText(/does not sell personal information/i)).toBeVisible();
   await expect(page.getByText(/before a request is saved.+suggest clarification questions/i)).toBeVisible();
   await expect(page.getByText(/Deepgram.+editable transcript/i)).toBeVisible();
-  await expect(page.getByText(/bucket.+explicitly configured as private/i)).toBeVisible();
-  await expect(page.getByText(/voice uploads expire after 30 days/i)).toBeVisible();
+  await expect(page.getByText(/original audio is uploaded to private Ajani storage/i)).toBeVisible();
+  await expect(page.getByText(/unclaimed saved drafts and voice uploads:.+30 days/i)).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy policy" }).last()).toHaveAttribute("href", "/privacy");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -187,8 +214,11 @@ test("the public footer stays focused on verified social and legal destinations"
     await expect(footer.getByRole("link", { name: "LinkedIn" })).toHaveAttribute("href", "https://www.linkedin.com/in/olakunleajani/");
     await expect(footer.getByRole("img", { name: "Instagram — coming soon" })).toBeVisible();
     await expect(footer.getByRole("img", { name: "Facebook — coming soon" })).toBeVisible();
-    await expect(footer.getByRole("link", { name: "Terms of service" })).toHaveAttribute("href", "/terms");
-    await expect(footer.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "/privacy");
+    const legalLinks = footer.locator('[data-footer-legal="true"]').getByRole("link");
+    await expect(legalLinks).toHaveCount(3);
+    await expect(legalLinks.nth(0)).toHaveAttribute("href", "/legal");
+    await expect(legalLinks.nth(1)).toHaveAttribute("href", "/terms");
+    await expect(legalLinks.nth(2)).toHaveAttribute("href", "/privacy");
     await expect(footer.getByRole("link", { name: /^(Home|Stories|Demos|Client portal|Record a note)$/ })).toHaveCount(0);
   }
 
@@ -200,10 +230,16 @@ test("the public footer stays focused on verified social and legal destinations"
 
 test("a visitor can complete the public funnel and open account access without losing progress", async ({ page }) => {
   let draftRequests = 0;
+  let acknowledgmentRequests = 0;
   let submittedBrief: unknown;
+  let submittedAcknowledgment: unknown;
+  let submittedVersions: unknown;
   await page.route("**/api/request-drafts", async (route) => {
     draftRequests += 1;
-    submittedBrief = (await route.request().postDataJSON()).draft.developmentBrief;
+    const submittedDraft = (await route.request().postDataJSON()).draft;
+    submittedBrief = submittedDraft.developmentBrief;
+    submittedAcknowledgment = submittedDraft.legalAcceptanceAcknowledged;
+    submittedVersions = submittedDraft.legalAcceptanceVersions;
     await route.fulfill({
       contentType: "application/json",
       status: 201,
@@ -213,8 +249,17 @@ test("a visitor can complete the public funnel and open account access without l
       }),
     });
   });
+  await page.route("**/api/request-drafts/acknowledge", async (route) => {
+    acknowledgmentRequests += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      body: JSON.stringify({ status: "acknowledged" }),
+    });
+  });
   await page.goto("/record");
 
+  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   const writtenBrief = page.getByRole("textbox", { name: "Tell us where the work gets stuck" });
   await writtenBrief.fill(
@@ -336,7 +381,17 @@ test("a visitor can complete the public funnel and open account access without l
   await expect(page.getByRole("heading", { name: "4 steps in build order" })).toBeVisible();
   await expect(page.getByText("1 day", { exact: true })).toHaveCount(0);
   await expect(page.getByText("3 days", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Send to Ajani" }).click();
+  const legalAcceptance = page.getByRole("checkbox", { name: /I agree to Ajani's Terms of Service/ });
+  const sendButton = page.getByRole("button", { name: "Send to Ajani" });
+  await expect(legalAcceptance).not.toBeChecked();
+  await expect(sendButton).toBeDisabled();
+  const legalAcceptanceGroup = legalAcceptance.locator("..");
+  await expect(legalAcceptanceGroup.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/terms");
+  await expect(legalAcceptanceGroup.getByRole("link", { name: "Acceptable Use Policy" })).toHaveAttribute("href", "/acceptable-use");
+  await expect(legalAcceptanceGroup.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/privacy");
+  await legalAcceptance.check();
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -348,19 +403,29 @@ test("a visitor can complete the public funnel and open account access without l
     desiredOutcome: expect.any(String),
     protection: expect.any(String),
   });
+  expect(submittedAcknowledgment).toBe(true);
+  expect(submittedVersions).toEqual({
+    noticeVersion: "handoff-notice-2026-09-02",
+    acceptableUseVersion: "2026-09-02",
+    privacyVersion: "2026-09-02",
+    termsVersion: "2026-09-02",
+  });
 
   await page.getByRole("button", { name: "Close account access" }).click();
   await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "Continue to account" }).click();
   await expect(dialog).toBeVisible();
   await expect.poll(() => draftRequests).toBe(1);
+  await expect.poll(() => acknowledgmentRequests).toBe(1);
 });
 
 test("the recorder keeps compact progress, focus, and motion safe at narrow widths", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/record");
-  await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+  await acknowledgeRequestProcessing(page);
+  await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
+  await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
 
   await expect(page.getByText("Step 1 of 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("list")).toBeHidden();
@@ -494,6 +559,7 @@ test("the recorder keeps compact progress, focus, and motion safe at narrow widt
 test("the recorder remains usable at 320 by 800", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("/record");
+  await acknowledgeRequestProcessing(page);
 
   await expect(page.getByText("Step 1 of 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("list")).toBeHidden();
@@ -552,6 +618,7 @@ test("a failed recorder save is announced and can be retried", async ({ page }) 
     });
   });
   await page.goto("/record");
+  await acknowledgeRequestProcessing(page);
 
   await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Type", exact: true }).click();
@@ -565,10 +632,13 @@ test("a failed recorder save is announced and can be retried", async ({ page }) 
   await finishClarifications(page);
   await page.getByRole("button", { name: "Check this route" }).click();
   await page.getByRole("button", { name: "Approve this route" }).click();
+  const acceptance = page.getByRole("checkbox", { name: /I agree to Ajani's Terms of Service/ });
+  await acceptance.check();
   await page.getByRole("button", { name: "Send to Ajani" }).click();
 
   const saveAlert = page.getByRole("alert").filter({ hasText: "temporarily unavailable" });
   await expect(saveAlert).toContainText("temporarily unavailable");
+  await expect(acceptance).toBeChecked();
   await saveAlert.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect.poll(() => draftRequests).toBe(2);
@@ -625,7 +695,7 @@ test("the homepage explains the Ajani workflow in an accessible tutorial", async
   await expect(dialog).toContainText("Ready to build");
 
   await dialog.getByRole("button", { name: "Go to step 6: Built and visible" }).click();
-  await expect(dialog).toContainText("Your team gets hours back and increases revenue.");
+  await expect(dialog).toContainText("Your team spends less time on repetitive steps and more time on client work.");
   await expect(dialog.getByRole("link", { name: /Record your note/ })).toHaveAttribute("href", "/sign-in?redirect_url=%2Frecord");
 
   await page.keyboard.press("Escape");
@@ -704,7 +774,8 @@ test("each automation route has its own step icon set", async ({ page }) => {
 test("automation theatre fallback stays manual when the full-motion override is absent", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/demos");
-  await page.locator("html").evaluate((element) => element.removeAttribute("data-motion"));
+  await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
+  await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.emulateMedia({ reducedMotion: "reduce" });
 
@@ -767,21 +838,24 @@ test("stories presents visual system narratives instead of a placeholder", async
   expect(await storyRoutes.evaluateAll((routes) => routes.every((route) => route.scrollWidth <= route.clientWidth))).toBe(true);
 });
 
-test("the site keeps motion on by default", async ({ page }) => {
+test("the homepage keeps its final route readable when the full-motion override is absent", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
+  await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
+  await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
 
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
   await expect(page.getByRole("button", { name: /motion/i })).toHaveCount(0);
-  const systemPreview = page.locator('svg[role="presentation"]').first();
-  await expect(systemPreview.locator("g").first()).not.toHaveCSS("animation-name", "none");
-  await expect(systemPreview.locator("line").first()).not.toHaveCSS("animation-name", "none");
-  await Promise.all([
-    page.waitForURL("**/stories"),
-    page.getByRole("link", { name: "Stories" }).first().click(),
-  ]);
-  await expect(page.locator(".route-transition")).not.toHaveCSS("animation-name", "none");
-  await expect(page.getByRole("link", { name: "Stories" }).first()).toHaveAttribute("aria-current", "page");
+  const carousel = page.locator('[data-hero-carousel="true"]');
+  const sceneViewport = carousel.locator('[data-scene-viewport="true"]');
+  const fallback = carousel.locator('[data-static-fallback="true"]');
+
+  await expect(sceneViewport).toBeHidden();
+  await expect(fallback).toBeVisible();
+  await expect(fallback.locator('[data-route-path="true"]').first()).toHaveCSS("animation-name", "none");
+  await expect(fallback.locator('[data-waveform="true"]').first()).toHaveCSS("animation-name", "none");
+  await expect(fallback.locator('[data-node-surface="true"]').first()).toHaveCSS("opacity", "1");
+  await expect(fallback.locator("p")).toContainText("a route your team can review");
+  expect(await fallback.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
 });
 
 test("internal navigation does not show a floating opening notice", async ({ page }) => {
@@ -791,7 +865,7 @@ test("internal navigation does not show a floating opening notice", async ({ pag
   await expect(page.getByText(/Opening demos/i)).toHaveCount(0);
 });
 
-test("homepage keeps the review in one session and sets clear commercial expectations", async ({ page }) => {
+test("homepage keeps the review in one session without repeating a closing sales block", async ({ page }) => {
   await page.goto("/");
 
   const timeline = page.locator("#how");
@@ -799,9 +873,10 @@ test("homepage keeps the review in one session and sets clear commercial expecta
   await expect(timeline.getByText("1 day", { exact: true })).toHaveCount(0);
   await expect(timeline.getByText("3 days", { exact: true })).toHaveCount(0);
   await expect(timeline.getByText("7–10 days", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ready when you are", { exact: true })).toBeVisible();
-  await expect(page.getByText("Based on your budget", { exact: true })).toBeVisible();
-  await expect(page.getByText("After you approve", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ready when you are", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("The working agreement", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Based on your budget", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("After you approve", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Start here", { exact: true })).toHaveCount(0);
 });
 
@@ -811,13 +886,14 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await expect(page.getByRole("heading", { name: /Three places good work/i })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Different businesses, the same gap/i })).toBeVisible();
   const clinics = page.getByRole("tab", { name: "Clinics & practices" });
+  await expect(page.getByRole("tabpanel").locator("img")).toHaveCount(1);
   await expect(async () => {
     await clinics.click();
     await expect(clinics).toHaveAttribute("aria-selected", "true");
   }).toPass();
   const panel = page.getByRole("tabpanel");
   const audienceImages = panel.locator("img");
-  await expect(audienceImages).toHaveCount(6);
+  await expect(audienceImages).toHaveCount(2);
   await expect.poll(() => audienceImages.evaluateAll((images) => images.every((image) => {
     const photo = image as HTMLImageElement;
     return photo.complete && photo.naturalWidth > 0;
@@ -829,6 +905,105 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await expect(page.getByRole("heading", { name: "The cancellation that reopened its own slot." })).toBeVisible();
   const proof = panel.getByTestId("audience-proof");
   await expect(proof).toHaveCount(1);
+  await expect(proof).toHaveAttribute("data-story-motion", "true");
+  await proof.scrollIntoViewIfNeeded();
+  await expect(proof).toHaveAttribute("data-story-active", "true");
+
+  const inputStage = proof.locator('[data-proof-stage="input"]');
+  const connector = proof.locator('[data-proof-connector="true"]');
+  const actionStage = proof.locator('[data-proof-stage="action"]');
+  const resultStage = proof.locator('[data-proof-stage="result"]');
+  const loopingAnimations = [
+    [inputStage, /proof-input-arrive/],
+    [connector.locator("span"), /proof-connector-label/],
+    [actionStage, /proof-action-arrive/],
+    [resultStage, /proof-result-arrive/],
+  ] as const;
+
+  for (const [element, animationName] of loopingAnimations) {
+    await expect(element).toHaveCSS("animation-name", animationName);
+    await expect(element).toHaveCSS("animation-duration", "7.2s");
+    await expect(element).toHaveCSS("animation-iteration-count", "infinite");
+  }
+  const connectorAnimation = await connector.evaluate((element) => ({
+    duration: getComputedStyle(element, "::after").animationDuration,
+    iterationCount: getComputedStyle(element, "::after").animationIterationCount,
+    name: getComputedStyle(element, "::after").animationName,
+  }));
+  expect(connectorAnimation.duration).toBe("7.2s");
+  expect(connectorAnimation.iterationCount).toBe("infinite");
+  expect(connectorAnimation.name).toMatch(/proof-trace-x/);
+
+  const inputFrame = () => inputStage.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    const style = getComputedStyle(element);
+    return {
+      currentTime: Number(animation?.currentTime ?? -1),
+      opacity: style.opacity,
+      transform: style.transform,
+    };
+  });
+
+  await expect.poll(
+    async () => (await inputFrame()).currentTime,
+    { timeout: 1_000 },
+  ).toBeGreaterThan(50);
+
+  const pauseButton = proof.getByRole("button", { name: "Pause automation example" });
+  await expect(pauseButton).toHaveAttribute("data-control-state", "playing");
+  await expect(pauseButton).not.toHaveAttribute("aria-pressed", /.*/);
+  await pauseButton.click();
+  const playButton = proof.getByRole("button", { name: "Play automation example" });
+  await expect(playButton).toHaveAttribute("data-control-state", "paused");
+  await expect(playButton).not.toHaveAttribute("aria-pressed", /.*/);
+  await expect(proof).toHaveAttribute("data-story-paused", "true");
+  await expect(inputStage).toHaveCSS("animation-play-state", "paused");
+
+  const manuallyPausedFrame = await inputFrame();
+  await page.waitForTimeout(400);
+  const manuallyHeldFrame = await inputFrame();
+  expect(Math.abs(manuallyHeldFrame.currentTime - manuallyPausedFrame.currentTime)).toBeLessThanOrEqual(20);
+  expect(manuallyHeldFrame.opacity).toBe(manuallyPausedFrame.opacity);
+  expect(manuallyHeldFrame.transform).toBe(manuallyPausedFrame.transform);
+  await expect(proof).toHaveAttribute("data-story-active", "true");
+
+  const salons = page.getByRole("tab", { name: "Salons & studios" });
+  await salons.click();
+  await expect(salons).toHaveAttribute("aria-selected", "true");
+  await expect(proof).toHaveCount(1);
+  await expect(proof).toHaveAttribute("data-audience-proof", "salons");
+  await proof.scrollIntoViewIfNeeded();
+  await expect(proof).toHaveAttribute("data-story-active", "true");
+  await expect(proof).toHaveAttribute("data-story-paused", "true");
+  await expect(playButton).toHaveAttribute("data-control-state", "paused");
+  await expect(playButton).not.toHaveAttribute("aria-pressed", /.*/);
+  await expect(inputStage).toHaveCSS("animation-play-state", "paused");
+  const switchedPausedFrame = await inputFrame();
+  await page.waitForTimeout(400);
+  expect(Math.abs((await inputFrame()).currentTime - switchedPausedFrame.currentTime)).toBeLessThanOrEqual(20);
+
+  await playButton.click();
+  const resumedPauseButton = proof.getByRole("button", { name: "Pause automation example" });
+  await expect(resumedPauseButton).toHaveAttribute("data-control-state", "playing");
+  await expect(resumedPauseButton).not.toHaveAttribute("aria-pressed", /.*/);
+  await expect(proof).toHaveAttribute("data-story-paused", "false");
+  await expect(inputStage).toHaveCSS("animation-play-state", "running");
+  const resumedFrame = await inputFrame();
+  await page.waitForTimeout(300);
+  expect((await inputFrame()).currentTime - resumedFrame.currentTime).toBeGreaterThan(150);
+
+  await page.getByRole("heading", { name: "Tell us where the work sucks. We fix it." }).scrollIntoViewIfNeeded();
+  await expect(proof).toHaveAttribute("data-story-paused", "true");
+  await expect(proof).toHaveAttribute("data-story-active", "true");
+  await expect(inputStage).toHaveCSS("animation-play-state", "paused");
+  const offscreenPausedFrame = await inputFrame();
+  await page.waitForTimeout(400);
+  const offscreenHeldFrame = await inputFrame();
+  expect(Math.abs(offscreenHeldFrame.currentTime - offscreenPausedFrame.currentTime)).toBeLessThanOrEqual(20);
+
+  await proof.scrollIntoViewIfNeeded();
+  await expect(proof).toHaveAttribute("data-story-paused", "false");
+  await expect(inputStage).toHaveCSS("animation-play-state", "running");
   expect(await panel.evaluate((node) => {
     const panelRect = node.getBoundingClientRect();
     const proofRect = node.querySelector<HTMLElement>('[data-testid="audience-proof"]')!.getBoundingClientRect();
@@ -841,17 +1016,20 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await expect(panel.locator('figure[data-active="true"] img')).toHaveCSS("object-fit", "contain");
 
   const audienceStories = [
-    ["Home services", "The lead that became a ready-to-send contract.", "Contract ready for approval"],
-    ["Clinics & practices", "The cancellation that reopened its own slot.", "Slot offered automatically"],
-    ["Salons & studios", "The booking that handled its own follow-up.", "Follow-up sequence scheduled"],
-    ["Agencies & consultants", "The approved scope that invoiced itself.", "Invoice sent automatically"],
-    ["Property & real estate", "The request that found the right person automatically.", "Routed to maintenance"],
-    ["Trades & field work", "The lead source you can finally tie to revenue.", "ROI report updated automatically"],
+    ["Home services", "home-services", "The lead that became a ready-to-send contract.", "Contract ready for approval"],
+    ["Clinics & practices", "clinics", "The cancellation that reopened its own slot.", "Slot offered automatically"],
+    ["Salons & studios", "salons", "The booking that handled its own follow-up.", "Follow-up sequence scheduled"],
+    ["Agencies & consultants", "agencies", "The approved scope that invoiced itself.", "Invoice sent automatically"],
+    ["Property & real estate", "real-estate", "The request that found the right person automatically.", "Routed to maintenance"],
+    ["Trades & field work", "trades", "The lead source you can finally tie to revenue.", "ROI report updated automatically"],
   ] as const;
-  for (const [tabName, heading, result] of audienceStories) {
+  for (const [tabName, audienceId, heading, result] of audienceStories) {
     await page.getByRole("tab", { name: tabName }).click();
     await expect(panel.locator("[data-audience-copy]")).toHaveCount(1);
-    await expect(panel.getByTestId("audience-proof")).toHaveCount(1);
+    const currentProof = panel.getByTestId("audience-proof");
+    await expect(currentProof).toHaveCount(1);
+    await expect(currentProof).toHaveAttribute("data-story-motion", "true");
+    await expect(currentProof).toHaveAttribute("data-audience-proof", audienceId);
     await expect(panel.getByRole("heading", { name: heading })).toBeVisible();
     await expect(panel.getByText(new RegExp(result, "i"))).toBeVisible();
   }
@@ -859,8 +1037,17 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await expect(panel.locator('figure[data-active="true"]')).toHaveAttribute("data-ready", "true");
   await expect(panel.locator('figure[data-active="true"]')).toHaveCSS("opacity", "1");
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await panel.getByTestId("audience-proof").scrollIntoViewIfNeeded();
+    expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await panel.getByTestId("audience-proof").evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      return bounds.left >= -1 && bounds.right <= document.documentElement.clientWidth + 1;
+    })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+      .toBeLessThanOrEqual(1);
+  }
 });
 
 test("mobile navigation fits the viewport and keeps every primary destination available", async ({ page }) => {
@@ -870,17 +1057,18 @@ test("mobile navigation fits the viewport and keeps every primary destination av
   const header = page.locator("header").first();
   const headerOverflows = await header.evaluate((node) => node.scrollWidth > node.clientWidth);
   expect(headerOverflows).toBe(false);
-  const menuTrigger = header.locator('summary[aria-label="Open navigation menu"]');
+  const menuTrigger = header.getByRole("button", { name: "Open navigation menu" });
   await expect(menuTrigger).toBeVisible();
   expect(await menuTrigger.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await menuTrigger.click();
 
-  const mobileNavigation = header.getByRole("navigation", { name: "Mobile navigation" });
+  const menuDialog = page.getByRole("dialog");
+  const mobileNavigation = menuDialog.getByRole("navigation", { name: "Mobile navigation" });
   await expect(header.locator('a[href="/"]').first()).toBeVisible();
   await expect(mobileNavigation.getByRole("link", { name: /Demos/ })).toBeVisible();
   await expect(mobileNavigation.getByRole("link", { name: /Stories/ })).toBeVisible();
-  await expect(header.getByRole("navigation", { name: "Legal" }).getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
-  await expect(header.getByRole("link", { name: "Record a note" })).toBeVisible();
+  await expect(menuDialog.getByRole("navigation", { name: "Legal" })).toHaveCount(0);
+  await expect(menuDialog.getByRole("link", { name: "Record a note" })).toBeVisible();
 
   await page.goto("/demos");
   const theatreOverflows = await page.getByRole("region", { name: "Automation theatre" }).evaluate((theatre) => theatre.scrollWidth > theatre.clientWidth);

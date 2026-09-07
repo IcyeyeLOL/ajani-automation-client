@@ -15,8 +15,11 @@
     "lint": "eslint",
     "type-check": "next typegen && tsc --noEmit",
     "test": "npm run test:unit",
-    "test:unit": "vitest run --passWithNoTests",
+    "test:unit": "vitest run",
+    "check:database-contract": "node scripts/audit-database-readonly.mjs --check",
     "test:e2e": "playwright test",
+    "test:regression": "playwright test --config audit/playwright.config.ts",
+    "test:database": "node scripts/test-local-database.mjs",
     "test:ci": "npm run lint && npm run type-check && npm run test:unit && npm run build"
   },
   "dependencies": {
@@ -46,6 +49,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
+    "embedded-postgres": "17.10.0-beta.17",
+    "pg": "8.23.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",

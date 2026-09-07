@@ -34,6 +34,6 @@ describe("build request notification cron", () => {
     }));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ claimed: 2, sent: 2 });
-    expect(processBuildRequestNotifications).toHaveBeenCalledWith({ limit: 25 });
+    expect(processBuildRequestNotifications).toHaveBeenCalledWith({ limit: 25, deadlineAt: expect.any(Number) });
   });
 });

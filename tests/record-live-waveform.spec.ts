@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 test("live recording renders a centered microphone-driven waveform", async ({ page }) => {
   await page.setViewportSize({ width: 690, height: 620 });
   await page.goto("/record");
+  await page.getByRole("checkbox", { name: /I confirm I am 18 or older/ }).check();
   await page.getByRole("button", { name: "Start recording your voice note" }).click();
   await expect(page.getByText("Recording", { exact: true })).toBeVisible();
 

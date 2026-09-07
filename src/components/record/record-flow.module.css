@@ -244,6 +244,76 @@
 .guide span { display: block; margin-top: 5px; color: var(--quiet); font-size: 14px; line-height: 1.45; }
 .callout { margin: 17px 0 0; padding: 14px 15px; border-left: 3px solid var(--sand); background: #f1ebe5; color: #5f534d; font-size: 14px; line-height: 1.45; }
 
+.processingDisclosure {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 -4px;
+  padding: 13px 15px;
+  border: 1px solid #ded4cb;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .58);
+  color: #655b56;
+  font-size: 12px;
+  line-height: 1.52;
+}
+
+.processingDisclosure > i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--sand-deep);
+}
+
+.processingDisclosure a {
+  color: var(--crimson);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.processingConsent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 11px;
+  margin: 12px 0 20px;
+  padding: 15px;
+  border: 1px solid rgba(121, 0, 24, .16);
+  border-radius: 10px;
+  background: #fff9f7;
+}
+.processingConsent input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--crimson);
+  cursor: pointer;
+}
+.processingConsent input:disabled { cursor: not-allowed; }
+.processingConsent label { cursor: pointer; }
+.processingConsent strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.processingConsent span {
+  display: block;
+  margin-top: 5px;
+  color: var(--quiet);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.processingConsent a,
+.legalAcceptance span a {
+  color: var(--crimson);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .voiceNotice {
   display: flex;
   flex-wrap: wrap;
@@ -937,6 +1007,41 @@
 .handoffIncludes ul { margin: 10px 0 0; padding: 0; list-style: none; }
 .handoffIncludes li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 5px 0; color: var(--quiet); font-size: 12px; line-height: 1.42; }
 .handoffIncludes li i { color: var(--success); font-style: normal; font-weight: 700; }
+.legalAcceptance {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 11px;
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f2ed;
+}
+.legalAcceptance input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--crimson);
+  cursor: pointer;
+}
+.legalAcceptance label { cursor: pointer; }
+.legalAcceptance strong {
+  display: block;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 640;
+  line-height: 1.48;
+}
+.legalAcceptance strong a {
+  color: var(--crimson);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legalAcceptance span {
+  display: block;
+  margin-top: 6px;
+  color: var(--quiet);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
 .handoffControls { display: grid; gap: 8px; padding: 18px 20px; }
 .handoffPrimary { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 52px; padding: 0 17px; border: 1px solid var(--crimson); border-radius: 9px; background: var(--crimson); color: #fff; cursor: pointer; font-size: 13px; font-weight: 700; }
 .handoffPrimary:hover:not(:disabled) { background: #620013; }
@@ -1482,6 +1587,7 @@
   .handoffPanel > header { padding: 17px 18px; }
   .handoffPanel > dl { padding-right: 18px; padding-left: 18px; }
   .handoffIncludes,
+  .legalAcceptance,
   .handoffControls,
   .handoffTerms { padding-right: 18px; padding-left: 18px; }
   .routeAttached > header { min-height: 54px; padding: 0 18px; }
@@ -1510,6 +1616,12 @@
   .back { justify-content: center; }
   .timeline li { grid-template-columns: 82px minmax(0, 1fr); }
   .savedDraftControl { align-items: stretch; flex-direction: column; }
+}
+
+/* Keep the transition inside the 18px mobile page gutter at every frame. */
+@media (max-width: 700px) {
+  .stage { --stage-enter-x: 12px; }
+  .stage[data-direction="backward"] { --stage-enter-x: -12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

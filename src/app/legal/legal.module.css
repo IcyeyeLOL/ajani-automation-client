@@ -1,5 +1,5 @@
 .shell {
-  --shell-width: min(1120px, calc(100% - 72px));
+  --shell-width: calc(100% - 64px);
   min-height: 100vh;
   background: var(--pearl);
   color: var(--ink);
@@ -15,7 +15,7 @@
 }
 
 .hero {
-  padding: 72px 0 68px;
+  padding: 58px 0 56px;
   background: radial-gradient(105% 120% at 10% 0%, #2b2022 0%, #171515 58%);
   color: var(--pearl);
 }
@@ -60,18 +60,49 @@
   line-height: 1.5;
 }
 
+.legalSwitcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 19px;
+}
+
+.legalSwitcher a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #554844;
+  border-radius: 999px;
+  color: #d8ccc6;
+  font-size: 12px;
+  transition: border-color var(--motion-fast) ease, background var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.legalSwitcher a:hover,
+.legalSwitcher a[aria-current="page"] {
+  border-color: var(--sand);
+  background: rgba(207, 174, 137, .12);
+  color: var(--pearl);
+}
+
+.legalSwitcher a:focus-visible {
+  outline: 2px solid var(--pearl);
+  outline-offset: 3px;
+}
+
 .content {
   width: var(--shell-width);
   margin: 0 auto;
-  padding: 70px 0 96px;
+  padding: 56px 0 72px;
 }
 
 .intro {
   display: grid;
-  grid-template-columns: 170px minmax(280px, .85fr) minmax(260px, .65fr);
+  grid-template-columns: 150px minmax(280px, .85fr) minmax(260px, .65fr);
   align-items: end;
   gap: 38px;
-  margin-bottom: 42px;
+  margin-bottom: 32px;
 }
 
 .intro .label { align-self: start; color: var(--crimson); }
@@ -94,15 +125,15 @@
 
 .documentGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .documentCard {
   display: flex;
-  min-height: 460px;
   flex-direction: column;
-  padding: 30px;
+  min-width: 0;
+  padding: 26px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -110,8 +141,8 @@
   box-shadow: 0 16px 42px rgba(42, 32, 28, .06);
 }
 
-.documentCard:first-child { border-top: 4px solid var(--sand); }
-.documentCard:last-child { border-top: 4px solid var(--crimson); }
+.documentCard:nth-child(odd) { border-top: 4px solid var(--sand); }
+.documentCard:nth-child(even) { border-top: 4px solid var(--crimson); }
 
 .cardTop {
   display: flex;
@@ -130,8 +161,8 @@
 }
 
 .documentCard h3 {
-  margin: 38px 0 0;
-  font-size: clamp(31px, 3.5vw, 44px);
+  margin: 30px 0 0;
+  font-size: clamp(29px, 2.7vw, 38px);
   font-weight: 630;
   line-height: 1;
   letter-spacing: -.05em;
@@ -147,26 +178,42 @@
 
 .documentCard ul {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 18px;
-  margin: 28px 0 30px;
+  grid-template-columns: 1fr;
+  margin: 22px 0 20px;
   padding: 0;
   list-style: none;
 }
 
 .documentCard li {
-  padding: 11px 0;
+  padding: 9px 0;
   border-top: 1px solid var(--line);
   color: var(--quiet);
   font-size: 12px;
 }
 
-.documentCard > a {
+.supportingLink {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 50px;
+  gap: 16px;
+  min-height: 44px;
   margin-top: auto;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  color: var(--crimson);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.supportingLink:hover { color: #920624; }
+
+.primaryLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  margin-top: 10px;
   padding: 0 17px;
   border-radius: 9px;
   background: var(--ink);
@@ -176,36 +223,7 @@
   transition: background var(--motion-fast) ease, transform var(--motion-fast) ease;
 }
 
-.documentCard > a:hover { background: var(--crimson); transform: translateY(-2px); }
-
-.contactCard {
-  display: grid;
-  grid-template-columns: minmax(260px, .8fr) minmax(280px, 1fr);
-  gap: 56px;
-  align-items: end;
-  margin-top: 18px;
-  padding: 30px;
-  border-radius: 16px;
-  background: #ebe5df;
-}
-
-.contactCard .label { color: var(--crimson); }
-
-.contactCard h2 {
-  margin: 13px 0 0;
-  font-size: 29px;
-  font-weight: 630;
-  line-height: 1.05;
-  letter-spacing: -.04em;
-}
-
-.contactCard > p {
-  max-width: 56ch;
-  margin: 0;
-  color: #625955;
-  font-size: 14px;
-  line-height: 1.55;
-}
+.primaryLink:hover { background: var(--crimson); transform: translateY(-2px); }
 
 @media (max-width: 900px) {
   .shell { --shell-width: min(100% - 48px, 1120px); }
@@ -213,7 +231,8 @@
   .heroNote { max-width: 520px; }
   .intro { grid-template-columns: 1fr 1fr; }
   .intro .label { grid-column: 1 / -1; }
-  .documentCard ul { grid-template-columns: 1fr; }
+  .documentGrid { grid-template-columns: 1fr; }
+  .documentCard { padding: 25px; }
 }
 
 @media (max-width: 680px) {
@@ -226,13 +245,27 @@
   .intro { grid-template-columns: 1fr; gap: 18px; margin-bottom: 28px; }
   .intro .label { grid-column: auto; }
   .intro h2 { font-size: 38px; }
-  .documentGrid { grid-template-columns: 1fr; }
-  .documentCard { min-height: 0; padding: 23px; }
+  .documentCard { padding: 23px; }
   .documentCard h3 { margin-top: 29px; font-size: 34px; }
-  .documentCard ul { margin: 23px 0 26px; }
-  .contactCard { grid-template-columns: 1fr; gap: 18px; padding: 24px; }
+  .documentCard ul { margin: 20px 0 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :global(html:not([data-motion="full"])) .documentCard > a { transition: none; }
+  :global(html:not([data-motion="full"])) .primaryLink { transition: none; }
+}
+
+@media print {
+  .shell { --shell-width: 100%; background: #fff; color: #111; }
+  .hero { padding: 24px 0; background: #fff; color: #111; }
+  .hero h1 em,
+  .heroNote span,
+  .label { color: #111; }
+  .heroNote { border-color: #bbb; }
+  .heroNote p { color: #333; }
+  .legalSwitcher,
+  .shell > footer,
+  .shell > header,
+  .shell > a { display: none !important; }
+  .content { width: 100%; padding: 24px 0; }
+  .documentCard { break-inside: avoid; box-shadow: none; }
 }

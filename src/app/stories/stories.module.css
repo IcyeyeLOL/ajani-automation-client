@@ -1,5 +1,5 @@
 .shell {
-  --shell-width: min(1240px, calc(100% - 72px));
+  --shell-width: calc(100% - 64px);
   --panel-edge: #423936;
   min-height: 100vh;
   background: var(--pearl);
@@ -25,43 +25,61 @@
 
 /* ---------- dark opening ---------- */
 .hero {
-  padding: 60px 0 68px;
+  padding: 56px 0 34px;
   background: radial-gradient(120% 90% at 12% 0%, #241d1f 0%, #171515 58%);
   color: var(--pearl);
 }
 
 .heroInner {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
-  align-items: center;
-  gap: 56px;
+  gap: 0;
   width: var(--shell-width);
   margin: 0 auto;
 }
 
-.heroCopy .label { color: var(--sand); }
+.heroCopy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(320px, .7fr);
+  grid-template-rows: auto 1fr;
+  align-items: end;
+  gap: 0 70px;
+  padding-bottom: 34px;
+  border-bottom: 1px solid rgba(237, 198, 160, .18);
+}
+
+.heroCopy .label { grid-column: 1; grid-row: 1; color: var(--sand); }
 .heroCopy h1 {
+  grid-column: 1;
+  grid-row: 2;
   margin: 16px 0 0;
-  font-size: clamp(40px, 4.6vw, 68px);
+  font-size: clamp(40px, 4.6vw, 82px);
   font-weight: 600;
   line-height: .95;
   letter-spacing: -.055em;
   text-wrap: balance;
 }
 .heroCopy h1 em { font-style: normal; color: var(--sand); }
-.heroCopy > p { max-width: 46ch; margin: 22px 0 0; color: #c3b7b1; font-size: 17.5px; line-height: 1.5; }
+.heroCopy > p {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  max-width: 46ch;
+  margin: 0 0 5px;
+  color: #c3b7b1;
+  font-size: 17.5px;
+  line-height: 1.5;
+}
 
 /* Proof is labeled plainly so the real testimonial and worked examples never
    blur into the same kind of claim. */
 .note {
-  padding: 22px 24px;
-  border: 1px solid var(--panel-edge);
-  border-left: 3px solid var(--sand);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .03);
+  display: grid;
+  grid-template-columns: minmax(150px, .32fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+  padding: 19px 0 0;
 }
 .note .label { color: var(--sand); }
-.note > p:last-child { margin: 12px 0 0; color: #b6a9a3; font-size: 14px; line-height: 1.55; }
+.note > p:last-child { max-width: 78ch; margin: 0; color: #b6a9a3; font-size: 14px; line-height: 1.55; }
 
 /* ---------- shared section chrome, same device as the homepage ---------- */
 .section { width: var(--shell-width); margin: 0 auto; padding: 46px 0; }
@@ -540,8 +558,9 @@
 /* ---------- responsive ---------- */
 @media (max-width: 1040px) {
   .shell { --shell-width: min(100% - 48px, 1240px); }
-  .heroInner { grid-template-columns: 1fr; align-items: start; gap: 34px; }
-  .note { max-width: 60ch; }
+  .heroCopy { grid-template-columns: 1fr; gap: 0; }
+  .heroCopy > p { grid-column: 1; grid-row: auto; max-width: 56ch; margin: 19px 0 0; }
+  .note { grid-template-columns: 140px minmax(0, 1fr); }
   .sectionHead { grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .clientProof { grid-template-columns: 1fr; }
   .clientQuote { padding: 28px; }
@@ -553,11 +572,12 @@
 
 @media (max-width: 620px) {
   .shell { --shell-width: min(100% - 32px, 1240px); }
-  .hero { padding: 34px 0 42px; }
-  .heroInner { gap: 26px; }
+  .hero { padding: 31px 0 29px; }
+  .heroCopy { display: block; padding-bottom: 25px; }
   .heroCopy h1 { font-size: clamp(42px, 12vw, 50px); line-height: .97; }
-  .heroCopy > p { margin-top: 18px; font-size: 16.5px; }
-  .note { padding: 18px 18px 19px; border-left-width: 2px; }
+  .heroCopy > p { margin-top: 17px; font-size: 16px; }
+  .note { grid-template-columns: 1fr; gap: 7px; padding-top: 15px; }
+  .note > p:last-child { font-size: 13px; line-height: 1.45; }
   .section { padding: 34px 0; }
   .sectionEnd { padding-bottom: 54px; }
   .sectionHead { padding-top: 24px; }
@@ -607,4 +627,21 @@
   .primaryCta { justify-content: center; width: 100%; margin-top: 24px; }
   .sample { padding: 22px 20px; border-radius: 16px; }
   .log li { grid-template-columns: 66px minmax(0, 1fr) 10px; gap: 11px; }
+}
+
+@keyframes route-header-detail-in {
+  from { opacity: 0; transform: translateY(11px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.heroCopy .label { animation: route-header-detail-in .48s var(--ease-enter) both; }
+.heroCopy h1 { animation: route-header-detail-in .54s .06s var(--ease-enter) both; }
+.heroCopy > p { animation: route-header-detail-in .54s .14s var(--ease-enter) both; }
+.note { animation: route-header-detail-in .48s .2s var(--ease-enter) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .heroCopy .label,
+  :global(html:not([data-motion="full"])) .heroCopy h1,
+  :global(html:not([data-motion="full"])) .heroCopy > p,
+  :global(html:not([data-motion="full"])) .note { animation: none; }
 }

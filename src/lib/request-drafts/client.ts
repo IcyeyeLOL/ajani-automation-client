@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
-import type { WebsiteRequestDraftInput } from "@/lib/validation/website-request-draft";
+import type {
+  HandoffPolicyVersionInput,
+  WebsiteRequestDraftInput,
+} from "@/lib/validation/website-request-draft";
 
 type DraftResponse = {
   draft?: { id: string; status: string; updated_at: string };
@@ -19,6 +22,67 @@ export type RequestDraftClaimResult = {
     build_request_created_at?: string;
   };
 };
+
+const CAPABILITY_KEY = "ajani_request_draft_capability_v1";
+const LEGACY_CAPABILITY_KEYS = ["ajani_request_draft_id", "ajani_request_draft_token"];
+type SavedCapability = { draftId: string; draftToken: string; persistence: "session" | "memory" };
+// undefined permits initial storage hydration; null is a cleared capability.
+// The tombstone prevents a failed storage deletion from reviving an old draft.
+let activeCapability: SavedCapability | null | undefined;
+
+function readSavedCapability(): SavedCapability | null {
+  if (activeCapability !== undefined) return activeCapability;
+  try {
+    const raw = sessionStorage.getItem(CAPABILITY_KEY);
+    if (raw) {
+      const value = JSON.parse(raw) as { draftId?: unknown; draftToken?: unknown };
+      if (typeof value.draftId === "string" && value.draftId && typeof value.draftToken === "string" && value.draftToken) {
+        return { draftId: value.draftId, draftToken: value.draftToken, persistence: "session" };
+      }
+      return null;
+    }
+    const draftId = sessionStorage.getItem(LEGACY_CAPABILITY_KEYS[0]);
+    const draftToken = sessionStorage.getItem(LEGACY_CAPABILITY_KEYS[1]);
+    return draftId && draftToken ? { draftId, draftToken, persistence: "session" } : null;
+  } catch {
+    return null;
+  }
+}
+
+function publishSavedCapability(draftId: string, draftToken: string) {
+  // Publish one pair only after the full save/upload succeeds. A partial storage
+  // write can never combine the new token with an earlier draft's identifier.
+  activeCapability = { draftId, draftToken, persistence: "memory" };
+  try {
+    sessionStorage.setItem(CAPABILITY_KEY, JSON.stringify({ draftId, draftToken }));
+    activeCapability.persistence = "session";
+  } catch {
+    // Same-page handoff remains possible when privacy settings block storage.
+    try { sessionStorage.removeItem(CAPABILITY_KEY); } catch { /* Memory remains authoritative. */ }
+  }
+  for (const key of LEGACY_CAPABILITY_KEYS) {
+    try { sessionStorage.removeItem(key); } catch { /* Memory is authoritative. */ }
+  }
+}
+
+export function getSavedWebsiteRequestDraft(): { id: string; persistence: "session" | "memory" } | null {
+  const capability = readSavedCapability();
+  return capability ? { id: capability.draftId, persistence: capability.persistence } : null;
+}
+
+function requireSavedCapability(expectedDraftId?: string) {
+  const capability = readSavedCapability();
+  if (!capability) throw new Error("This saved request is no longer available in this tab.");
+  if (expectedDraftId && capability.draftId !== expectedDraftId) throw new Error("The saved request changed. Review the current draft before sending it.");
+  return capability;
+}
+
+export class RequestDraftApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "RequestDraftApiError";
+  }
+}
 
 export async function saveWebsiteRequestDraft(draft: WebsiteRequestDraftInput, voiceMemo?: Blob) {
   if (Boolean(draft.voiceMemo) !== Boolean(voiceMemo)) {
@@ -70,27 +134,21 @@ export async function saveWebsiteRequestDraft(draft: WebsiteRequestDraftInput, v
   }
 
   // The raw capability stays on this device. Supabase stores only its hash.
-  sessionStorage.setItem("ajani_request_draft_token", result.draftToken);
-  sessionStorage.setItem("ajani_request_draft_id", result.draft.id);
+  publishSavedCapability(result.draft.id, result.draftToken);
 
   return result.draft;
 }
 
 export async function deleteSavedWebsiteRequestDraft() {
-  const draftId = sessionStorage.getItem("ajani_request_draft_id");
-  const draftToken = sessionStorage.getItem("ajani_request_draft_token");
-  if (!draftId || !draftToken) throw new Error("This saved request is no longer available in this tab.");
+  const { draftId, draftToken } = requireSavedCapability();
 
   await deleteDraftCapability(draftId, draftToken);
 
-  sessionStorage.removeItem("ajani_request_draft_id");
-  sessionStorage.removeItem("ajani_request_draft_token");
+  clearSavedWebsiteRequestCapability(draftId);
 }
 
-export async function claimSavedWebsiteRequestDraft(): Promise<RequestDraftClaimResult> {
-  const draftId = sessionStorage.getItem("ajani_request_draft_id");
-  const draftToken = sessionStorage.getItem("ajani_request_draft_token");
-  if (!draftId || !draftToken) throw new Error("This saved request is no longer available in this tab.");
+export async function claimSavedWebsiteRequestDraft(expectedDraftId?: string): Promise<RequestDraftClaimResult> {
+  const { draftId, draftToken } = requireSavedCapability(expectedDraftId);
 
   const response = await fetch("/api/request-drafts/claim", {
     method: "POST",
@@ -98,13 +156,40 @@ export async function claimSavedWebsiteRequestDraft(): Promise<RequestDraftClaim
     body: JSON.stringify({ draftId, draftToken }),
   });
   const result = await response.json() as RequestDraftClaimResult;
-  if (!response.ok) throw new Error(result.error || "Your saved request could not be sent to Ajani.");
+  if (!response.ok) throw new RequestDraftApiError(
+    result.error || "Your saved request could not be sent to Ajani.",
+    response.status,
+  );
   return result;
 }
 
-export function clearSavedWebsiteRequestCapability() {
-  sessionStorage.removeItem("ajani_request_draft_id");
-  sessionStorage.removeItem("ajani_request_draft_token");
+export async function acknowledgeSavedWebsiteRequestDraft(legalAcceptanceVersions: HandoffPolicyVersionInput, expectedDraftId?: string) {
+  const { draftId, draftToken } = requireSavedCapability(expectedDraftId);
+
+  const response = await fetch("/api/request-drafts/acknowledge", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      draftId,
+      draftToken,
+      legalAcceptanceAcknowledged: true,
+      legalAcceptanceVersions,
+    }),
+  });
+  const result = await response.json() as { error?: string; status?: string };
+  if (!response.ok) throw new RequestDraftApiError(
+    result.error || "The saved request acknowledgment could not be recorded.",
+    response.status,
+  );
+  return result;
+}
+
+export function clearSavedWebsiteRequestCapability(expectedDraftId?: string) {
+  if (expectedDraftId && readSavedCapability()?.draftId !== expectedDraftId) return;
+  activeCapability = null;
+  for (const key of [CAPABILITY_KEY, ...LEGACY_CAPABILITY_KEYS]) {
+    try { sessionStorage.removeItem(key); } catch { /* Keep the cleared tombstone. */ }
+  }
 }
 
 async function deleteDraftCapability(draftId: string, draftToken: string) {

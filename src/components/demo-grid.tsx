@@ -3,6 +3,7 @@
 import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { MobileDemoTheatre } from "@/components/mobile-demo-theatre";
 import { RecordNoteAction } from "@/components/record-note-action";
+import { getReducedMotionPreference, subscribeToMotionPreference } from "@/lib/motion/preference";
 import styles from "./demo-theatre.module.css";
 
 const DEMO_STEP_DURATION = 3_000;
@@ -138,32 +139,30 @@ export function DemoGrid() {
   const activeEvent = scenario.events[Math.max(activeStep - 1, 0)];
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updatePreference = () => {
-      const shouldReduceMotion = mediaQuery.matches && document.documentElement.dataset.motion !== "full";
+    return subscribeToMotionPreference((shouldReduceMotion) => {
       setReducedMotion(shouldReduceMotion);
       if (shouldReduceMotion) setMode((currentMode) => currentMode === "playing" ? "paused" : currentMode);
+    });
+  }, []);
+
+  useEffect(() => {
+    const pauseWhenHidden = () => {
+      if (document.hidden) setMode((current) => current === "playing" ? "paused" : current);
     };
-    updatePreference();
-    mediaQuery.addEventListener("change", updatePreference);
-    return () => mediaQuery.removeEventListener("change", updatePreference);
+    document.addEventListener("visibilitychange", pauseWhenHidden);
+    return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
   }, []);
 
   useEffect(() => {
     if (mode !== "playing" || reducedMotion) return;
 
     const timer = window.setTimeout(() => {
-      setActiveStep((step) => {
-        if (step >= totalSteps) {
-          setMode("complete");
-          return step;
-        }
-        return step + 1;
-      });
+      if (activeStep >= totalSteps) setMode("complete");
+      else setActiveStep(activeStep + 1);
     }, DEMO_STEP_DURATION);
 
     return () => window.clearTimeout(timer);
-  }, [mode, reducedMotion, totalSteps]);
+  }, [activeStep, mode, reducedMotion, totalSteps]);
 
   const resetRun = () => {
     setActiveStep(0);
@@ -190,10 +189,7 @@ export function DemoGrid() {
   };
 
   const runOrPause = () => {
-    const shouldReduceMotion = reducedMotion || (
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      && document.documentElement.dataset.motion !== "full"
-    );
+    const shouldReduceMotion = reducedMotion || getReducedMotionPreference();
     if (shouldReduceMotion) {
       const nextStep = mode === "complete" || activeStep === 0
         ? 1

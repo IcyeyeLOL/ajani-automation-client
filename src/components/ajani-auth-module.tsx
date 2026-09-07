@@ -1,6 +1,7 @@
 "use client";
 
 import { SignIn, SignUp, useSignIn, useSignUp } from "@clerk/nextjs";
+import Link from "next/link";
 import { useState } from "react";
 import { ajaniClerkAppearance } from "@/lib/clerk/appearance";
 import { authPageUrl } from "@/lib/clerk/redirect";
@@ -80,6 +81,12 @@ export function AjaniAuthModule({ mode, redirectTo, path, routing = "hash" }: Aj
       <h2>{isSignUp ? "Create your workspace." : "Welcome back."}</h2>
       <p>{isSignUp ? "Save your requests, recordings, and systems in one secure place." : "Sign in to record a note and keep your systems moving."}</p>
     </header>
+
+    {isSignUp ? (
+      <p className="ajani-auth-legal-notice">
+        By creating an account, you confirm that you are 18 or older and authorized to act for the named business, agree to the <Link href="/terms">Terms of Service</Link> and <Link href="/acceptable-use">Acceptable Use Policy</Link>, and acknowledge the <Link href="/privacy">Privacy Policy</Link>.
+      </p>
+    ) : null}
 
     <div aria-label="Social sign in options" className="ajani-auth-socials">
       <button disabled={activeProvider !== null} onClick={() => startOAuth("google")} type="button">

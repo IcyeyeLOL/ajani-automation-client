@@ -45,7 +45,7 @@ const steps = [
     marker: "Built and visible",
     title: "We build the system and keep you in the loop.",
     body: "The team is notified, progress stays visible in your portal, and the automation is tested in your real workflow before it goes live.",
-    takeaway: "Your team gets hours back and increases revenue.",
+    takeaway: "Your team spends less time on repetitive steps and more time on client work.",
     kind: "build",
   },
 ] as const;
@@ -73,7 +73,7 @@ function MiniPreview({ kind }: { kind: StepKind }) {
           ))}
           </div>
         </div>
-        <p><b>Voice signal active</b><span>00:18 / live</span></p>
+        <p><b>Voice note active</b><span>00:18 / demo</span></p>
       </div>
     );
   }
@@ -137,7 +137,7 @@ function MiniPreview({ kind }: { kind: StepKind }) {
           {[
             ["01", "Signal", "Lead arrives", "↗"],
             ["02", "Read", "Intent mapped", "◎"],
-            ["03", "Reply", "Answer sent", "↵"],
+            ["03", "Reply", "Draft answer", "↵"],
             ["04", "Handoff", "Team has context", "✓"],
           ].map(([number, label, detail, icon], index) => (
             <div className={styles.routeNode} key={number}>
@@ -266,7 +266,7 @@ export function HowItWorksDialog({ triggerClassName }: { triggerClassName: strin
             <div className={styles.preview}>
               <div className={styles.previewHeader}>
                 <span>Ajani / tutorial</span>
-                <span><i /> Live preview</span>
+                <span><i /> Interactive preview</span>
               </div>
               <div className={styles.previewBody}>
                 <MiniPreview kind={step.kind} />

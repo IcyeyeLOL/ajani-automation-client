@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated test output is removed/recreated by parallel verification.
+    // Keep lint focused on source, not transient artifacts or local DB files.
+    "test-results/",
+    "playwright-report/",
+    "artifacts/",
+    "coverage/",
+    ".tmp/",
+    "supabase/.temp/",
   ]),
 ]);
 

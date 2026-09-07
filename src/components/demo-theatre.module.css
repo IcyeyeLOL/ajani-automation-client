@@ -1,4 +1,4 @@
-.theatre { width:var(--shell-width,min(1240px,calc(100% - 72px))); margin:0 auto; padding:46px 0 78px; font-family:var(--font-display),system-ui,sans-serif; }
+.theatre { width:var(--shell-width,min(2000px,calc(100% - 64px))); margin:0 auto; padding:46px 0 78px; font-family:var(--font-display),system-ui,sans-serif; }
 .scenarioBar { display:flex; align-items:end; justify-content:space-between; gap:48px; padding:30px 0 27px; border-top:1px solid var(--line); }
 .scenarioBar h2 { max-width:610px; margin:13px 0 0; font-size:clamp(32px,3.2vw,44px); font-weight:600; line-height:1; letter-spacing:-.052em; }
 .scenarioBar h2 em { color:var(--crimson); font-style:normal; }

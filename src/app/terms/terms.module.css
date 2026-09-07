@@ -1,5 +1,5 @@
 .shell {
-  --shell-width: min(1120px, calc(100% - 72px));
+  --shell-width: calc(100% - 64px);
   min-height: 100vh;
   background: var(--pearl);
   color: var(--ink);
@@ -99,6 +99,8 @@
 .summary {
   position: sticky;
   top: 96px;
+  max-height: calc(100vh - 116px);
+  overflow-y: auto;
   padding: 22px;
   border: 1px solid var(--line);
   border-top: 3px solid var(--sand);
@@ -166,11 +168,105 @@
 
 .document strong { color: var(--ink); font-weight: 650; }
 
+.document section:not(.relatedDocument) a {
+  color: var(--crimson);
+  font-weight: 620;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+
+.legalSwitcher a:focus-visible {
+  outline: 2px solid var(--pearl);
+  outline-offset: 3px;
+}
+
+.document section:not(.relatedDocument) a:hover { color: #920624; }
+
 .document section > p:not(.sectionNumber) {
   margin: 16px 0 0;
   color: #5f5752;
   font-size: 15px;
   line-height: 1.67;
+}
+
+.document section > ul {
+  display: grid;
+  gap: 10px;
+  margin: 19px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.document section > ul li {
+  position: relative;
+  padding: 12px 14px 12px 31px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .52);
+  color: #5f5752;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.document section > ul li::before {
+  position: absolute;
+  top: 18px;
+  left: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sand-deep);
+  content: "";
+}
+
+.providerList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.providerList article {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper);
+}
+
+.providerList header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.providerList h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.providerList header span {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  color: var(--crimson);
+  font: 9px var(--font-mono), ui-monospace, monospace;
+  letter-spacing: .06em;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.providerList article p {
+  margin: 13px 0 0;
+  color: #5f5752;
+  font-size: 13px;
+  line-height: 1.52;
+  overflow-wrap: anywhere;
 }
 
 .relatedDocument > a {
@@ -214,4 +310,30 @@
   .document section { padding: 29px 0 31px; }
   .document h2 { font-size: 28px; line-height: 1.05; }
   .document section > p:not(.sectionNumber) { font-size: 15px; line-height: 1.62; }
+  .providerList { grid-template-columns: 1fr; }
+  .providerList header {
+    flex-direction: column;
+    gap: 7px;
+  }
+}
+
+@media print {
+  .shell { --shell-width: 100%; background: #fff; color: #111; }
+  .hero { padding: 24px 0; background: #fff; color: #111; }
+  .hero h1 em,
+  .heroNote span,
+  .label,
+  .sectionNumber { color: #111; }
+  .heroNote { border-color: #bbb; }
+  .heroNote p { color: #333; }
+  .legalSwitcher,
+  .summary,
+  .shell > footer,
+  .shell > header,
+  .shell > a { display: none !important; }
+  .termsLayout { display: block; width: 100%; padding: 24px 0; }
+  .document { max-width: none; }
+  .document section,
+  .providerList article { break-inside: avoid; }
+  .relatedDocument { display: none; }
 }

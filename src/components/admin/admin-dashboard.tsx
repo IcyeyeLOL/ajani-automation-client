@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   createExperimentAction,
   createOutreachBatchAction,
@@ -95,11 +96,14 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
     <section className="admin-main">
       <AdminHeader section={activeSection} generatedAt={data.generatedAt} isRefreshing={isRefreshing} onRefresh={refreshDashboard} />
       {!data.outreachSchemaReady ? <SetupBanner connected={data.dataConnected} /> : null}
+      {data.dataNotice ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
+      {data.dataStatus !== "unavailable" ? <>
       {activeSection === "overview" ? <Overview data={data} onNavigate={setActiveSection} /> : null}
-      {activeSection === "outreach" ? <Outreach data={data} /> : null}
-      {activeSection === "experiments" ? <Experiments data={data} /> : null}
+      {activeSection === "outreach" ? <Outreach data={data} key={data.pagination.experimentPage} /> : null}
+      {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} /> : null}
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
       {activeSection === "operations" ? <Operations data={data} /> : null}
+      </> : null}
     </section>
   </main>;
 }
@@ -114,8 +118,8 @@ function AdminHeader({ section, generatedAt, isRefreshing, onRefresh }: { sectio
 
 function SetupBanner({ connected }: { connected: boolean }) {
   return <aside className="admin-setup-banner">
-    <div><span>{connected ? "OUTREACH STORAGE PENDING" : "DATA CONNECTION PENDING"}</span><b>{connected ? "Apply the latest outreach migration to activate batch entry and A/B tracking." : "Connect the private data layer to replace empty states with live statistics."}</b></div>
-    <p>WEBSITE DASHBOARD REMAINS SAFE</p>
+    <div><span>{connected ? "ANALYTICS INCOMPLETE" : "ANALYTICS UNAVAILABLE"}</span><b>Statistics cannot be loaded. Check the database connection and apply the engineering analytics migration.</b></div>
+    <p>NO ZERO TOTALS ARE IMPLIED</p>
   </aside>;
 }
 
@@ -174,7 +178,8 @@ function FunnelCard({ data }: { data: AdminDashboardData }) {
 
 function RecentActivity({ data }: { data: AdminDashboardData }) {
   return <article className="admin-panel admin-recent-panel"><header className="admin-panel-head"><div><p>RECENT OUTREACH</p><h2>Latest team batches.</h2></div><span>{String(data.recentBatches.length).padStart(2, "0")} LOGS</span></header>
-    {data.recentBatches.length ? <div className="admin-recent-list">{data.recentBatches.slice(0, 5).map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{batch.context}</span></p><strong>{batch.sent}<small> TOUCHES</small></strong><em>{batch.replies} replies / {batch.calls} calls</em></div>)}</div> : <EmptyState title="No outreach batches yet" copy="The first submitted batch will appear here with its owner, context, volume, and results." />}
+    {data.recentBatches.length ? <div className="admin-recent-list">{data.recentBatches.map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{batch.context}</span></p><strong>{batch.sent}<small> TOUCHES</small></strong><em>{batch.replies} replies / {batch.calls} calls</em></div>)}</div> : <EmptyState title="No outreach batches yet" copy="The first submitted batch will appear here with its owner, context, volume, and results." />}
+    <AdminPagination data={data} kind="batches" />
   </article>;
 }
 
@@ -190,6 +195,7 @@ function Outreach({ data }: { data: AdminDashboardData }) {
   return <div className="admin-section-stack">
     <section className="admin-outreach-strip">{cards.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{formatNumber(value)}</strong><small>{detail}</small></article>)}</section>
     <BatchLogger experiments={data.experiments} enabled={data.outreachSchemaReady} />
+    <AdminPagination data={data} kind="experiments" />
     <RecentActivity data={data} />
   </div>;
 }
@@ -235,10 +241,24 @@ function Experiments({ data }: { data: AdminDashboardData }) {
   const experiment = data.experiments.find((item) => item.id === selectedId) ?? data.experiments[0] ?? null;
   const performance = experiment ? data.experimentPerformance[experiment.id] ?? [] : [];
   return <div className="admin-section-stack">
+    <AdminPagination data={data} kind="experiments" />
     <section className="admin-two-column admin-experiment-layout"><ExperimentForm enabled={data.outreachSchemaReady} /><ExperimentComparison experiment={experiment} experiments={data.experiments} performance={performance} selectedId={selectedId} setSelectedId={setSelectedId} /></section>
     <ExperimentMetricEntry enabled={data.outreachSchemaReady} experiment={experiment} key={experiment?.id ?? "no-experiment"} />
     <article className="admin-panel admin-rules-panel"><header className="admin-panel-head"><div><p>MEASUREMENT RULES</p><h2>Signals without false certainty.</h2></div></header><div>{[["01","Matched denominator","Each experiment uses exposure at its selected message step."],["02","Absolute + relative","A 5% to 8% move is +3 points and +60% relative lift."],["03","Cohort aware","Attributed replies stay attached to the tested step and variant."],["04","No forced winner","Expected-cell and multiple-variant safeguards prevent premature winners."]].map(([number,title,copy]) => <section key={number}><b>{number}</b><h3>{title}</h3><p>{copy}</p></section>)}</div></article>
   </div>;
+}
+
+function AdminPagination({ data, kind }: { data: AdminDashboardData; kind: "experiments" | "batches" }) {
+  const { experimentPage, batchPage, experimentCount, batchCount } = data.pagination;
+  const page = kind === "experiments" ? experimentPage : batchPage;
+  const size = kind === "experiments" ? 25 : 20;
+  const count = kind === "experiments" ? experimentCount : batchCount;
+  const href = (next: number) => `/admin?experiments=${kind === "experiments" ? next : experimentPage}&batches=${kind === "batches" ? next : batchPage}`;
+  return <nav aria-label={`${kind} pages`} className="admin-pagination">
+    <span>{count ? `${Math.min(page * size + 1, count)}–${Math.min((page + 1) * size, count)} of ${count}` : "No"} {kind}. Totals include all pages.</span>
+    {page > 0 ? <Link href={href(page - 1)} prefetch={false} scroll={false}>Previous {kind}</Link> : null}
+    {(page + 1) * size < count ? <Link href={href(page + 1)} prefetch={false} scroll={false}>Next {kind}</Link> : null}
+  </nav>;
 }
 
 function ExperimentForm({ enabled }: { enabled: boolean }) {

@@ -79,7 +79,7 @@ describe("build request email", () => {
       name: "TimeoutError",
     }));
     vi.stubGlobal("fetch", fetchMock);
-    const { admin, updateJob } = notificationAdmin();
+    const { admin, updateJob, stateAttemptEq } = notificationAdmin();
 
     const result = await processBuildRequestNotifications({
       buildRequestId: "request-123",
@@ -97,6 +97,7 @@ describe("build request email", () => {
       next_attempt_at: expect.any(String),
       last_error: "Resend timed out",
     }));
+    expect(stateAttemptEq).toHaveBeenCalledWith("attempt_count", 1);
     expect(result).toEqual({
       claimed: 1,
       sent: 0,
@@ -104,11 +105,44 @@ describe("build request email", () => {
       terminalFailures: 0,
     });
   });
+
+  it("renders the approved edited route instead of stale generated instructions", async () => {
+    vi.stubEnv("RESEND_API_KEY", "resend-test-key");
+    vi.stubEnv("INTERNAL_NOTIFICATION_TO", "ops@ajani.test");
+    vi.stubEnv("RESEND_FROM", "Ajani <requests@ajani.test>");
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "message-123" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { admin, request, stateAttemptEq } = notificationAdmin();
+    request.title = "Approved edited title";
+    request.extracted_context = {
+      emailBrief: { subject: "STALE SUBJECT", overview: "STALE OVERVIEW", implementationNotes: ["DELETED OLD STEP"] },
+      developmentBrief: { desiredOutcome: "Current approved outcome" },
+    };
+    request.system_definition = [{ title: "Second now first", detail: "Edited current detail" }, { title: "New human handoff", detail: "Escalate to the new owner" }];
+    await processBuildRequestNotifications({ admin, buildRequestId: "request-123", limit: 1 });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.subject).toBe("New Ajani build request: Approved edited title");
+    expect(body.html).toContain("Current approved outcome");
+    expect(body.html).toContain("Second now first: Edited current detail");
+    expect(body.html.indexOf("Second now first")).toBeLessThan(body.html.indexOf("New human handoff"));
+    expect(body.html).not.toContain("DELETED OLD STEP");
+    expect(body.html).not.toContain("STALE OVERVIEW");
+    expect(stateAttemptEq).toHaveBeenCalledWith("attempt_count", 1);
+  });
+
+  it("does not lease more jobs without enough delivery and state-write time", async () => {
+    const { admin, claimJob } = notificationAdmin();
+    expect(await processBuildRequestNotifications({ admin, limit: 25, deadlineAt: Date.now() + 5_000 })).toEqual({
+      claimed: 0, sent: 0, retryableFailures: 0, terminalFailures: 0,
+    });
+    expect(claimJob).not.toHaveBeenCalled();
+  });
 });
 
 function notificationAdmin() {
   const updateJob = vi.fn();
-  const stateStatusEq = vi.fn().mockResolvedValue({ error: null });
+  const stateAttemptEq = vi.fn().mockResolvedValue({ error: null });
+  const stateStatusEq = vi.fn(() => ({ eq: stateAttemptEq }));
   const stateRequestEq = vi.fn(() => ({ eq: stateStatusEq }));
   const request = {
     id: "request-123",
@@ -116,8 +150,8 @@ function notificationAdmin() {
     title: "Route qualified leads",
     status: "submitted",
     created_at: "2026-08-27T12:00:00.000Z",
-    extracted_context: {},
-    system_definition: [],
+    extracted_context: {} as Record<string, unknown>,
+    system_definition: [] as Array<{ title: string; detail: string }>,
     plain_language_scope: "Route qualified leads to the right owner.",
     organizations: { business_name: "Northstar Services" },
   };
@@ -162,6 +196,9 @@ function notificationAdmin() {
 
   return {
     admin: admin as never,
+    claimJob: admin.rpc,
+    stateAttemptEq,
+    request,
     updateJob,
   };
 }

@@ -14,7 +14,9 @@ export async function requireAdminClerkUser(returnTo = "/admin") {
   if (!userId) redirect(signInUrl);
 
   const user = await currentUser();
-  const emails = user?.emailAddresses.map((address) => address.emailAddress) ?? [];
+  const emails = user?.emailAddresses
+    .filter((address) => address.verification?.status === "verified")
+    .map((address) => address.emailAddress) ?? [];
   if (!isAdminIdentityAllowed({ userId, emails }, getAdminAllowlist())) notFound();
 
   return userId;

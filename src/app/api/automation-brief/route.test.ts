@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { POST } from "@/app/api/automation-brief/route";
+import { CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT } from "@/lib/legal/processing-notice";
 
 const transcript = "Website quote requests arrive after hours and wait until morning for a reply.";
 
@@ -25,10 +26,10 @@ describe("automation brief route", () => {
     const response = await POST(new Request("https://ajani.test/api/automation-brief", {
       method: "POST",
       headers: { origin: "https://ajani.test", "content-type": "application/json" },
-      body: JSON.stringify({ action: "clarify", transcript }),
+      body: JSON.stringify({ action: "clarify", transcript, ...CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT }),
     }));
     expect(response.status).toBe(200);
-    expect(mocks.intake).toHaveBeenCalledWith(transcript);
+    expect(mocks.intake).toHaveBeenCalledWith(transcript, { deadlineAt: expect.any(Number) });
   });
 
   it("passes the transcript and complete answer history into route shaping", async () => {
@@ -40,10 +41,10 @@ describe("automation brief route", () => {
     const response = await POST(new Request("https://ajani.test/api/automation-brief", {
       method: "POST",
       headers: { origin: "https://ajani.test", "content-type": "application/json" },
-      body: JSON.stringify({ action: "shape", transcript, clarificationAnswers }),
+      body: JSON.stringify({ action: "shape", transcript, clarificationAnswers, ...CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT }),
     }));
     expect(response.status).toBe(200);
-    expect(mocks.shape).toHaveBeenCalledWith(transcript, clarificationAnswers);
+    expect(mocks.shape).toHaveBeenCalledWith(transcript, clarificationAnswers, { deadlineAt: expect.any(Number) });
   });
 
   it("rejects cross-origin model requests", async () => {
@@ -53,6 +54,18 @@ describe("automation brief route", () => {
       body: JSON.stringify({ action: "clarify", transcript }),
     }));
     expect(response.status).toBe(403);
+    expect(mocks.intake).not.toHaveBeenCalled();
+  });
+
+  it("rejects provider processing without the current acknowledgment", async () => {
+    const response = await POST(new Request("https://ajani.test/api/automation-brief", {
+      method: "POST",
+      headers: { origin: "https://ajani.test", "content-type": "application/json" },
+      body: JSON.stringify({ action: "clarify", transcript }),
+    }));
+
+    expect(response.status).toBe(428);
+    expect(mocks.rpc).not.toHaveBeenCalled();
     expect(mocks.intake).not.toHaveBeenCalled();
   });
 });

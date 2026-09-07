@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { processingNoticeAcknowledgmentSchema } from "@/lib/legal/processing-notice";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transcribeVoiceMemoBlob } from "@/lib/transcription/worker";
 
@@ -38,6 +39,14 @@ export async function POST(request: Request) {
     body = await request.formData();
   } catch {
     return errorResponse("Add a voice note to transcribe.", 400);
+  }
+
+  const acknowledgment = processingNoticeAcknowledgmentSchema.safeParse({
+    processingAcknowledged: body.get("processingAcknowledged") === "true",
+    processingNoticeVersion: body.get("processingNoticeVersion"),
+  });
+  if (!acknowledgment.success) {
+    return errorResponse("Review the current processing notice before transcribing this note.", 428);
   }
 
   const audio = body.get("audio");

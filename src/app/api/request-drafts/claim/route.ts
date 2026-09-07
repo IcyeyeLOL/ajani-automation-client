@@ -5,10 +5,13 @@ import { z } from "zod";
 import { hasClerkCredentials } from "@/lib/clerk/config";
 import { provisionClerkWorkspace } from "@/lib/clerk/provisioning";
 import { readLimitedJson } from "@/lib/http/read-limited-json";
+import { legalAcceptanceEnvelopeSchema } from "@/lib/legal/handoff-acceptance";
+import { isCurrentHandoffPolicyVersion } from "@/lib/legal/policy-versions";
 import { processBuildRequestNotifications } from "@/lib/notifications/build-request";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const claimSchema = z.object({
   draftId: z.string().uuid(),
@@ -17,6 +20,7 @@ const claimSchema = z.object({
 const MAX_BODY_BYTES = 4_096;
 
 export async function POST(request: Request) {
+  const deadlineAt = Date.now() + 50_000;
   if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin request rejected" }, { status: 403 });
   if (!hasClerkCredentials()) return Response.json({ error: "Account access is unavailable." }, { status: 503 });
   if (Number(request.headers.get("content-length") || 0) > MAX_BODY_BYTES) {
@@ -41,15 +45,27 @@ export async function POST(request: Request) {
     const tokenHash = createHash("sha256").update(parsed.data.draftToken, "utf8").digest("hex");
     const { data: availableDraft, error: availabilityError } = await admin
       .from("request_drafts")
-      .select("id,expires_at,submitted_build_request_id")
+      .select("id,expires_at,submitted_build_request_id,claimed_by,organization_id,deletion_reserved_at,payload")
       .eq("id", parsed.data.draftId)
       .eq("token_hash", tokenHash)
       .maybeSingle();
     if (availabilityError
       || !availableDraft
-      || Date.parse(availableDraft.expires_at) <= Date.now()
-      || availableDraft.submitted_build_request_id) {
+      || availableDraft.deletion_reserved_at
+      || (Date.parse(availableDraft.expires_at) <= Date.now() && !availableDraft.submitted_build_request_id)
+      || (availableDraft.claimed_by && availableDraft.claimed_by !== userId)) {
       return Response.json({ error: "The saved request is unavailable." }, { status: 404 });
+    }
+    const parsedAcceptance = typeof availableDraft.payload === "object" && availableDraft.payload !== null
+      ? legalAcceptanceEnvelopeSchema.safeParse((availableDraft.payload as Record<string, unknown>).legalAcceptance)
+      : { success: false as const };
+    const acceptanceIsCurrent = parsedAcceptance.success
+      && isCurrentHandoffPolicyVersion(parsedAcceptance.data);
+    if (!availableDraft.submitted_build_request_id && !acceptanceIsCurrent) {
+      return Response.json(
+        { error: "Review and accept the current Terms, Acceptable Use Policy, and Privacy Policy before sending this request." },
+        { status: 428 },
+      );
     }
 
     const workspace = await provisionClerkWorkspace(userId, orgId ?? null);
@@ -72,7 +88,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "The saved request is unavailable." }, { status: 404 });
     }
 
-    if (claimed.status !== "ready_to_submit") {
+    if (claimed.status !== "ready_to_submit" && claimed.status !== "submitted") {
       return Response.json({ status: "claimed", draftId: claimed.id });
     }
 
@@ -81,15 +97,26 @@ export async function POST(request: Request) {
       p_user_id: userId,
       p_organization_id: workspace.organizationId,
     });
-    if (submitError) return Response.json({ error: "The request is claimed but not ready to submit yet." }, { status: 409 });
+    if (submitError) {
+      if (submitError.message?.includes("handoff_acceptance_required")) {
+        return Response.json(
+          { error: "Review and accept the current Terms, Acceptable Use Policy, and Privacy Policy before sending this request." },
+          { status: 428 },
+        );
+      }
+      return Response.json({ error: "The request is claimed but not ready to submit yet." }, { status: 409 });
+    }
 
     const submitted = Array.isArray(submittedRows) ? submittedRows[0] : submittedRows;
+    if (!submitted?.build_request_id) {
+      return Response.json({ error: "The saved request receipt could not be loaded. Please retry." }, { status: 503 });
+    }
     if (submitted?.build_request_id) {
       try {
         const buildRequestId = submitted.build_request_id;
         after(async () => {
           try {
-            await processBuildRequestNotifications({ buildRequestId, limit: 1 });
+            await processBuildRequestNotifications({ buildRequestId, limit: 1, deadlineAt });
           } catch (error) {
             // The database job is durable and the scheduled worker will retry it.
             console.error("Post-response build request notification failed", {

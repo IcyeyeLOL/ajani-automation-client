@@ -1,11 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RecordNoteAction } from "@/components/record-note-action";
 import styles from "./audience-picker.module.css";
 
 type Direction = "forward" | "backward";
+
+/** Set to false to restore the original Automation in practice card exactly. */
+const ENABLE_AUTOMATION_IN_PRACTICE_PROTOTYPE = true;
 
 type Audience = {
   id: string;
@@ -160,11 +163,14 @@ export function AudiencePicker() {
   const [active, setActive] = useState(0);
   const [direction, setDirection] = useState<Direction>("forward");
   const [loadedPhotos, setLoadedPhotos] = useState<Set<string>>(() => new Set());
+  const [requestedPhotos, setRequestedPhotos] = useState<Set<number>>(() => new Set([0]));
+  const [proofManuallyPaused, setProofManuallyPaused] = useState(false);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const select = (index: number, nextDirection: Direction) => {
     const next = (index + audiences.length) % audiences.length;
     if (next === active) return;
+    setRequestedPhotos((requested) => new Set(requested).add(next));
     setDirection(nextDirection);
     setActive(next);
   };
@@ -230,7 +236,7 @@ export function AudiencePicker() {
             data-ready={loadedPhotos.has(current.id)}
             style={{ aspectRatio: `${current.frameWidth ?? current.photoWidth ?? 1} / ${current.frameHeight ?? current.photoHeight ?? 1}` }}
           >
-            {audiences.map((audience, index) => audience.photo ? (
+            {audiences.map((audience, index) => audience.photo && requestedPhotos.has(index) ? (
               <figure
                 aria-hidden={index !== active}
                 className={styles.shotPhoto}
@@ -242,7 +248,7 @@ export function AudiencePicker() {
                 <Image
                   alt={audience.photoAlt ?? ""}
                   height={audience.photoHeight ?? 1}
-                  loading="eager"
+                  loading={index === active && index !== 0 ? "eager" : "lazy"}
                   onLoad={() => markPhotoLoaded(audience.id)}
                   sizes="(max-width: 620px) calc(100vw - 32px), (max-width: 900px) calc(100vw - 48px), 46vw"
                   src={audience.photo}
@@ -252,7 +258,12 @@ export function AudiencePicker() {
             ) : null)}
           </div>
         ) : (
-          <Example thread={current.thread} />
+          <Example
+            audienceId={current.id}
+            manuallyPaused={proofManuallyPaused}
+            onToggleManualPause={() => setProofManuallyPaused((value) => !value)}
+            thread={current.thread}
+          />
         )}
 
         <div className={styles.copy} data-audience-copy data-direction={direction} key={current.id}>
@@ -263,17 +274,175 @@ export function AudiencePicker() {
           </RecordNoteAction>
         </div>
 
-        {current.photo ? <Example key={`proof-${current.id}`} thread={current.thread} /> : null}
+        {current.photo ? (
+          <Example
+            audienceId={current.id}
+            key={`proof-${current.id}`}
+            manuallyPaused={proofManuallyPaused}
+            onToggleManualPause={() => setProofManuallyPaused((value) => !value)}
+            thread={current.thread}
+          />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function Example({ thread }: { thread: Audience["thread"] }) {
+function Example({
+  audienceId,
+  manuallyPaused,
+  onToggleManualPause,
+  thread,
+}: {
+  audienceId: string;
+  manuallyPaused: boolean;
+  onToggleManualPause: () => void;
+  thread: Audience["thread"];
+}) {
+  if (!ENABLE_AUTOMATION_IN_PRACTICE_PROTOTYPE) {
+    return <LegacyExample audienceId={audienceId} thread={thread} />;
+  }
+
   return (
-    <figure className={styles.example} data-testid="audience-proof">
+    <GuidedHandoffTrace
+      audienceId={audienceId}
+      manuallyPaused={manuallyPaused}
+      onToggleManualPause={onToggleManualPause}
+      thread={thread}
+    />
+  );
+}
+
+function GuidedHandoffTrace({
+  audienceId,
+  manuallyPaused,
+  onToggleManualPause,
+  thread,
+}: {
+  audienceId: string;
+  manuallyPaused: boolean;
+  onToggleManualPause: () => void;
+  thread: Audience["thread"];
+}) {
+  const proof = useRef<HTMLElement>(null);
+  const [hasEntered, setHasEntered] = useState(false);
+  const [environmentPaused, setEnvironmentPaused] = useState(true);
+  const paused = environmentPaused || manuallyPaused;
+
+  useEffect(() => {
+    const element = proof.current;
+    if (!element) return;
+
+    let inView = false;
+    let frame: number | undefined;
+
+    const syncEnvironmentPause = () => {
+      setEnvironmentPaused(document.hidden || !inView);
+    };
+
+    document.addEventListener("visibilitychange", syncEnvironmentPause);
+
+    if (typeof IntersectionObserver !== "function") {
+      frame = requestAnimationFrame(() => {
+        inView = true;
+        setHasEntered(true);
+        setEnvironmentPaused(document.hidden);
+      });
+
+      return () => {
+        if (frame !== undefined) cancelAnimationFrame(frame);
+        document.removeEventListener("visibilitychange", syncEnvironmentPause);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) setHasEntered(true);
+        syncEnvironmentPause();
+      },
+      { threshold: 0.15 },
+    );
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", syncEnvironmentPause);
+    };
+  }, []);
+
+  return (
+    <figure
+      className={`${styles.example} ${styles.examplePrototype}`}
+      data-audience-proof={audienceId}
+      data-story-active={String(hasEntered)}
+      data-story-motion="true"
+      data-story-paused={String(paused)}
+      data-testid="audience-proof"
+      ref={proof}
+    >
       <figcaption>
-        <b><i /> Automation in practice</b>
+        <span className={styles.exampleHeading}>
+          <b><i aria-hidden="true" /> Automation in practice</b>
+          <small>Illustrative</small>
+        </span>
+        <span className={styles.exampleMeta}>
+          <span>{thread.stamp} · {thread.source}</span>
+          <button
+            aria-label={manuallyPaused ? "Play automation example" : "Pause automation example"}
+            data-control-state={manuallyPaused ? "paused" : "playing"}
+            onClick={onToggleManualPause}
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 18 18">
+              {manuallyPaused ? (
+                <path d="m6.5 5 6.5 4-6.5 4z" />
+              ) : (
+                <path d="M6.5 5.2v7.6M11.5 5.2v7.6" />
+              )}
+            </svg>
+          </button>
+        </span>
+      </figcaption>
+
+      <div className={styles.exampleRoute}>
+        <div className={styles.exampleStep} data-proof-stage="input">
+          <b>01</b>
+          <div>
+            <small>{thread.kind === "message" ? "New input" : "Trigger detected"}</small>
+            <p>{thread.inbound}</p>
+          </div>
+        </div>
+        <div className={styles.exampleConnector} data-proof-connector="true">
+          <i aria-hidden="true" />
+          <span>Ajani handles the next step</span>
+        </div>
+        <div className={`${styles.exampleStep} ${styles.exampleAction}`} data-proof-stage="action">
+          <b>02</b>
+          <div>
+            <small>Prepared action</small>
+            <p>{thread.out}</p>
+          </div>
+        </div>
+      </div>
+
+      <footer data-proof-stage="result">
+        <span aria-hidden="true" className={styles.outcomeMark} />
+        <span className={styles.outcomeCopy}>
+          <small>Example outcome</small>
+          <strong>{thread.outTo}</strong>
+        </span>
+        <span aria-hidden="true" className={styles.outcomeRail}><i /></span>
+      </footer>
+    </figure>
+  );
+}
+
+function LegacyExample({ audienceId, thread }: { audienceId: string; thread: Audience["thread"] }) {
+  return (
+    <figure className={styles.example} data-audience-proof={audienceId} data-testid="audience-proof">
+      <figcaption>
+        <b><i aria-hidden="true" /> Automation in practice</b>
         <span>{thread.stamp} · {thread.source}</span>
       </figcaption>
       <div className={styles.exampleRoute}>
@@ -284,7 +453,7 @@ function Example({ thread }: { thread: Audience["thread"] }) {
             <p>{thread.inbound}</p>
           </div>
         </div>
-        <div className={styles.exampleConnector}><i /><span>Ajani handles the next step</span></div>
+        <div className={styles.exampleConnector}><i aria-hidden="true" /><span>Ajani handles the next step</span></div>
         <div className={`${styles.exampleStep} ${styles.exampleAction}`}>
           <b>02</b>
           <div>
@@ -293,7 +462,7 @@ function Example({ thread }: { thread: Audience["thread"] }) {
           </div>
         </div>
       </div>
-      <footer><i />{thread.outTo}</footer>
+      <footer><i aria-hidden="true" />{thread.outTo}</footer>
     </figure>
   );
 }

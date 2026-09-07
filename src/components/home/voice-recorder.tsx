@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveWaveform } from "./live-waveform";
 import styles from "./voice-recorder.module.css";
@@ -28,6 +29,7 @@ const statusCopy: Record<Phase, string> = {
 type RecorderProps = {
   id?: string;
   embedded?: boolean;
+  processingAllowed?: boolean;
   onCaptured?: (capture: VoiceMemoCapture) => void;
   onInvalidated?: () => void;
   onActiveChange?: (active: boolean) => void;
@@ -77,6 +79,7 @@ function preferredRecorderMimeType() {
 export function VoiceRecorder({
   id,
   embedded = false,
+  processingAllowed = true,
   onActiveChange,
   onCaptured,
   onInvalidated,
@@ -92,9 +95,11 @@ export function VoiceRecorder({
   const [transcriptionMode, setTranscriptionMode] = useState<"idle" | "live" | "manual">("idle");
   const recorder = useRef<MediaRecorder | null>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionGeneration = useRef(0);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
-  const secondsRef = useRef(0);
+  const recordedMs = useRef(0);
+  const recordingStartedAt = useRef<number | null>(null);
   const audioUrlRef = useRef<string | null>(audioUrl);
   const urlTransferred = useRef(Boolean(savedCapture));
   const mounted = useRef(true);
@@ -102,6 +107,7 @@ export function VoiceRecorder({
   const captureFailed = useRef(false);
   const transcriptRef = useRef(transcript);
   const transcriptSourceRef = useRef<VoiceMemoCapture["transcriptSource"]>(savedCapture?.transcriptSource ?? "none");
+  const manuallyEdited = useRef(savedCapture?.transcriptSource === "manual");
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -112,9 +118,12 @@ export function VoiceRecorder({
   }, [onActiveChange, phase]);
 
   const stopRecognition = useCallback((abort = false) => {
+    recognitionGeneration.current += 1;
     const current = recognition.current;
     recognition.current = null;
     if (!current) return;
+    current.onresult = null;
+    current.onerror = null;
     current.onend = null;
     try {
       if (abort) current.abort();
@@ -125,6 +134,7 @@ export function VoiceRecorder({
   }, []);
 
   const startRecognition = useCallback(() => {
+    stopRecognition(true);
     const recognitionWindow = window as Window & {
       SpeechRecognition?: SpeechRecognitionConstructor;
       webkitSpeechRecognition?: SpeechRecognitionConstructor;
@@ -136,11 +146,16 @@ export function VoiceRecorder({
     }
 
     const nextRecognition = new Recognition();
+    const generation = recognitionGeneration.current;
+    const isCurrent = () => mounted.current
+      && recognitionGeneration.current === generation
+      && recognition.current === nextRecognition;
     const base = transcriptRef.current.trim();
     nextRecognition.continuous = true;
     nextRecognition.interimResults = true;
     nextRecognition.lang = document.documentElement.lang || "en-US";
     nextRecognition.onresult = (event) => {
+      if (!isCurrent()) return;
       let finalText = "";
       let interimText = "";
       for (let index = 0; index < event.results.length; index += 1) {
@@ -151,16 +166,25 @@ export function VoiceRecorder({
         else interimText += `${phrase} `;
       }
       const nextTranscript = [base, finalText.trim(), interimText.trim()].filter(Boolean).join(" ");
-      transcriptSourceRef.current = "live";
+      // Resumed speech adds to the edited note; it must never revoke ownership
+      // of a correction and permit full-audio transcription to replace it.
+      transcriptSourceRef.current = manuallyEdited.current ? "manual" : "live";
       transcriptRef.current = nextTranscript;
       onTranscriptChange(nextTranscript);
     };
     nextRecognition.onerror = () => {
-      if (recognition.current === nextRecognition) recognition.current = null;
+      if (!isCurrent()) return;
+      stopRecognition(true);
       setTranscriptionMode("manual");
     };
     nextRecognition.onend = () => {
-      if (recognition.current === nextRecognition) recognition.current = null;
+      if (!isCurrent()) return;
+      recognitionGeneration.current += 1;
+      recognition.current = null;
+      nextRecognition.onresult = null;
+      nextRecognition.onerror = null;
+      nextRecognition.onend = null;
+      setTranscriptionMode("manual");
     };
 
     try {
@@ -168,10 +192,10 @@ export function VoiceRecorder({
       nextRecognition.start();
       setTranscriptionMode("live");
     } catch {
-      recognition.current = null;
+      stopRecognition(true);
       setTranscriptionMode("manual");
     }
-  }, [onTranscriptChange]);
+  }, [onTranscriptChange, stopRecognition]);
 
   const releaseStream = useCallback(() => {
     stream.current?.getTracks().forEach((track) => track.stop());
@@ -192,12 +216,24 @@ export function VoiceRecorder({
     onInvalidated?.();
   }, [onInvalidated, revokeAudioUrl]);
 
+  const elapsedRecordingMs = useCallback(() => recordedMs.current
+    + (recordingStartedAt.current === null ? 0 : Math.max(0, performance.now() - recordingStartedAt.current)), []);
+
+  const pauseRecordingClock = useCallback(() => {
+    recordedMs.current = elapsedRecordingMs();
+    recordingStartedAt.current = null;
+    setSeconds(Math.min(MAX_SECONDS, Math.floor(recordedMs.current / 1_000)));
+  }, [elapsedRecordingMs]);
+
   const finish = useCallback(() => {
     stopRecognition();
     const current = recorder.current;
-    if (current && current.state !== "inactive") current.stop();
+    if (current && current.state !== "inactive") {
+      pauseRecordingClock();
+      current.stop();
+    }
     releaseStream();
-  }, [releaseStream, stopRecognition]);
+  }, [pauseRecordingClock, releaseStream, stopRecognition]);
 
   useEffect(() => {
     // React Strict Mode runs an extra setup/cleanup cycle in development.
@@ -217,6 +253,7 @@ export function VoiceRecorder({
         current.stop();
       }
       stream.current?.getTracks().forEach((track) => track.stop());
+      recordingStartedAt.current = null;
       if (audioUrlRef.current && !urlTransferred.current) URL.revokeObjectURL(audioUrlRef.current);
     };
   }, [onActiveChange, stopRecognition]);
@@ -224,22 +261,24 @@ export function VoiceRecorder({
   useEffect(() => {
     if (phase !== "recording") return;
     const timer = window.setInterval(() => {
-      setSeconds((value) => {
-        const next = value + 1;
-        secondsRef.current = next;
-        return Math.min(next, MAX_SECONDS);
-      });
+      // UI ticks may be throttled or React may defer their render. Duration and
+      // capture validity must not depend on how often this display was updated.
+      setSeconds(Math.min(MAX_SECONDS, Math.floor(elapsedRecordingMs() / 1_000)));
     }, 1_000);
     return () => window.clearInterval(timer);
-  }, [finish, phase]);
+  }, [elapsedRecordingMs, phase]);
 
   useEffect(() => {
-    if (phase !== "recording" || seconds < MAX_SECONDS) return;
-    const timer = window.setTimeout(finish, 0);
+    if (phase !== "recording") return;
+    // Enforce the active-recording limit independently from display ticks. On
+    // resume only the remaining budget is scheduled; paused time is excluded.
+    const remainingMs = Math.max(0, MAX_SECONDS * 1_000 - elapsedRecordingMs());
+    const timer = window.setTimeout(finish, remainingMs);
     return () => window.clearTimeout(timer);
-  }, [finish, phase, seconds]);
+  }, [elapsedRecordingMs, finish, phase]);
 
   const start = async () => {
+    if (!processingAllowed) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setPhase("error");
       return;
@@ -249,11 +288,13 @@ export function VoiceRecorder({
     stopRecognition(true);
     transcriptRef.current = "";
     transcriptSourceRef.current = "none";
+    manuallyEdited.current = false;
     onTranscriptChange?.("");
     setTranscriptionMode("idle");
     captureFailed.current = false;
     setSeconds(0);
-    secondsRef.current = 0;
+    recordedMs.current = 0;
+    recordingStartedAt.current = null;
     chunks.current = [];
     setPhase("requesting");
     const generation = ++requestGeneration.current;
@@ -282,28 +323,37 @@ export function VoiceRecorder({
       const preferredMimeType = preferredRecorderMimeType();
       stream.current = media;
       const nextRecorder = new MediaRecorder(media, preferredMimeType ? { mimeType: preferredMimeType } : undefined);
+      const isCurrentCapture = () => mounted.current && generation === requestGeneration.current;
       recorder.current = nextRecorder;
       setLiveStream(media);
 
       media.getAudioTracks().forEach((track) => {
         track.onended = () => {
+          if (!isCurrentCapture()) return;
           if (nextRecorder.state === "inactive") return;
           captureFailed.current = true;
+          pauseRecordingClock();
           nextRecorder.stop();
         };
       });
 
       nextRecorder.ondataavailable = (event) => {
+        if (!isCurrentCapture()) return;
         if (event.data.size > 0) chunks.current.push(event.data);
       };
       nextRecorder.onerror = () => {
+        if (!isCurrentCapture()) return;
         captureFailed.current = true;
+        pauseRecordingClock();
         stopRecognition(true);
         releaseStream();
         invalidateCapture();
         setPhase("error");
       };
       nextRecorder.onstop = () => {
+        if (!isCurrentCapture()) return;
+        stopRecognition();
+        pauseRecordingClock();
         const mimeType = normalizeMimeType(nextRecorder.mimeType || chunks.current[0]?.type || "audio/webm");
         if (captureFailed.current || !mimeType) {
           releaseStream();
@@ -315,25 +365,31 @@ export function VoiceRecorder({
         const bytes = blob.size;
         releaseStream();
 
-        if (bytes === 0 || secondsRef.current === 0) {
+        if (bytes === 0) {
           invalidateCapture();
           setPhase("error");
           return;
         }
 
         const nextUrl = URL.createObjectURL(blob);
+        // The API accepts whole seconds. Round a real nonempty short recording
+        // up instead of discarding it because the display never reached 00:01.
+        const durationSeconds = Math.min(MAX_SECONDS, Math.max(1, Math.ceil(recordedMs.current / 1_000)));
         audioUrlRef.current = nextUrl;
-        urlTransferred.current = true;
+        urlTransferred.current = Boolean(onCaptured);
         setAudioUrl(nextUrl);
         setSize(bytes);
+        setSeconds(durationSeconds);
         setPhase("ready");
-        onCaptured?.({ blob, seconds: secondsRef.current, bytes, mimeType, objectUrl: nextUrl, transcriptSource: transcriptSourceRef.current });
+        onCaptured?.({ blob, seconds: durationSeconds, bytes, mimeType, objectUrl: nextUrl, transcriptSource: transcriptSourceRef.current });
       };
       nextRecorder.start(1_000);
+      recordingStartedAt.current = performance.now();
       startRecognition();
       setPhase("recording");
     } catch (reason) {
       window.clearTimeout(permissionTimer);
+      if (!mounted.current || generation !== requestGeneration.current) return;
       requestGeneration.current += 1;
       stopRecognition(true);
       releaseStream();
@@ -346,6 +402,7 @@ export function VoiceRecorder({
   const pause = () => {
     if (recorder.current?.state !== "recording") return;
     recorder.current.pause();
+    pauseRecordingClock();
     stopRecognition();
     setPhase("paused");
   };
@@ -353,6 +410,7 @@ export function VoiceRecorder({
   const resume = () => {
     if (recorder.current?.state !== "paused") return;
     recorder.current.resume();
+    recordingStartedAt.current = performance.now();
     startRecognition();
     setPhase("recording");
   };
@@ -363,10 +421,12 @@ export function VoiceRecorder({
     invalidateCapture();
     transcriptRef.current = "";
     transcriptSourceRef.current = "none";
+    manuallyEdited.current = false;
     onTranscriptChange?.("");
     setTranscriptionMode("idle");
     setSeconds(0);
-    secondsRef.current = 0;
+    recordedMs.current = 0;
+    recordingStartedAt.current = null;
     chunks.current = [];
     setPhase("idle");
   };
@@ -413,6 +473,7 @@ export function VoiceRecorder({
                 aria-label="Edit your voice note transcript"
                 autoFocus
                 onChange={(event) => {
+                  manuallyEdited.current = true;
                   transcriptSourceRef.current = "manual";
                   transcriptRef.current = event.target.value;
                   onTranscriptChange?.(event.target.value);
@@ -443,12 +504,12 @@ export function VoiceRecorder({
           <div className={styles.readyState}>
             <span className={styles.readyMark} aria-hidden="true">✓</span>
             <div>
-              <strong>Voice note saved</strong>
-              <small>{clock(seconds)} · {Math.max(1, Math.round(size / 1024))} KB · private to this request</small>
+              <strong>Voice note ready</strong>
+              <small>{clock(seconds)} · {Math.max(1, Math.round(size / 1024))} KB · held in this tab</small>
             </div>
             <audio aria-label="Review your voice note" controls preload="metadata" src={audioUrl} />
             <div className={styles.readyActions}>
-              <button onClick={() => void start()} type="button">Redo note</button>
+              <button disabled={!processingAllowed} onClick={() => void start()} type="button">Redo note</button>
               <button onClick={discard} type="button">Discard</button>
             </div>
           </div>
@@ -473,7 +534,7 @@ export function VoiceRecorder({
                 <button
                   aria-label="Start recording your voice note"
                   className={styles.record}
-                  disabled={phase === "requesting"}
+                  disabled={phase === "requesting" || !processingAllowed}
                   onClick={() => void start()}
                   type="button"
                 >
@@ -499,7 +560,7 @@ export function VoiceRecorder({
                       : "Up to three minutes. Explain what happens today, where it gets stuck, and what a better outcome would look like."}
                 </small>
                 {phase === "blocked" || phase === "error" ? (
-                  <button className={styles.retry} onClick={() => void start()} type="button">Try microphone again</button>
+                  <button className={styles.retry} disabled={!processingAllowed} onClick={() => void start()} type="button">Try microphone again</button>
                 ) : null}
               </>
             )}
@@ -509,7 +570,7 @@ export function VoiceRecorder({
 
       <footer className={styles.privacy}>
         <span aria-hidden="true">◇</span>
-        <p><strong>Private by default.</strong> The recording stays in this tab until you choose Use this note. It is then sent securely for transcription and saved only when you approve the handoff.</p>
+        <p><strong>Before you record.</strong> Ajani keeps its recorded copy in this tab while you record. Your browser or operating-system speech service may process speech for live text. After you finish, Ajani may send the recording to Deepgram unless you already provided enough written text. Ajani uploads the original only if you send the handoff. Record only yourself unless you gave required notice and obtained required permission. Do not include sensitive or regulated information. <Link href="/privacy#notice-at-collection">Privacy details</Link>.</p>
       </footer>
 
       {embedded ? null : (

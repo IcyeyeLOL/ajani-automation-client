@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { generateAutomationIntake, generateAutomationShape } from "@/lib/ai/automation-workflow";
 import { readLimitedJson } from "@/lib/http/read-limited-json";
+import { publicRequestFingerprint } from "@/lib/http/request-quota";
+import { withinDeadline } from "@/lib/operations/deadline";
+import { processingNoticeAcknowledgmentSchema } from "@/lib/legal/processing-notice";
 import { MIN_TYPED_NOTE_CHARACTERS } from "@/lib/record/typed-note-analysis";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -24,21 +26,39 @@ const requestSchema = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: Request) {
+  const deadlineAt = Date.now() + 45_000;
   if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin request rejected" }, { status: 403 });
   if (Number(request.headers.get("content-length") || 0) > MAX_BODY_BYTES) return Response.json({ error: "The note is too large" }, { status: 413 });
-  const body = await readLimitedJson(request, MAX_BODY_BYTES);
+  const body = await withinDeadline(readLimitedJson(request, MAX_BODY_BYTES), deadlineAt)
+    .catch(() => ({ status: "timeout" as const }));
+  if (body.status === "timeout") return Response.json({ error: "The request timed out. Please retry." }, { status: 408 });
   if (body.status === "too_large") return Response.json({ error: "The note is too large" }, { status: 413 });
   if (body.status === "invalid") return Response.json({ error: "Request body must be valid JSON" }, { status: 400 });
+  const processingNoticeCandidate = body.value && typeof body.value === "object" && !Array.isArray(body.value)
+    ? body.value as Record<string, unknown>
+    : null;
+  const acknowledgment = processingNoticeCandidate
+    ? processingNoticeAcknowledgmentSchema.safeParse({
+      processingAcknowledged: processingNoticeCandidate.processingAcknowledged,
+      processingNoticeVersion: processingNoticeCandidate.processingNoticeVersion,
+    })
+    : { success: false as const };
+  if (!acknowledgment.success) {
+    return Response.json(
+      { error: "Review the current processing notice before Ajani analyzes this note." },
+      { status: 428 },
+    );
+  }
   const parsed = requestSchema.safeParse(body.value);
   if (!parsed.success) return Response.json({ error: "Add a complete note and confirmed answers" }, { status: 400 });
 
   try {
     const admin = createSupabaseAdminClient();
-    const { data: allowed, error } = await admin.rpc("consume_public_request_allowance", {
-      p_fingerprint: requestFingerprint(request),
+    const { data: allowed, error } = await withinDeadline(admin.rpc("consume_public_request_allowance", {
+      p_fingerprint: publicRequestFingerprint(request, "automation-brief"),
       p_limit: MAX_GENERATIONS_PER_WINDOW,
       p_window_seconds: Math.floor(WINDOW_MS / 1_000),
-    });
+    }), deadlineAt);
     if (error) throw error;
     if (!allowed) return Response.json({ error: "Too many AI requests. Please wait a few minutes and retry." }, { status: 429 });
   } catch (error) {
@@ -49,20 +69,12 @@ export async function POST(request: Request) {
   }
 
   const result = parsed.data.action === "clarify"
-    ? await generateAutomationIntake(parsed.data.transcript)
-    : await generateAutomationShape(parsed.data.transcript, parsed.data.clarificationAnswers);
+    ? await generateAutomationIntake(parsed.data.transcript, { deadlineAt })
+    : await generateAutomationShape(parsed.data.transcript, parsed.data.clarificationAnswers, { deadlineAt });
   return Response.json(result, { headers: { "cache-control": "no-store" } });
 }
 
 function isSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
-}
-
-function requestFingerprint(request: Request) {
-  const forwarded = request.headers.get("x-vercel-forwarded-for") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || request.headers.get("x-real-ip") || "local";
-  const salt = process.env.REQUEST_RATE_LIMIT_SECRET || process.env.AJANI_ADMIN_SESSION_SECRET;
-  if (!salt && process.env.NODE_ENV === "production") throw new Error("request_rate_limit_secret_missing");
-  return createHash("sha256").update(`${address}:${salt}`).digest("hex");
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withinDeadline } from "@/lib/operations/deadline";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -37,9 +38,10 @@ export type TranscriptionSweepResult = {
   terminalFailures: number;
 };
 
-export async function processVoiceTranscriptions(options: { limit?: number; voiceMemoId?: string; admin?: AdminClient } = {}) {
+export async function processVoiceTranscriptions(options: { limit?: number; voiceMemoId?: string; admin?: AdminClient; deadlineAt?: number } = {}) {
   const admin = options.admin ?? createSupabaseAdminClient();
   const limit = Math.min(Math.max(options.limit ?? 3, 1), 10);
+  const deadlineAt = options.deadlineAt ?? Date.now() + 55_000;
   const result: TranscriptionSweepResult = {
     claimed: 0,
     succeeded: 0,
@@ -48,58 +50,35 @@ export async function processVoiceTranscriptions(options: { limit?: number; voic
   };
 
   for (let index = 0; index < limit; index += 1) {
-    const job = await claimJob(admin, options.voiceMemoId);
+    if (deadlineAt - Date.now() < 10_000) break;
+    const job = await withinDeadline(claimJob(admin, options.voiceMemoId), deadlineAt - 3_000);
     if (!job) break;
     result.claimed += 1;
 
     try {
-      const memo = await loadVoiceMemo(admin, job.voice_memo_id);
-      const audio = await downloadVoiceMemo(admin, memo);
-      const transcript = await transcribeVoiceMemoBlob(audio, memo.mime_type, job.model);
+      const memo = await withinDeadline(loadVoiceMemo(admin, job.voice_memo_id), deadlineAt - 3_000);
+      const audio = await withinDeadline(downloadVoiceMemo(admin, memo, deadlineAt), deadlineAt - 3_000);
+      const transcript = await transcribeVoiceMemoBlob(audio, memo.mime_type, job.model, deadlineAt - 3_000);
       if (!transcript.text) throw new TerminalTranscriptionError("empty_transcript");
 
-      const { error: memoError } = await admin.from("voice_memos").update({
-        status: "ready",
-        provider: "deepgram",
-        duration_seconds: Math.max(Math.round(transcript.durationSeconds), 0),
-        transcript: transcript.text,
-        transcript_metadata: {
-          requestId: transcript.requestId,
-          language: transcript.language,
-          confidence: transcript.confidence,
-          model: job.model,
-        },
-      }).eq("id", memo.id);
-      if (memoError) throw new Error(`voice_memo_update_failed:${memoError.message}`);
-
-      const { error: jobError } = await admin.from("voice_memo_transcription_jobs").update({
-        status: "succeeded",
-        provider_request_id: transcript.requestId,
-        language: transcript.language,
-        confidence: transcript.confidence,
-        error_code: null,
-        next_attempt_at: null,
-        completed_at: new Date().toISOString(),
-      }).eq("id", job.job_id).eq("status", "running");
+      const { data: finished, error: jobError } = await withinDeadline(admin.rpc("finish_voice_memo_transcription", {
+        p_job_id: job.job_id, p_attempt: job.attempt_count, p_status: "succeeded",
+        p_result: { ...transcript, model: job.model }, p_error: null, p_next_attempt_at: null,
+      }), deadlineAt);
       if (jobError) throw new Error(`transcription_state_update_failed:${jobError.message}`);
-      result.succeeded += 1;
+      if (finished) result.succeeded += 1;
     } catch (error) {
       const retryable = !(error instanceof TerminalTranscriptionError) && job.attempt_count < job.max_attempts;
-      const { error: jobError } = await admin.from("voice_memo_transcription_jobs").update({
-        status: retryable ? "retryable_failed" : "terminal_failed",
-        error_code: safeErrorCode(error),
-        next_attempt_at: retryable ? retryAt(job.attempt_count) : null,
-        completed_at: retryable ? null : new Date().toISOString(),
-      }).eq("id", job.job_id).eq("status", "running");
-
-      if (!retryable) {
-        await admin.from("voice_memos").update({ status: "failed" }).eq("id", job.voice_memo_id);
-      }
+      const { data: finished, error: jobError } = await withinDeadline(admin.rpc("finish_voice_memo_transcription", {
+        p_job_id: job.job_id, p_attempt: job.attempt_count,
+        p_status: retryable ? "retryable_failed" : "terminal_failed",
+        p_result: {}, p_error: safeErrorCode(error), p_next_attempt_at: retryable ? retryAt(job.attempt_count) : null,
+      }), deadlineAt);
       if (jobError) {
         console.error("Transcription job state update failed", { jobId: job.job_id, message: jobError.message });
       }
-      if (retryable) result.retryableFailures += 1;
-      else result.terminalFailures += 1;
+      if (finished && retryable) result.retryableFailures += 1;
+      else if (finished) result.terminalFailures += 1;
     }
 
     if (options.voiceMemoId) break;
@@ -122,17 +101,20 @@ async function loadVoiceMemo(admin: AdminClient, id: string) {
     .select("id,storage_path,mime_type")
     .eq("id", id)
     .single();
-  if (error || !data) throw new TerminalTranscriptionError("voice_memo_missing");
+  if (error) throw new Error(`voice_memo_load_failed:${error.message}`);
+  if (!data) throw new TerminalTranscriptionError("voice_memo_missing");
   return data as VoiceMemo;
 }
 
-async function downloadVoiceMemo(admin: AdminClient, memo: VoiceMemo) {
-  const { data, error } = await admin.storage.from("voice-memos").download(memo.storage_path);
+async function downloadVoiceMemo(admin: AdminClient, memo: VoiceMemo, deadlineAt: number) {
+  const { data, error } = await admin.storage.from("voice-memos").download(memo.storage_path, {}, {
+    signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, deadlineAt - Date.now() - 5_000))),
+  });
   if (error || !data) throw new Error(`voice_memo_download_failed:${error?.message ?? "not_found"}`);
   return data;
 }
 
-export async function transcribeVoiceMemoBlob(audio: Blob, mimeType: string | null, model = "nova-3") {
+export async function transcribeVoiceMemoBlob(audio: Blob, mimeType: string | null, model = "nova-3", deadlineAt = Date.now() + 50_000) {
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) throw new TerminalTranscriptionError("deepgram_not_configured");
 
@@ -149,9 +131,9 @@ export async function transcribeVoiceMemoBlob(audio: Blob, mimeType: string | nu
       "content-type": mimeType || audio.type || "application/octet-stream",
     },
     body: audio,
-    signal: AbortSignal.timeout(50_000),
+    signal: AbortSignal.timeout(Math.max(1, Math.min(50_000, deadlineAt - Date.now()))),
   });
-  const payload = await response.json().catch(() => ({})) as DeepgramResponse;
+  const payload = await response.json() as DeepgramResponse;
   if (!response.ok) {
     const message = payload.err_code || payload.err_msg || `deepgram_http_${response.status}`;
     if (response.status >= 400 && response.status < 500 && response.status !== 429) {

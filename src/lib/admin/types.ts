@@ -99,6 +99,10 @@ export type RecentBatch = {
 export type AdminDashboardData = {
   generatedAt: string;
   dataConnected: boolean;
+  dataStatus: "available" | "partial" | "unavailable";
+  dataNotice: string | null;
+  coverageStartedAt: string | null;
+  pagination: { experimentPage: number; batchPage: number; experimentCount: number; batchCount: number };
   outreachSchemaReady: boolean;
   metrics: AdminMetric[];
   trend: TrendPoint[];

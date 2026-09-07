@@ -283,5 +283,12 @@
   :global(html:not([data-motion="full"])) .overlay::before,
   :global(html:not([data-motion="full"])) .dialog,
   :global(html:not([data-motion="full"])) .dialog *,
+  :global(html:not([data-motion="full"])) .dialog *::before,
+  :global(html:not([data-motion="full"])) .dialog *::after,
   :global(html:not([data-motion="full"])) .preview::after { animation: none !important; }
+  :global(html:not([data-motion="full"])) .overlay,
+  :global(html:not([data-motion="full"])) .dialog,
+  :global(html:not([data-motion="full"])) .dialog *,
+  :global(html:not([data-motion="full"])) .dialog *::before,
+  :global(html:not([data-motion="full"])) .dialog *::after { transition: none !important; }
 }

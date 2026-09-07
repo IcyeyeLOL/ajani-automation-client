@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type DragEvent } from "react";
 import { useAccountAccess } from "@/components/account-access-dialog";
 import type { SystemBlock } from "@/lib/domain/types";
+import { CURRENT_HANDOFF_POLICY_VERSION, HANDOFF_NOTICE_COPY } from "@/lib/legal/policy-versions";
 import { saveWebsiteRequestDraft } from "@/lib/request-drafts/client";
 
 const initialBlocks: SystemBlock[] = [
@@ -33,6 +35,7 @@ export function BuildRequestFlow() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   const advance = () => setStage((current) => Math.min(current + 1, stageNames.length - 1));
   const goBack = () => setStage((current) => Math.max(current - 1, 0));
@@ -56,12 +59,14 @@ export function BuildRequestFlow() {
     setDraggedId(null);
   };
   const sendRequest = async () => {
-    if (saving) return;
+    if (saving || !legalAccepted) return;
     setSaving(true);
     setSaveError(null);
 
     try {
       await saveWebsiteRequestDraft({
+        legalAcceptanceAcknowledged: true,
+        legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
         title: "After-hours lead handoff",
         transcript: "Most leads come through Instagram and the website. When someone replies after hours, I want the first response to feel personal before the team gets involved.",
         clarificationAnswer: answer.trim(),
@@ -109,8 +114,15 @@ export function BuildRequestFlow() {
 
       {stage === 4 && <section className={`flow-stage stage-${stage}`} key={stage}><FlowHeading eyebrow="05 / SUBMIT YOUR REQUEST" title={<>Everything is clear. Now send the <em>build request.</em></>} copy="Once submitted, Ajani reviews the approved route and opens your private handoff room." />
         <div className="launch-grid"><article className="submission-card"><span>READY TO REQUEST</span><h2>After-hours lead handoff</h2><div>{[["VOICE NOTE", "01:12 RECEIVED"], ["SYSTEM", `${String(blocks.length).padStart(2, "0")} BLOCKS APPROVED`], ["BUILD WINDOW", "7 TO 10 DAYS"]].map(([label, value]) => <p key={label}><small>{label}</small><b>{value}</b></p>)}</div><p>Request this exact system, then use your private account to follow the build.</p></article><NextTimeline /></div>
+        <div className="flow-legal-acceptance">
+          <input checked={legalAccepted} id="legacy-flow-legal-acceptance" onChange={(event) => setLegalAccepted(event.target.checked)} type="checkbox" />
+          <div>
+            <label htmlFor="legacy-flow-legal-acceptance">{HANDOFF_NOTICE_COPY.agreement}</label>
+            <p className="flow-legal-note">Review the <Link href="/terms">Terms of Service</Link>, <Link href="/acceptable-use">Acceptable Use Policy</Link>, and <Link href="/privacy">Privacy Policy</Link>. {HANDOFF_NOTICE_COPY.detail}</p>
+          </div>
+        </div>
         {saveError ? <p className="flow-save-error" role="alert">{saveError}</p> : null}
-        <FlowActions secondary="BACK TO REVIEW" primary={saving ? "SAVING REQUEST…" : "REQUEST BUILD"} primaryDisabled={saving} onPrimary={sendRequest} onSecondary={goBack} />
+        <FlowActions secondary="BACK TO REVIEW" primary={saving ? "SAVING REQUEST…" : "REQUEST BUILD"} primaryDisabled={saving || !legalAccepted} onPrimary={sendRequest} onSecondary={goBack} />
       </section>}
     </div>
   );

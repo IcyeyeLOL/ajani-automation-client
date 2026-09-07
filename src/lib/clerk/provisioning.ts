@@ -51,15 +51,10 @@ export async function provisionClerkWorkspace(userId: string, activeOrganization
   if (!email) throw new Error("clerk_email_required_for_handoff");
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || email || "Ajani client";
   const admin = createSupabaseAdminClient();
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: userId,
-    full_name: fullName,
-    email,
-    phone,
-    avatar_url: user.imageUrl,
-    clerk_updated_at: new Date().toISOString(),
-    deleted_at: null,
-  }, { onConflict: "id" });
+  const { error: profileError } = await admin.rpc("sync_clerk_profile", {
+    p_id: userId, p_full_name: fullName, p_email: email, p_phone: phone,
+    p_avatar_url: user.imageUrl, p_event_at: new Date(user.updatedAt).toISOString(), p_deleted: false,
+  });
   if (profileError) throw profileError;
 
   const organizationResult = await admin
@@ -71,25 +66,27 @@ export async function provisionClerkWorkspace(userId: string, activeOrganization
   let organization = organizationResult.data;
 
   if (!organization) {
-    const inserted = await admin.from("organizations").insert({
-      owner_id: userId,
-      business_name: membership.organization.name,
-      clerk_organization_id: membership.organization.id,
-      clerk_slug: membership.organization.slug,
-      avatar_url: membership.organization.imageUrl,
-    }).select("id").single();
+    const providerOrganization = await clerk.organizations.getOrganization({ organizationId: membership.organization.id });
+    if (!providerOrganization.createdBy) throw new Error("organization_owner_missing");
+    const inserted = await admin.rpc("sync_clerk_organization", {
+      p_owner_id: providerOrganization.createdBy,
+      p_business_name: providerOrganization.name,
+      p_clerk_organization_id: providerOrganization.id,
+      p_clerk_slug: providerOrganization.slug,
+      p_avatar_url: providerOrganization.imageUrl,
+      p_event_at: new Date(providerOrganization.updatedAt).toISOString(), p_archived: false,
+    });
     if (inserted.error) throw inserted.error;
-    organization = inserted.data;
+    if (typeof inserted.data !== "string") throw new Error("organization_provisioning_unavailable");
+    organization = { id: inserted.data };
   }
 
   const isOwner = membership.role === "org:admin";
-  const { error: membershipError } = await admin.from("organization_members").upsert({
-    organization_id: organization.id,
-    user_id: userId,
-    role: isOwner ? "owner" : "member",
-    clerk_membership_id: membership.id,
-    clerk_role: membership.role,
-  }, { onConflict: "organization_id,user_id" });
+  const { error: membershipError } = await admin.rpc("sync_clerk_membership", {
+    p_organization_id: organization.id, p_user_id: userId, p_role: isOwner ? "owner" : "member",
+    p_clerk_membership_id: membership.id, p_clerk_role: membership.role,
+    p_event_at: new Date(membership.updatedAt).toISOString(), p_deleted: false,
+  });
   if (membershipError) throw membershipError;
 
   return {

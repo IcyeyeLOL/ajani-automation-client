@@ -32,20 +32,12 @@ export async function DELETE(request: Request, context: RouteContext<"/api/reque
 
   try {
     const admin = createSupabaseAdminClient();
-    const { data: draft, error } = await admin
-      .from("request_drafts")
-      .select("id,status,claimed_by,submitted_build_request_id")
-      .eq("id", draftId)
-      .eq("token_hash", tokenHash)
-      .maybeSingle();
-
-    if (error || !draft || draft.claimed_by || draft.submitted_build_request_id || !["draft", "ready_to_submit"].includes(draft.status)) {
-      return Response.json({ error: "The draft is unavailable." }, { status: 404 });
-    }
-
-    const deleted = await deleteRequestDraftData(admin, draft.id);
+    const deleted = await deleteRequestDraftData(admin, draftId, { tokenHash });
     return Response.json({ deleted: true, ...deleted });
   } catch (error) {
+    if (error && typeof error === "object" && "message" in error && String(error.message).includes("draft_unavailable")) {
+      return Response.json({ error: "The draft is unavailable." }, { status: 404 });
+    }
     console.error("Draft deletion failed", { message: error instanceof Error ? error.message : "Unknown error" });
     return Response.json({ error: "The draft could not be deleted. Please retry." }, { status: 503 });
   }

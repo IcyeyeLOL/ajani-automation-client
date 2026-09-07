@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   type ReactNode,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -17,7 +18,14 @@ import { useAccountAccess } from "@/components/account-access-dialog";
 import { VoiceRecorder, type VoiceMemoCapture } from "@/components/home/voice-recorder";
 import type { SystemBlock } from "@/lib/domain/types";
 import {
+  CURRENT_HANDOFF_POLICY_VERSION,
+  HANDOFF_NOTICE_COPY,
+  PROCESSING_NOTICE_VERSION,
+} from "@/lib/legal/policy-versions";
+import { CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT } from "@/lib/legal/processing-notice";
+import {
   asTypedClarifications,
+  approvedAutomationEmailBrief,
   automationEmailBriefSchema,
   fallbackAutomationIntake,
   fallbackAutomationShape,
@@ -33,12 +41,16 @@ import {
   type TypedNoteAnalysis,
 } from "@/lib/record/typed-note-analysis";
 import {
+  acknowledgeSavedWebsiteRequestDraft,
   claimSavedWebsiteRequestDraft,
   clearSavedWebsiteRequestCapability,
   deleteSavedWebsiteRequestDraft,
+  getSavedWebsiteRequestDraft,
   saveWebsiteRequestDraft,
 } from "@/lib/request-drafts/client";
 import { transcribeCapturedVoiceMemo } from "@/lib/transcription/client";
+import { getReducedMotionPreference } from "@/lib/motion/preference";
+import { readTabValue, removeTabValue, writeTabValue } from "@/lib/record/tab-storage";
 import styles from "./record-flow.module.css";
 
 const stages = ["Tell us", "Clarify", "Shape", "Check", "Handoff"];
@@ -154,6 +166,8 @@ type StoredFlow = {
   briefOverrides: BriefOverrides;
   emailBrief: AutomationEmailBrief | null;
   automationMethod: "ai" | "deterministic_fallback" | null;
+  processingAcknowledged: boolean;
+  processingNoticeVersion: string;
 };
 
 const emptyClarificationResponse: ClarificationResponse = { answerChoice: "", customAnswer: "" };
@@ -195,7 +209,7 @@ function reviewDraftError(draft: ReviewEditDraft | null) {
 
 function readStoredFlow(): StoredFlow | null {
   try {
-    const raw = sessionStorage.getItem(FLOW_STORAGE_KEY);
+    const raw = readTabValue(FLOW_STORAGE_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<Omit<StoredFlow, "version">> & {
       version?: number;
@@ -224,6 +238,8 @@ function readStoredFlow(): StoredFlow | null {
       : value.written.trim().length >= MIN_TYPED_NOTE_CHARACTERS
         ? analyzeTypedNote(value.written).clarifications
         : [];
+    const processingAcknowledged = value.processingAcknowledged === true
+      && value.processingNoticeVersion === PROCESSING_NOTICE_VERSION;
     return {
       version: 5,
       stage: Math.max(0, Math.min(Number(value.stage) || 0, stages.length - 1)),
@@ -245,6 +261,8 @@ function readStoredFlow(): StoredFlow | null {
       automationMethod: value.automationMethod === "ai" || value.automationMethod === "deterministic_fallback"
         ? value.automationMethod
         : null,
+      processingAcknowledged,
+      processingNoticeVersion: PROCESSING_NOTICE_VERSION,
     };
   } catch {
     return null;
@@ -308,11 +326,14 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   const [mobileRouteMode, setMobileRouteMode] = useState<"edit" | "reorder">("edit");
   const [mobileActiveBlockId, setMobileActiveBlockId] = useState(fallbackBlocks[0]?.id ?? "");
   const [mobileRouteAnnouncement, setMobileRouteAnnouncement] = useState("Step 1 selected");
+  const [processingAcknowledged, setProcessingAcknowledged] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
+  const [savedDraftPersistence, setSavedDraftPersistence] = useState<"session" | "memory" | null>(null);
   const [submittedBuildRequestId, setSubmittedBuildRequestId] = useState<string | null>(null);
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>("idle");
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
@@ -339,7 +360,25 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   const writtenRef = useRef(written);
   const transcriptionRequest = useRef(0);
   const automationRequest = useRef(0);
+  const transcriptionController = useRef<AbortController | null>(null);
+  const automationController = useRef<AbortController | null>(null);
   const didMount = useRef(false);
+
+  const cancelTranscription = useCallback(() => {
+    transcriptionRequest.current += 1;
+    transcriptionController.current?.abort();
+    transcriptionController.current = null;
+  }, []);
+  const cancelAutomation = useCallback(() => {
+    automationRequest.current += 1;
+    automationController.current?.abort();
+    automationController.current = null;
+  }, []);
+
+  useEffect(() => () => {
+    cancelTranscription();
+    cancelAutomation();
+  }, [cancelAutomation, cancelTranscription]);
 
   const writtenReady = written.trim().length >= MIN_TYPED_NOTE_CHARACTERS;
   const capturedNoteReady = capture !== null && voiceTranscriptionStatus === "ready" && writtenReady;
@@ -347,7 +386,9 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     capturedNoteReady
     || (!capture && writtenReady)
   );
-  const noteHint = voiceRecordingActive
+  const noteHint = !processingAcknowledged
+    ? "Review and acknowledge the processing notice before continuing"
+    : voiceRecordingActive
     ? "Finish the voice note before continuing"
     : capture && voiceTranscriptionStatus === "transcribing"
       ? "Putting your voice note into writing…"
@@ -401,8 +442,8 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   const humanHandoffs = blocks.filter((block) => block.kind === "handoff").length;
   const canRemoveBlock = (block: SystemBlock, route = blocks) => route.length > 2
     && (block.kind !== "handoff" || route.filter((item) => item.kind === "handoff").length > 1);
-  const handoffTitle = emailBrief?.subject || `${blocks[0]?.title ?? "Your workflow"} → ${blocks.at(-1)?.title ?? "human handoff"}`;
-  const handoffOverview = emailBrief?.overview || effectiveProblem.desiredOutcome;
+  const handoffTitle = `${blocks[0]?.title ?? "Your workflow"} → ${blocks.at(-1)?.title ?? "human handoff"}`;
+  const handoffOverview = effectiveProblem.desiredOutcome;
   const receiptReference = savedDraftId ? savedDraftId.slice(0, 8).toUpperCase() : "DRAFT";
   const buildReference = submittedBuildRequestId?.slice(0, 8).toUpperCase() || receiptReference;
   const submittedLabel = submittedAt
@@ -419,13 +460,16 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      LEGACY_FLOW_STORAGE_KEYS.forEach((key) => sessionStorage.removeItem(key));
+      const storageAvailable = LEGACY_FLOW_STORAGE_KEYS.map(removeTabValue).every(Boolean);
       const stored = readStoredFlow();
       if (stored) {
-        const pendingDraftId = sessionStorage.getItem("ajani_request_draft_id");
-        const restoredStage = stored.written.trim().length >= MIN_TYPED_NOTE_CHARACTERS ? stored.stage : 0;
+        const pendingDraft = getSavedWebsiteRequestDraft();
+        const restoredStage = stored.processingAcknowledged
+          && stored.written.trim().length >= MIN_TYPED_NOTE_CHARACTERS
+          ? stored.stage
+          : 0;
         setStage(restoredStage);
-        setReached(Math.max(restoredStage, stored.reached));
+        setReached(stored.processingAcknowledged ? Math.max(restoredStage, stored.reached) : 0);
         setInputMode(stored.inputMode);
         setWritten(stored.written);
         setClarificationIndex(stored.clarificationIndex);
@@ -437,14 +481,16 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         setBriefOverrides(stored.briefOverrides);
         setEmailBrief(stored.emailBrief);
         setAutomationMethod(stored.automationMethod);
+        setProcessingAcknowledged(stored.processingAcknowledged);
         setAutomationStatus(stored.automationMethod === "deterministic_fallback" ? "fallback" : stored.automationMethod ? "ready" : "idle");
-        if (pendingDraftId && restoredStage === 4) {
-          setSavedDraftId(pendingDraftId);
+        if (pendingDraft && restoredStage === 4) {
+          setSavedDraftId(pendingDraft.id);
+          setSavedDraftPersistence(pendingDraft.persistence);
           setSubmissionStatus("awaiting_account");
         }
         setSaveStatus("Restored from this tab");
       } else {
-        setSaveStatus("Saved in this tab");
+        setSaveStatus(storageAvailable ? "Saved in this tab" : "Keep this tab open to keep your progress");
       }
       setHydrated(true);
     }, 0);
@@ -499,16 +545,14 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         briefOverrides,
         emailBrief,
         automationMethod,
+        processingAcknowledged,
+        processingNoticeVersion: PROCESSING_NOTICE_VERSION,
       };
-      try {
-        sessionStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(state));
-        setSaveStatus("Saved in this tab");
-      } catch {
-        setSaveStatus("Keep this tab open to keep your progress");
-      }
+      const saved = writeTabValue(FLOW_STORAGE_KEY, JSON.stringify(state));
+      setSaveStatus(saved ? "Saved in this tab" : "Keep this tab open to keep your progress");
     }, 320);
     return () => window.clearTimeout(timer);
-  }, [automationMethod, blocks, briefOverrides, clarificationIndex, clarificationQuestions, clarificationResponses, emailBrief, hydrated, inputMode, reached, routeCustomized, stage, suggestedBlocks, written]);
+  }, [automationMethod, blocks, briefOverrides, clarificationIndex, clarificationQuestions, clarificationResponses, emailBrief, hydrated, inputMode, processingAcknowledged, reached, routeCustomized, stage, suggestedBlocks, written]);
 
   useEffect(() => {
     return () => {
@@ -570,7 +614,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     const gesture = pointerDrag.current;
     if (gesture?.active) syncPointerDragVisual(gesture);
     if (!previous) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches && document.documentElement.dataset.motion !== "full") return;
+    if (getReducedMotionPreference()) return;
 
     for (const [id, element] of animatedElements) {
       if (id === dragged) continue;
@@ -590,11 +634,17 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   const go = (index: number) => {
     const target = Math.max(0, Math.min(index, stages.length - 1));
+    if (target > 0 && !processingAcknowledged) return;
     if (reviewDraft && target !== stage) {
       setReviewEditMessage("Save or cancel this file before leaving the development brief.");
       firstReviewEditField.current?.focus();
       return;
     }
+    // A result belongs to the step/input snapshot that requested it.
+    cancelAutomation();
+    setAutomationStatus((current) => current === "clarifying" || current === "shaping"
+      ? automationMethod === "ai" ? "ready" : automationMethod === "deterministic_fallback" ? "fallback" : "idle"
+      : current);
     if (target === 1 && clarifications.length > 0) {
       setClarificationResponses((current) => clarifications.map((clarification, questionIndex) => {
         const existing = current[questionIndex];
@@ -612,8 +662,10 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   const chooseInputMode = (mode: InputMode) => {
     if (mode === inputMode) return;
+    cancelAutomation();
+    setAutomationStatus(automationMethod === "ai" ? "ready" : automationMethod === "deterministic_fallback" ? "fallback" : "idle");
     if (mode === "type") {
-      transcriptionRequest.current += 1;
+      cancelTranscription();
       setCapture(null);
       setVoiceTranscriptionStatus("idle");
       setVoiceTranscriptionError(null);
@@ -622,6 +674,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   };
 
   const continueFromNote = async () => {
+    if (!processingAcknowledged) return;
     if (capture && (!writtenReady || voiceTranscriptionStatus !== "ready")) return;
     if (!writtenReady || automationStatus === "clarifying") return;
     if (automationMethod && clarifications.length > 0) {
@@ -629,12 +682,18 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       return;
     }
 
-    const requestId = automationRequest.current + 1;
-    automationRequest.current = requestId;
+    cancelAutomation();
+    const requestId = automationRequest.current;
+    const controller = new AbortController();
+    automationController.current = controller;
     setAutomationStatus("clarifying");
     setAutomationError(null);
     try {
-      const result = await requestAutomationClarifications(written.trim());
+      const result = await requestAutomationClarifications(
+        written.trim(),
+        CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT,
+        controller.signal,
+      );
       if (automationRequest.current !== requestId) return;
       setClarificationQuestions(asTypedClarifications(result));
       setClarificationResponses([]);
@@ -653,13 +712,15 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       setAutomationMethod(result.method);
       setAutomationStatus("fallback");
       setAutomationError(error instanceof Error ? error.message : "AI analysis is temporarily unavailable.");
+    } finally {
+      if (automationRequest.current === requestId) automationController.current = null;
     }
     setStage(1);
     setReached((high) => Math.max(high, 1));
   };
 
   const updateWritten = (value: string) => {
-    automationRequest.current += 1;
+    cancelAutomation();
     writtenRef.current = value;
     setWritten(value);
     setReached((high) => Math.min(high, stage));
@@ -688,26 +749,35 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   };
 
   const resetVoiceCapture = () => {
-    transcriptionRequest.current += 1;
+    cancelTranscription();
     setCapture(null);
     setVoiceTranscriptionStatus("idle");
     setVoiceTranscriptionError(null);
   };
 
   const handleVoiceCaptured = async (nextCapture: VoiceMemoCapture) => {
-    const requestId = transcriptionRequest.current + 1;
-    transcriptionRequest.current = requestId;
+    if (!processingAcknowledged) return;
+    cancelTranscription();
+    const requestId = transcriptionRequest.current;
     setCapture(nextCapture);
     setVoiceTranscriptionError(null);
 
-    if (nextCapture.transcriptSource === "manual" && writtenRef.current.trim().length >= MIN_TYPED_NOTE_CHARACTERS) {
-      setVoiceTranscriptionStatus("ready");
+    if (nextCapture.transcriptSource === "manual") {
+      const enoughDetail = writtenRef.current.trim().length >= MIN_TYPED_NOTE_CHARACTERS;
+      setVoiceTranscriptionStatus(enoughDetail ? "ready" : "failed");
+      if (!enoughDetail) setVoiceTranscriptionError("Your edits are preserved. Switch to typing to add a little more detail before continuing.");
       return;
     }
 
     setVoiceTranscriptionStatus("transcribing");
+    const controller = new AbortController();
+    transcriptionController.current = controller;
     try {
-      const transcript = await transcribeCapturedVoiceMemo(nextCapture.blob);
+      const transcript = await transcribeCapturedVoiceMemo(
+        nextCapture.blob,
+        CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT,
+        controller.signal,
+      );
       if (transcriptionRequest.current !== requestId) return;
       if (transcript.length < MIN_TYPED_NOTE_CHARACTERS) {
         throw new Error("We heard the note, but it needs a little more detail before Clarify.");
@@ -722,6 +792,8 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       }
       setVoiceTranscriptionStatus("failed");
       setVoiceTranscriptionError(error instanceof Error ? error.message : "We could not put this voice note into writing.");
+    } finally {
+      if (transcriptionRequest.current === requestId) transcriptionController.current = null;
     }
   };
 
@@ -1064,9 +1136,9 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     const id = `step-${Date.now()}`;
     setBlocks((current) => [...current, {
       id,
-      kind: "custom",
-      title: "New step",
-      detail: "Describe what should happen here.",
+      kind: hasHumanHandoff ? "custom" : "handoff",
+      title: hasHumanHandoff ? "New step" : "Human handoff",
+      detail: hasHumanHandoff ? "Describe what should happen here." : "Send exceptions and decisions requiring judgment to a person with the full context.",
     }]);
     setMobileActiveBlockId(id);
     setMobileRouteMode("edit");
@@ -1104,6 +1176,9 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   };
 
   const updateClarificationResponse = (update: Partial<ClarificationResponse>) => {
+    cancelAutomation();
+    setAutomationStatus(automationMethod === "ai" ? "ready" : automationMethod === "deterministic_fallback" ? "fallback" : "idle");
+    setEmailBrief(null);
     setClarificationResponses((current) => {
       const next = [...current];
       next[clarificationIndex] = { ...(next[clarificationIndex] ?? emptyClarificationResponse), ...update };
@@ -1113,6 +1188,10 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   };
 
   const advanceClarification = async () => {
+    if (!processingAcknowledged) {
+      go(0);
+      return;
+    }
     if (!currentAnswer) return;
     if (clarificationIndex < clarifications.length - 1) {
       setClarificationIndex((current) => current + 1);
@@ -1124,18 +1203,27 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       return;
     }
     if (automationStatus === "shaping") return;
-    const requestId = automationRequest.current + 1;
-    automationRequest.current = requestId;
+    cancelAutomation();
+    const requestId = automationRequest.current;
+    const controller = new AbortController();
+    automationController.current = controller;
     setAutomationStatus("shaping");
     setAutomationError(null);
     let result;
     try {
-      result = await requestAutomationShape(written.trim(), clarificationAnswers);
+      result = await requestAutomationShape(
+        written.trim(),
+        clarificationAnswers,
+        CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT,
+        controller.signal,
+      );
       if (automationRequest.current !== requestId) return;
     } catch (error) {
       if (automationRequest.current !== requestId) return;
       result = fallbackAutomationShape(written.trim(), clarificationAnswers);
       setAutomationError(error instanceof Error ? error.message : "AI route generation is temporarily unavailable.");
+    } finally {
+      if (automationRequest.current === requestId) automationController.current = null;
     }
     setBriefOverrides({ ...result.problem, protection: result.protection });
     setBlocks(result.systemBlocks);
@@ -1151,6 +1239,10 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   const sendRequest = async () => {
     if (saving || !writtenReady || !allClarificationsReady) return;
+    if (!legalAccepted) {
+      setSaveError("Review and accept the Terms, Acceptable Use Policy, and Privacy Policy before sending your request.");
+      return;
+    }
     if (submissionStatus === "submitted") {
       router.push("/portal");
       return;
@@ -1160,12 +1252,15 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
     try {
       let draftId = savedDraftId;
+      const existingDraftNeedsAcknowledgment = Boolean(draftId);
       if (!draftId) {
         setSubmissionStatus("saving");
         const firstStep = blocks[0]?.title ?? "Your request";
         const finalStep = blocks.at(-1)?.title ?? "human handoff";
         const clarificationAnswer = clarificationAnswers.map((item) => item.answer).join("\n").slice(0, 2_000);
         const draft = await saveWebsiteRequestDraft({
+          legalAcceptanceAcknowledged: true,
+          legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
           title: `${firstStep} → ${finalStep}`.slice(0, 120),
           transcript: written.trim(),
           clarificationAnswer,
@@ -1174,7 +1269,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
             ...effectiveProblem,
             protection: effectiveProtection,
           },
-          emailBrief: emailBrief ?? fallbackAutomationShape(written.trim(), clarificationAnswers).emailBrief,
+          emailBrief: approvedAutomationEmailBrief(blocks, effectiveProblem, routeCustomized ? null : emailBrief),
           systemBlocks: blocks,
           voiceMemo: capture ? {
             durationSeconds: capture.seconds,
@@ -1184,26 +1279,34 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         }, capture?.blob);
         draftId = draft.id;
         setSavedDraftId(draft.id);
+        setSavedDraftPersistence(getSavedWebsiteRequestDraft()?.persistence ?? "memory");
+      }
+
+      if (existingDraftNeedsAcknowledgment) {
+        await acknowledgeSavedWebsiteRequestDraft(CURRENT_HANDOFF_POLICY_VERSION, draftId);
       }
 
       if (isLoaded && isSignedIn) {
         setSubmissionStatus("connecting");
-        let result = await claimSavedWebsiteRequestDraft();
+        let result = await claimSavedWebsiteRequestDraft(draftId);
         if (result.status === "organization_activation_required" && result.organizationId) {
           if (!setActive) throw new Error("Account access is unavailable. Please retry.");
           await setActive({ organization: result.organizationId });
-          result = await claimSavedWebsiteRequestDraft();
+          result = await claimSavedWebsiteRequestDraft(draftId);
         }
         if (result.status !== "submitted") {
           throw new Error(result.error || "Your request was saved, but Ajani has not received it yet. Please retry.");
         }
-        clearSavedWebsiteRequestCapability();
-        sessionStorage.removeItem(FLOW_STORAGE_KEY);
+        clearSavedWebsiteRequestCapability(draftId);
+        removeTabValue(FLOW_STORAGE_KEY);
         setSubmittedBuildRequestId(result.buildRequest?.build_request_id ?? draftId);
         setSubmittedAt(result.buildRequest?.build_request_created_at ?? new Date().toISOString());
         setSubmissionStatus("submitted");
       } else {
         setSubmissionStatus("awaiting_account");
+        // Let the user see the persistence warning before starting an auth
+        // method which might navigate away and lose this memory-only capability.
+        if (!existingDraftNeedsAcknowledgment && getSavedWebsiteRequestDraft()?.persistence === "memory") return;
         openAccountAccess("request", "/portal?handoff=pending");
       }
     } catch (error) {
@@ -1220,15 +1323,19 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     setDeleteError(null);
     try {
       await deleteSavedWebsiteRequestDraft();
-      sessionStorage.removeItem(FLOW_STORAGE_KEY);
+      removeTabValue(FLOW_STORAGE_KEY);
       setSavedDraftId(null);
+      setSavedDraftPersistence(null);
       setSubmittedBuildRequestId(null);
       setSubmissionStatus("idle");
       setSubmittedAt(null);
+      setProcessingAcknowledged(false);
+      setLegalAccepted(false);
       setStage(0);
       setReached(0);
       setInputMode("speak");
-      transcriptionRequest.current += 1;
+      cancelTranscription();
+      cancelAutomation();
       setCapture(null);
       setVoiceRecordingActive(false);
       setVoiceTranscriptionStatus("idle");
@@ -1272,7 +1379,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
               <li data-rail={index < reached ? "on" : "off"} data-state={state} key={name}>
                 <button
                   aria-current={index === stage ? "step" : undefined}
-                  disabled={!hydrated || (savedDraftId ? index !== stage : index > reached)}
+                  disabled={!hydrated || (!processingAcknowledged && index > 0) || (savedDraftId ? index !== stage : index > reached)}
                   onClick={() => go(index)}
                   type="button"
                 >
@@ -1300,6 +1407,36 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
             <button aria-pressed={inputMode === "type"} disabled={!hydrated} onClick={() => chooseInputMode("type")} type="button">Type</button>
           </div>
 
+          <p className={styles.processingDisclosure}>
+            <i aria-hidden="true" />
+            Your note may be sent to Ajani&apos;s transcription or AI providers to create editable text, questions, and a proposed route. Do not include sensitive or regulated personal information. <Link href="/privacy#notice-at-collection">How processing works</Link>.
+          </p>
+
+          <div className={styles.processingConsent}>
+            <input
+              checked={processingAcknowledged}
+              disabled={voiceRecordingActive}
+              id="request-processing-acceptance"
+              onChange={(event) => {
+                setProcessingAcknowledged(event.target.checked);
+                if (!event.target.checked) {
+                  cancelAutomation();
+                  setAutomationStatus("idle");
+                  cancelTranscription();
+                  if (voiceTranscriptionStatus === "transcribing") {
+                    setVoiceTranscriptionStatus("failed");
+                    setVoiceTranscriptionError("Processing paused. Review the notice before retrying this recording.");
+                  }
+                }
+              }}
+              type="checkbox"
+            />
+            <div>
+              <label htmlFor="request-processing-acceptance"><strong>I confirm I am 18 or older, am authorized to share this note, and have permission from anyone recorded.</strong></label>
+              <span>I acknowledge that Ajani may process the note as described in the <Link href="/privacy#notice-at-collection">Privacy Policy</Link>. The <Link href="/terms">Terms of Service</Link> also apply to this request tool.</span>
+            </div>
+          </div>
+
           <div className={styles.split}>
             <div className={styles.inputSurface} data-mode={inputMode} key={inputMode}>
               {inputMode === "speak" ? (
@@ -1311,6 +1448,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
                     onCaptured={(nextCapture) => void handleVoiceCaptured(nextCapture)}
                     onInvalidated={resetVoiceCapture}
                     onTranscriptChange={updateWritten}
+                    processingAllowed={processingAcknowledged}
                     savedCapture={capture}
                     transcript={written}
                   />
@@ -1320,6 +1458,9 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
                       {voiceTranscriptionStatus === "transcribing"
                         ? "Putting your voice note into writing…"
                         : voiceTranscriptionError || "We could not put this note into writing. Redo it or switch to typing."}
+                      {voiceTranscriptionStatus === "failed" ? (
+                        <button disabled={!processingAcknowledged} onClick={() => void handleVoiceCaptured(capture)} type="button">Retry transcription</button>
+                      ) : null}
                     </p>
                   ) : null}
                 </>
@@ -1360,7 +1501,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
             hint={noteHint}
             onPrimary={() => void continueFromNote()}
             primary={automationStatus === "clarifying" ? "Writing your questions…" : "Continue to clarify"}
-            primaryDisabled={!noteReady}
+            primaryDisabled={!processingAcknowledged || !noteReady}
           />
         </Stage>
       ) : null}
@@ -1444,11 +1585,15 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
           </div>
 
           <Actions
-            hint={automationStatus === "shaping" ? "Combining your transcript and every confirmed answer…" : questionsNeedRefresh ? "Refresh the questions so they match your edited note." : !writtenReady ? "Add or confirm the written version first" : !currentAnswer ? "Choose the answer that fits" : undefined}
+            hint={!processingAcknowledged ? "Review and acknowledge the processing notice before continuing" : automationStatus === "shaping" ? "Combining your transcript and every confirmed answer…" : questionsNeedRefresh ? "Refresh the questions so they match your edited note." : !writtenReady ? "Add or confirm the written version first" : !currentAnswer ? "Choose the answer that fits" : undefined}
             onPrimary={() => void (questionsNeedRefresh ? continueFromNote() : advanceClarification())}
-            onSecondary={clarificationIndex > 0 ? () => setClarificationIndex((current) => current - 1) : () => go(0)}
+            onSecondary={clarificationIndex > 0 ? () => {
+              cancelAutomation();
+              setAutomationStatus(automationMethod === "ai" ? "ready" : automationMethod === "deterministic_fallback" ? "fallback" : "idle");
+              setClarificationIndex((current) => current - 1);
+            } : () => go(0)}
             primary={automationStatus === "clarifying" ? "Refreshing your questions…" : automationStatus === "shaping" ? "Shaping your automation…" : questionsNeedRefresh ? "Refresh questions" : clarificationIndex < clarifications.length - 1 ? "Next question" : "Build the first route"}
-            primaryDisabled={automationStatus === "clarifying" || automationStatus === "shaping" || (!questionsNeedRefresh && (!currentAnswer || (clarificationIndex === clarifications.length - 1 && !allClarificationsReady)))}
+            primaryDisabled={!processingAcknowledged || automationStatus === "clarifying" || automationStatus === "shaping" || (!questionsNeedRefresh && (!currentAnswer || (clarificationIndex === clarifications.length - 1 && !allClarificationsReady)))}
             secondary={clarificationIndex > 0 ? "Previous question" : "Back to your note"}
           />
         </Stage>
@@ -1998,8 +2143,27 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
                 <p>Included in the handoff</p>
                 <ul>{buildIncludes.map((item) => <li key={item}><i aria-hidden="true">✓</i>{item}</li>)}</ul>
               </div>
+              <div className={styles.legalAcceptance}>
+                <input
+                  aria-describedby="handoff-legal-detail"
+                  checked={legalAccepted}
+                  id="handoff-legal-acceptance"
+                  onChange={(event) => {
+                    setLegalAccepted(event.target.checked);
+                    if (event.target.checked && saveError?.includes("Acceptable Use Policy")) setSaveError(null);
+                  }}
+                  type="checkbox"
+                />
+                <div>
+                  <label htmlFor="handoff-legal-acceptance"><strong>{HANDOFF_NOTICE_COPY.agreement}</strong></label>
+                  <span id="handoff-legal-detail">Review the <Link href="/terms">Terms of Service</Link>, <Link href="/acceptable-use">Acceptable Use Policy</Link>, and <Link href="/privacy">Privacy Policy</Link>. {HANDOFF_NOTICE_COPY.detail}</span>
+                </div>
+              </div>
               <div className={styles.handoffControls}>
-                <button className={styles.handoffPrimary} disabled={saving} onClick={() => void sendRequest()} type="button">
+                {savedDraftPersistence === "memory" ? (
+                  <p role="status">Your browser blocks tab storage. Keep this page open to finish account access. Reloading or a sign-in redirect will lose access to this saved draft; enable site storage before using a sign-in method that leaves this page.</p>
+                ) : null}
+                <button className={styles.handoffPrimary} disabled={saving || !legalAccepted} onClick={() => void sendRequest()} type="button">
                   {handoffButtonLabel}<span aria-hidden="true">→</span>
                 </button>
                 {!savedDraftId ? <button className={styles.handoffBack} onClick={() => go(3)} type="button"><span aria-hidden="true">←</span>Back to check</button> : null}

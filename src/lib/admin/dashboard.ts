@@ -1,243 +1,103 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireAdminSession } from "@/lib/admin/session";
+import { withinDeadline } from "@/lib/operations/deadline";
 import { hasAdequateProportionSample, multipleComparisonCriticalZ, twoProportionZScore } from "@/lib/admin/statistics";
 import type {
-  AdminDashboardData,
-  AdminMetric,
-  FunnelStage,
-  OperationsStatus,
-  OutreachExperiment,
-  OutreachMessageStep,
-  OutreachTotals,
-  RecentBatch,
-  TrendPoint,
-  VariantPerformance,
+  AdminDashboardData, AdminMetric, OutreachExperiment, OutreachMessageStep,
+  OutreachTotals, VariantPerformance,
 } from "@/lib/admin/types";
 
 type Row = Record<string, unknown>;
-type ReadResult = { rows: Row[]; available: boolean };
+export type AdminPages = { experimentPage?: number; batchPage?: number };
 
-const DAY_MS = 86_400_000;
+export function adminPageNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? Math.min(number, 100_000) : 0;
+}
 
-export async function loadAdminDashboardData(): Promise<AdminDashboardData> {
+export async function loadAdminDashboardData(pages: AdminPages = {}): Promise<AdminDashboardData> {
+  // The DAL authorizes independently of the layout, which can render in parallel.
+  await requireAdminSession();
   const generatedAt = new Date().toISOString();
-  let admin;
+  const experimentPage = adminPageNumber(pages.experimentPage);
+  const batchPage = adminPageNumber(pages.batchPage);
   try {
-    admin = createSupabaseAdminClient();
-  } catch {
-    return emptyDashboard(generatedAt);
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await withinDeadline(admin.rpc("load_admin_analytics", {
+      p_experiment_page: experimentPage,
+      p_batch_page: batchPage,
+    }), Date.now() + 12_000);
+    if (error) throw error;
+    return shapeAdminAnalytics(data, generatedAt, { experimentPage, batchPage });
+  } catch (error) {
+    console.error("Admin analytics unavailable", {
+      code: error && typeof error === "object" && "code" in error ? error.code : "analytics_unavailable",
+    });
+    return {
+      generatedAt, dataConnected: false, outreachSchemaReady: false, dataStatus: "unavailable",
+      dataNotice: "Analytics are unavailable. Check the analytics migration and database connection; missing values are not zero activity.",
+      coverageStartedAt: null,
+      pagination: { experimentPage, batchPage, experimentCount: 0, batchCount: 0 },
+      metrics: [], trend: [], funnel: [], outreach: emptyOutreach(), experiments: [],
+      experimentPerformance: {}, operations: [], recentBatches: [], contentDemand: [],
+    };
   }
-
-  const since = new Date(Date.now() - 180 * DAY_MS).toISOString();
-  const [
-    drafts,
-    aiStates,
-    builds,
-    organizations,
-    quotes,
-    subscriptions,
-    systems,
-    aiRuns,
-    transcriptionJobs,
-    notificationJobs,
-    experimentsResult,
-    variantsResult,
-    batchesResult,
-    batchMetricsResult,
-  ] = await Promise.all([
-    readRows(admin, "request_drafts", "id,status,payload,claimed_at,submitted_build_request_id,created_at,updated_at", "created_at", since),
-    readRows(admin, "request_draft_ai_states", "request_draft_id,state,clarification_round,approved_revision,confidence,requires_human_review,latest_extraction,created_at,updated_at", "created_at", since),
-    readRows(admin, "build_requests", "id,request_draft_id,status,quoted_amount_cents,paid_at,created_at,updated_at", "created_at", since),
-    readRows(admin, "organizations", "id,industry,budget_tier,created_at", "created_at", since),
-    readRows(admin, "build_request_quotes", "id,tier,amount_cents,review_status,created_at,reviewed_at"),
-    readRows(admin, "billing_subscriptions", "id,status,amount_cents,interval,created_at"),
-    readRows(admin, "automation_systems", "id,status,health,last_success_at,last_error_at,created_at"),
-    readRows(admin, "request_draft_ai_runs", "id,task,status,latency_ms,error_code,created_at,completed_at", "created_at", since),
-    readRows(admin, "voice_memo_transcription_jobs", "id,status,attempt_count,confidence,started_at,completed_at,created_at", "created_at", since),
-    readRows(admin, "build_request_notification_jobs", "build_request_id,status,attempt_count,created_at,sent_at", "created_at", since),
-    readRows(admin, "outreach_experiments", "id,title,audience,campaign,channel,method,message_step,primary_metric,status,created_at"),
-    readRows(admin, "outreach_variants", "id,experiment_id,label,title,sort_order,active,created_at"),
-    readRows(admin, "outreach_batches", "id,activity_date,team_member,channel,method,audience,campaign,experiment_id,created_at"),
-    readRows(admin, "outreach_batch_metrics", "id,batch_id,variant_id,variant_label,connection_requests,connections_accepted,initial_dms,f1_sent,f2_sent,custom_sent,replies,attributed_replies,positive_replies,calls_booked,created_at"),
-  ]);
-
-  const coreAvailable = drafts.available || builds.available || organizations.available;
-  const outreachSchemaReady = experimentsResult.available && variantsResult.available && batchesResult.available && batchMetricsResult.available;
-  const experiments = shapeExperiments(experimentsResult.rows, variantsResult.rows);
-  const batchById = new Map(batchesResult.rows.map((batch) => [stringValue(batch.id), batch]));
-  const outreach = aggregateOutreach(batchMetricsResult.rows);
-  const experimentPerformance = aggregateExperimentPerformance(experiments, batchesResult.rows, batchMetricsResult.rows);
-  const trend = buildTrend(drafts.rows, builds.rows, batchesResult.rows, batchMetricsResult.rows);
-  const funnel = buildFunnel(drafts.rows, aiStates.rows);
-  const operations = buildOperations(systems.rows, aiRuns.rows, transcriptionJobs.rows, notificationJobs.rows);
-  const recentBatches = buildRecentBatches(batchesResult.rows, batchMetricsResult.rows);
-  const contentDemand = buildContentDemand(aiStates.rows);
-  const metrics = buildMetrics({
-    drafts: drafts.rows,
-    builds: builds.rows,
-    organizations: organizations.rows,
-    quotes: quotes.rows,
-    subscriptions: subscriptions.rows,
-    batches: batchesResult.rows,
-    batchMetrics: batchMetricsResult.rows,
-    batchById,
-  });
-
-  return {
-    generatedAt,
-    dataConnected: coreAvailable,
-    outreachSchemaReady,
-    metrics,
-    trend,
-    funnel,
-    outreach,
-    experiments,
-    experimentPerformance,
-    operations,
-    recentBatches,
-    contentDemand,
-  };
 }
 
-async function readRows(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  table: string,
-  columns: string,
-  dateColumn?: string,
-  since?: string,
-): Promise<ReadResult> {
-  let query = admin.from(table).select(columns).limit(10_000);
-  if (dateColumn && since) query = query.gte(dateColumn, since);
-  const { data, error } = await query;
-  if (error) {
-    console.error("Admin dashboard query failed", { table, code: error.code, message: error.message });
-    return { rows: [], available: false };
+/** SQL aggregates include every matching row; only detail lists are paginated. */
+export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Required<AdminPages>): AdminDashboardData {
+  const payload = objectValue(raw);
+  if (!payload.metrics || !payload.funnel || !Array.isArray(payload.trend)
+    || !Array.isArray(payload.experiments) || !Array.isArray(payload.recent_batches)) {
+    throw new Error("analytics_payload_incomplete");
   }
-  return { rows: (data ?? []) as unknown as Row[], available: true };
-}
-
-function emptyDashboard(generatedAt: string): AdminDashboardData {
+  const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(objectValue) : [];
+  const totals = objectValue(payload.metrics);
+  const n = (key: string) => numberValue(totals[key]);
+  const funnel = objectValue(payload.funnel);
+  const saved = numberValue(funnel.saved);
+  const experiments = shapeExperiments(rows(payload.experiments), rows(payload.variants));
+  const coverageStartedAt = nullableString(payload.coverage_started_at);
+  const coverageDate = coverageStartedAt?.slice(0, 10);
+  const completeCohortWindow = coverageStartedAt !== null
+    && Date.parse(coverageStartedAt) <= Date.parse(generatedAt) - 180 * 86_400_000;
   return {
-    generatedAt,
-    dataConnected: false,
-    outreachSchemaReady: false,
+    generatedAt, dataConnected: true, outreachSchemaReady: true, dataStatus: completeCohortWindow ? "available" : "partial",
+    coverageStartedAt,
+    dataNotice: completeCohortWindow ? null : coverageDate
+      ? `Cohort tracking began ${coverageDate} UTC. Earlier cohorts include only drafts retained at backfill; already-deleted history cannot be reconstructed. New cohorts remain stable after retention.`
+      : "Historical cohort coverage has not been established.",
+    pagination: { ...pages, experimentCount: numberValue(payload.experiment_count), batchCount: numberValue(payload.batch_count) },
     metrics: [
-      metric("Saved drafts", "0", "Connect Supabase to load website activity", null, "neutral"),
-      metric("Submitted builds", "0", "No connected request data", null, "neutral"),
-      metric("Outreach touches", "0", "Apply the outreach migration to begin", null, "brand"),
-      metric("Replies", "0", "No outreach data yet", null, "neutral"),
-      metric("Quoted pipeline", "$0", "Pricing remains editable per request", null, "neutral"),
-      metric("Monthly retainers", "$0", "No active subscriptions connected", null, "success"),
+      metric("Saved drafts", formatNumber(n("saved_current")), `${n("organizations_current")} new business workspaces; UTC calendar days`, growth(n("saved_current"), n("saved_previous")), "neutral"),
+      metric("Submitted builds", formatNumber(n("builds_current")), n("saved_current") ? `${percentage(n("cohort_submitted_current"), n("saved_current"))?.toFixed(1)}% of 30-day draft cohorts converted` : "No drafts in this 30-day cohort", growth(n("builds_current"), n("builds_previous")), "brand"),
+      metric("Outreach touches", formatNumber(n("outreach_current")), "Manual and Dripify activity", growth(n("outreach_current"), n("outreach_previous")), "brand"),
+      metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
+      metric("Quoted pipeline", formatMoney(n("quoted_pipeline")), "Pending and approved quotes", null, "neutral"),
+      metric("Monthly retainers", formatMoney(n("mrr")), "Active monthly subscriptions", null, "success"),
     ],
-    trend: emptyTrend(),
-    funnel: ["Brief saved", "AI processed", "Scope approved", "Account claimed", "Build submitted"].map((label) => ({ label, value: 0, rate: null })),
-    outreach: emptyOutreach(),
-    experiments: [],
-    experimentPerformance: {},
-    operations: [],
-    recentBatches: [],
-    contentDemand: [],
+    trend: rows(payload.trend).map((row) => ({
+      date: stringValue(row.date), drafts: numberValue(row.drafts), submissions: numberValue(row.submissions),
+      outreach: numberValue(row.outreach), replies: numberValue(row.replies),
+    })),
+    funnel: [["saved", "Brief saved"], ["processed", "AI processed"], ["approved", "Scope approved"], ["claimed", "Account claimed"], ["submitted", "Build submitted"]].map(([key, label]) => ({
+      label, value: numberValue(funnel[key]), rate: percentage(numberValue(funnel[key]), saved),
+    })),
+    outreach: aggregateOutreach([objectValue(payload.outreach)]),
+    experiments,
+    experimentPerformance: aggregateExperimentPerformance(experiments, experiments.map((item) => ({ id: item.id, experiment_id: item.id })), rows(payload.experiment_metrics)),
+    operations: rows(payload.operations).map((row) => ({
+      label: stringValue(row.label), healthy: numberValue(row.healthy), attention: numberValue(row.attention), detail: stringValue(row.detail),
+    })),
+    recentBatches: rows(payload.recent_batches).map((row) => ({
+      id: stringValue(row.id), date: stringValue(row.activity_date), teamMember: stringValue(row.team_member),
+      context: [titleCase(stringValue(row.channel)), titleCase(stringValue(row.method)), stringValue(row.audience)].filter(Boolean).join(" / "),
+      sent: numberValue(row.sent), replies: numberValue(row.replies), calls: numberValue(row.calls),
+    })),
+    contentDemand: rows(payload.content_demand).map((row) => ({ label: stringValue(row.label), value: numberValue(row.value) })),
   };
-}
-
-function buildMetrics(input: {
-  drafts: Row[];
-  builds: Row[];
-  organizations: Row[];
-  quotes: Row[];
-  subscriptions: Row[];
-  batches: Row[];
-  batchMetrics: Row[];
-  batchById: Map<string, Row>;
-}): AdminMetric[] {
-  const now = Date.now();
-  const currentStart = now - 30 * DAY_MS;
-  const previousStart = now - 60 * DAY_MS;
-  const countPeriod = (rows: Row[], key: string, start: number, end: number) => rows.filter((row) => {
-    const time = Date.parse(stringValue(row[key]));
-    return Number.isFinite(time) && time >= start && time < end;
-  }).length;
-  const draftCurrent = countPeriod(input.drafts, "created_at", currentStart, now + 1);
-  const draftPrevious = countPeriod(input.drafts, "created_at", previousStart, currentStart);
-  const buildCurrent = countPeriod(input.builds, "created_at", currentStart, now + 1);
-  const buildPrevious = countPeriod(input.builds, "created_at", previousStart, currentStart);
-  const draftCohortSubmitted = input.drafts.filter((row) => {
-    const time = Date.parse(stringValue(row.created_at));
-    return Number.isFinite(time) && time >= currentStart && Boolean(row.submitted_build_request_id);
-  }).length;
-  const orgCurrent = countPeriod(input.organizations, "created_at", currentStart, now + 1);
-  const currentBatchIds = new Set(input.batches.filter((row) => Date.parse(stringValue(row.activity_date)) >= currentStart).map((row) => stringValue(row.id)));
-  const previousBatchIds = new Set(input.batches.filter((row) => {
-    const time = Date.parse(stringValue(row.activity_date));
-    return time >= previousStart && time < currentStart;
-  }).map((row) => stringValue(row.id)));
-  const sumTouches = (ids: Set<string>) => input.batchMetrics.reduce((sum, row) => ids.has(stringValue(row.batch_id))
-    ? sum + outreachTouchCount(row)
-    : sum, 0);
-  const sumReplies = (ids: Set<string>) => input.batchMetrics.reduce((sum, row) => ids.has(stringValue(row.batch_id)) ? sum + numberValue(row.replies) : sum, 0);
-  const outreachCurrent = sumTouches(currentBatchIds);
-  const outreachPrevious = sumTouches(previousBatchIds);
-  const repliesCurrent = sumReplies(currentBatchIds);
-  const repliesPrevious = sumReplies(previousBatchIds);
-  const pipeline = input.quotes.filter((row) => stringValue(row.review_status) !== "rejected").reduce((sum, row) => sum + numberValue(row.amount_cents), 0);
-  const mrr = input.subscriptions.filter((row) => stringValue(row.status) === "active" && stringValue(row.interval) === "month").reduce((sum, row) => sum + numberValue(row.amount_cents), 0);
-
-  return [
-    metric("Saved drafts", formatNumber(draftCurrent), `${orgCurrent} new business workspace${orgCurrent === 1 ? "" : "s"}`, growth(draftCurrent, draftPrevious), "neutral"),
-    metric("Submitted builds", formatNumber(buildCurrent), draftCurrent ? `${percentage(draftCohortSubmitted, draftCurrent)?.toFixed(1)}% of 30-day drafts converted` : "No drafts in this 30-day cohort", growth(buildCurrent, buildPrevious), "brand"),
-    metric("Outreach touches", formatNumber(outreachCurrent), "Manual and Dripify activity", growth(outreachCurrent, outreachPrevious), "brand"),
-    metric("Replies", formatNumber(repliesCurrent), rateLabel(repliesCurrent, initialDmsForIds(input.batchMetrics, currentBatchIds), "reply rate"), growth(repliesCurrent, repliesPrevious), "success"),
-    metric("Quoted pipeline", formatMoney(pipeline), "Pending and approved quotes", null, "neutral"),
-    metric("Monthly retainers", formatMoney(mrr), "Active monthly subscriptions", null, "success"),
-  ];
-}
-
-function buildFunnel(drafts: Row[], aiStates: Row[]): FunnelStage[] {
-  const aiByDraft = new Map(aiStates.map((state) => [stringValue(state.request_draft_id), state]));
-  const saved = drafts.length;
-  const processed = drafts.filter((draft) => {
-    const state = aiByDraft.get(stringValue(draft.id));
-    return state && hasAiDemandExtraction(objectValue(state.latest_extraction));
-  }).length;
-  const approved = drafts.filter((draft) => numberOrNull(aiByDraft.get(stringValue(draft.id))?.approved_revision) !== null).length;
-  const claimed = drafts.filter((draft) => Boolean(draft.claimed_at)).length;
-  const submitted = drafts.filter((draft) => Boolean(draft.submitted_build_request_id)).length;
-  return [
-    { label: "Brief saved", value: saved, rate: saved ? 100 : null },
-    { label: "AI processed", value: processed, rate: percentage(processed, saved) },
-    { label: "Scope approved", value: approved, rate: percentage(approved, saved) },
-    { label: "Account claimed", value: claimed, rate: percentage(claimed, saved) },
-    { label: "Build submitted", value: submitted, rate: percentage(submitted, saved) },
-  ];
-}
-
-function buildTrend(drafts: Row[], builds: Row[], batches: Row[], metrics: Row[]): TrendPoint[] {
-  const points = emptyTrend();
-  const byDate = new Map(points.map((point) => [point.date, point]));
-  drafts.forEach((row) => increment(byDate, stringValue(row.created_at).slice(0, 10), "drafts", 1));
-  builds.forEach((row) => increment(byDate, stringValue(row.created_at).slice(0, 10), "submissions", 1));
-  const batchById = new Map(batches.map((batch) => [stringValue(batch.id), batch]));
-  metrics.forEach((row) => {
-    const batch = batchById.get(stringValue(row.batch_id));
-    if (!batch) return;
-    const date = stringValue(batch.activity_date).slice(0, 10);
-    increment(byDate, date, "outreach", outreachTouchCount(row));
-    increment(byDate, date, "replies", numberValue(row.replies));
-  });
-  return points;
-}
-
-function emptyTrend(): TrendPoint[] {
-  return Array.from({ length: 90 }, (_, index) => {
-    const date = new Date(Date.now() - (89 - index) * DAY_MS).toISOString().slice(0, 10);
-    return { date, drafts: 0, submissions: 0, outreach: 0, replies: 0 };
-  });
-}
-
-function increment(map: Map<string, TrendPoint>, date: string, key: keyof Omit<TrendPoint, "date">, amount: number) {
-  const point = map.get(date);
-  if (point) point[key] += amount;
 }
 
 function shapeExperiments(experiments: Row[], variants: Row[]): OutreachExperiment[] {
@@ -376,44 +236,6 @@ function messageStepValue(value: unknown): OutreachMessageStep {
     : "initial_dm";
 }
 
-function buildOperations(systems: Row[], aiRuns: Row[], transcriptionJobs: Row[], notificationJobs: Row[]): OperationsStatus[] {
-  const statuses: OperationsStatus[] = [];
-  statuses.push({
-    label: "Live systems",
-    healthy: systems.filter((row) => stringValue(row.health) === "healthy").length,
-    attention: systems.filter((row) => ["warning", "error", "paused"].includes(stringValue(row.health))).length,
-    detail: systems.length ? `${systems.length} provisioned automation${systems.length === 1 ? "" : "s"}` : "No live systems provisioned yet",
-  });
-  statuses.push(jobStatus("AI workflow", aiRuns));
-  statuses.push(jobStatus("Transcription", transcriptionJobs));
-  statuses.push(jobStatus("Internal notification", notificationJobs));
-  return statuses;
-}
-
-function jobStatus(label: string, rows: Row[]): OperationsStatus {
-  const healthy = rows.filter((row) => ["succeeded", "sent"].includes(stringValue(row.status))).length;
-  const attention = rows.filter((row) => ["retryable_failed", "terminal_failed", "failed"].includes(stringValue(row.status))).length;
-  return { label, healthy, attention, detail: rows.length ? `${rows.length} recorded job${rows.length === 1 ? "" : "s"}` : "No jobs recorded in this period" };
-}
-
-function buildRecentBatches(batches: Row[], metrics: Row[]): RecentBatch[] {
-  return [...batches]
-    .sort((a, b) => stringValue(b.activity_date).localeCompare(stringValue(a.activity_date)))
-    .slice(0, 8)
-    .map((batch) => {
-      const rows = metrics.filter((row) => stringValue(row.batch_id) === stringValue(batch.id));
-      return {
-        id: stringValue(batch.id),
-        date: stringValue(batch.activity_date),
-        teamMember: stringValue(batch.team_member),
-        context: [titleCase(stringValue(batch.channel)), titleCase(stringValue(batch.method)), stringValue(batch.audience)].filter(Boolean).join(" / "),
-        sent: rows.reduce((sum, row) => sum + outreachTouchCount(row), 0),
-        replies: rows.reduce((sum, row) => sum + numberValue(row.replies), 0),
-        calls: rows.reduce((sum, row) => sum + numberValue(row.calls_booked), 0),
-      };
-    });
-}
-
 export function buildContentDemand(aiStates: Row[]) {
   const counts = new Map<string, number>();
   aiStates.forEach((row) => {
@@ -426,14 +248,6 @@ export function buildContentDemand(aiStates: Row[]) {
     if (category) counts.set(category, (counts.get(category) ?? 0) + 1);
   });
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
-}
-
-function hasAiDemandExtraction(extraction: Row) {
-  return objectValue(extraction.demand).method === "ai";
-}
-
-function initialDmsForIds(rows: Row[], ids: Set<string>) {
-  return rows.reduce((sum, row) => ids.has(stringValue(row.batch_id)) ? sum + numberValue(row.initial_dms) : sum, 0);
 }
 
 export function outreachTouchCount(row: Row) {

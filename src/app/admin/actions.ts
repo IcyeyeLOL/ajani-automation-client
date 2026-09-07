@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { AdminActionState } from "@/app/admin/action-state";
 import { requireAdminClerkUser } from "@/lib/admin/clerk";
+import { consumeAdminLoginAllowance } from "@/lib/admin/login-throttle";
 import {
   adminLoginSchema,
   experimentMetricEntrySchema,
@@ -23,7 +24,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  await requireAdminClerkUser("/admin/login");
+  const actor = await requireAdminClerkUser("/admin/login");
   const configuration = getAdminConfiguration();
   if (!configuration) return { status: "error", message: "Admin access has not been configured for this environment." };
   const parsed = adminLoginSchema.safeParse({ accessKey: formData.get("accessKey") });
@@ -34,15 +35,24 @@ export async function unlockAdminAction(_state: AdminActionState, formData: Form
     || requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
     || requestHeaders.get("x-real-ip")
     || "local";
-  const fingerprint = fingerprintRequest(ip, requestHeaders.get("user-agent") || "unknown", configuration.sessionSecret);
-  if (await isBlocked(fingerprint)) return { status: "error", message: "Access is temporarily locked. Try again in 15 minutes." };
+  const fingerprints = [
+    fingerprintRequest("admin-user", actor, configuration.sessionSecret),
+    fingerprintRequest("admin-ip", ip, configuration.sessionSecret),
+  ];
+  let allowed = false;
+  try {
+    allowed = await consumeAdminLoginAllowance(createSupabaseAdminClient(), fingerprints);
+  } catch {
+    // Missing infrastructure must not bypass the attempt budget.
+  }
+  if (!allowed) {
+    return { status: "error", message: "Access is temporarily locked. Try again in 15 minutes." };
+  }
 
   if (!keysMatch(parsed.data.accessKey, configuration.accessKey)) {
-    await recordFailedLogin(fingerprint);
     return { status: "error", message: "The access key is not valid." };
   }
 
-  await clearFailedLogins(fingerprint);
   await setAdminSessionCookie(configuration.sessionSecret);
   redirect("/admin");
 }
@@ -172,33 +182,4 @@ function hasActivity(metric: OutreachMetricInput) {
 
 function labelForIndex(index: number) {
   return index < 26 ? String.fromCharCode(65 + index) : `V${index + 1}`;
-}
-
-async function isBlocked(fingerprint: string) {
-  try {
-    const admin = createSupabaseAdminClient();
-    const { data } = await admin.from("admin_login_attempts").select("blocked_until").eq("fingerprint", fingerprint).maybeSingle();
-    return Boolean(data?.blocked_until && Date.parse(data.blocked_until) > Date.now());
-  } catch {
-    return true;
-  }
-}
-
-async function recordFailedLogin(fingerprint: string) {
-  try {
-    const admin = createSupabaseAdminClient();
-    await admin.rpc("register_admin_login_failure", {
-      p_fingerprint: fingerprint,
-    });
-  } catch {
-    // Authentication still uses constant-time verification if persistence is unavailable.
-  }
-}
-
-async function clearFailedLogins(fingerprint: string) {
-  try {
-    await createSupabaseAdminClient().from("admin_login_attempts").delete().eq("fingerprint", fingerprint);
-  } catch {
-    // A successful key check is sufficient when the audit table is unavailable.
-  }
 }

@@ -1,0 +1,153 @@
+.timeline {
+  margin-bottom: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.motionStep [data-process-line] {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.progress,
+.progressFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.progress {
+  opacity: 0;
+}
+
+.progressFill {
+  background: #ce8357;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+/*
+ * One shared 4.15s handoff on wide layouts. The first three fills bridge
+ * 01→02→03→04; the fourth segment is deliberately left neutral.
+ */
+@media (min-width: 621px) {
+  .timeline[data-process-active="true"] .motionStep:not(:last-child) [data-process-progress] {
+    animation: process-trace-presence 4.15s linear 0s 1 both;
+  }
+
+  .timeline[data-process-active="true"] .motionStep:not(:last-child) [data-process-fill] {
+    animation: process-progress .65s cubic-bezier(.4, 0, .2, 1) var(--process-line-delay) 1 both;
+  }
+
+  .timeline[data-process-active="true"] [data-process-marker] {
+    animation: process-marker var(--process-marker-duration) cubic-bezier(.16, 1, .3, 1) var(--process-delay) 1 both;
+  }
+
+  .timeline[data-process-active="true"] .motionStep h3,
+  .timeline[data-process-active="true"] .motionStep > p:last-child {
+    animation: process-copy .72s cubic-bezier(.16, 1, .3, 1) var(--process-delay) 1 both;
+  }
+
+  .timeline[data-process-active="true"] [data-process-when] {
+    animation: process-when var(--process-marker-duration) cubic-bezier(.16, 1, .3, 1) var(--process-delay) 1 both;
+  }
+}
+
+.timeline[data-process-paused="true"],
+.timeline[data-process-paused="true"] *,
+.timeline .motionStep[data-process-paused="true"],
+.timeline .motionStep[data-process-paused="true"] * {
+  animation-play-state: paused !important;
+}
+
+@keyframes process-trace-presence {
+  0%, 90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes process-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes process-marker {
+  0%, 100% {
+    border-color: #cdbfb5;
+    background: #f3f1ec;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  34%, 74% {
+    border-color: #ce8357;
+    background: #f4dfcc;
+    transform: translate3d(0, -1px, 0) scale(1.035);
+  }
+}
+
+@keyframes process-copy {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  42%, 70% { transform: translate3d(0, -1.5px, 0); }
+}
+
+@keyframes process-when {
+  0%, 100% { color: var(--sand-deep); }
+  34%, 74% { color: var(--crimson); }
+}
+
+/* The 2×2 layout traces across each row, never through the row break. */
+@media (min-width: 621px) and (max-width: 780px) {
+  .timeline[data-process-active="true"] .motionStep:nth-child(2) [data-process-progress],
+  .timeline[data-process-active="true"] .motionStep:nth-child(2) [data-process-fill] {
+    animation: none;
+  }
+}
+
+/*
+ * On a single-column screen each visible step owns a short local gesture.
+ * Root-clock declarations are cleared first so lower steps cannot finish
+ * while they are still below the viewport.
+ */
+@media (max-width: 620px) {
+  .timeline .motionStep:not(:last-child)[data-process-active="true"] [data-process-progress] {
+    animation: process-mobile-presence .65s linear 0s 1 both;
+  }
+
+  .timeline .motionStep:not(:last-child)[data-process-active="true"] [data-process-fill] {
+    animation: process-progress .42s cubic-bezier(.4, 0, .2, 1) 0s 1 both;
+  }
+
+  .timeline .motionStep[data-process-active="true"] [data-process-marker] {
+    animation: process-marker .65s cubic-bezier(.16, 1, .3, 1) 0s 1 both;
+  }
+
+  .timeline .motionStep[data-process-active="true"] [data-process-when] {
+    animation: process-when .65s cubic-bezier(.16, 1, .3, 1) 0s 1 both;
+  }
+
+  .timeline .motionStep[data-process-active="true"] h3,
+  .timeline .motionStep[data-process-active="true"] > p:last-child {
+    animation: process-copy .65s cubic-bezier(.16, 1, .3, 1) 0s 1 both;
+  }
+}
+
+@keyframes process-mobile-presence {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion="full"])) .timeline,
+  :global(html:not([data-motion="full"])) .timeline * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  :global(html:not([data-motion="full"])) .timeline .progress {
+    opacity: 0;
+  }
+
+  :global(html:not([data-motion="full"])) .timeline .progressFill {
+    transform: scaleX(0);
+  }
+}

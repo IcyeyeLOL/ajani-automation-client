@@ -13,6 +13,9 @@ for (const width of widths) {
     test(`${route} does not overflow horizontally at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(route);
+      // /request is a compatibility redirect; measure the settled recorder,
+      // not an execution context being replaced by the streamed redirect.
+      if (route === "/request") await page.waitForURL(/\/record$/);
 
       const overflow = await page.evaluate(() => {
         const root = document.documentElement;

@@ -153,10 +153,15 @@ npm run lint
 npm run type-check
 npm run test:unit
 npm run test:e2e
+npm run test:database
 npm run build
 ```
 
-`npm run test:unit` covers domain validation and server utilities. `npm run test:e2e` launches the application and exercises public navigation, responsive layouts, accessibility regressions, recording states, workflow transitions, and transcription handoff behavior.
+`npm run test:unit` covers domain validation and server utilities. `npm run test:e2e` launches the application and exercises public navigation, responsive layouts, accessibility regressions, recording states, workflow transitions, transcription handoff, and the permanent reliability regressions in `audit/`. No expected failures are accepted as proof of a fix.
+
+`npm run test:database` creates an isolated native PostgreSQL 17 cluster on a random loopback port. It never loads `.env` or accepts a remote database URL. It applies the complete migration chain, runs synthetic rollback-only SQL checks, and uses independent connections to prove transaction locking. Test data is retained under the ignored `.tmp/database-tests` directory, and the server stops after the run. Minimal Supabase-owned schema contracts are bootstrapped; this does not emulate the Storage HTTP service or validate real Clerk/provider credentials.
+
+For production-build browser verification, set `PLAYWRIGHT_PRODUCTION=1` and optionally `PLAYWRIGHT_PORT` before `npm run test:e2e`. The harness builds and runs optimized Next output using a credential-free **preview** environment; production's fail-closed authentication policy is unchanged. The standalone `npm run test:regression` command targets an already-running local server (`PLAYWRIGHT_BASE_URL` overrides its URL).
 
 Install the browser runtime once before running Playwright locally:
 
@@ -164,7 +169,7 @@ Install the browser runtime once before running Playwright locally:
 npx playwright install chromium
 ```
 
-The GitHub Actions workflow runs linting, generated-route type checks, unit tests, a production build, and the Playwright browser suite for pull requests and pushes to `main`.
+The GitHub Actions workflow runs linting, generated-route type checks, unit tests, production-build browser tests, and isolated database tests for pull requests and pushes to `main`. It does not deploy or mutate a connected database.
 
 ## Production deployment
 
@@ -172,17 +177,20 @@ The production target is [ajaniflow.com](https://ajaniflow.com), hosted on Verce
 
 Before releasing:
 
-1. Apply every pending Supabase migration in order.
+1. Review and explicitly approve the release and target database; apply pending Supabase migrations in order only after backup/recovery checks. Local development is not approval to push or deploy.
 2. Confirm the Vercel production environment contains the live Clerk credential pair and all required server integrations.
 3. Run the complete quality suite.
 4. Verify the deployed home page, Demos, Stories, authentication handoff, and record flow.
-5. Confirm cron authorization and inspect failed-job backlog after database or provider changes.
+5. Confirm cron authorization and a plan/scheduler supporting the configured every-minute recovery and every-15-minute retention schedules. These schedules cannot run on Vercel Hobby. Inspect failed-job backlog after database or provider changes.
+6. Run `npm run check:database-contract` against the explicitly configured target. This read-only check verifies required RPCs are exposed; it does not apply migrations or certify provider behavior.
 
 The proxy deliberately fails closed in a production runtime when valid live Clerk credentials are missing. Preview and local environments can run the public experience with optional integrations disabled.
 
 ## Additional documentation
 
 - [Architecture notes](./docs/architecture.md)
+- [Engineering audit](./docs/engineering-audit-2026-09-05.md)
+- [Engineering remediation and release gates](./docs/engineering-remediation-2026-09-05.md)
 
 ## Project status
 

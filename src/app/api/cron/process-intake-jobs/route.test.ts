@@ -6,11 +6,13 @@ const mocks = vi.hoisted(() => ({
   notifications: vi.fn(),
   transcriptions: vi.fn(),
   retention: vi.fn(),
+  health: vi.fn(),
 }));
 
 vi.mock("@/lib/notifications/build-request", () => ({ processBuildRequestNotifications: mocks.notifications }));
 vi.mock("@/lib/transcription/worker", () => ({ processVoiceTranscriptions: mocks.transcriptions }));
 vi.mock("@/lib/operations/retention", () => ({ purgeOperationalSecurityRecords: mocks.retention }));
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.health }) }));
 
 import { GET } from "@/app/api/cron/process-intake-jobs/route";
 
@@ -34,6 +36,7 @@ describe("intake worker cron", () => {
     mocks.notifications.mockResolvedValue({ claimed: 1, sent: 1, retryableFailures: 0, terminalFailures: 0 });
     mocks.transcriptions.mockResolvedValue({ claimed: 1, succeeded: 1, retryableFailures: 0, terminalFailures: 0 });
     mocks.retention.mockResolvedValue({ purged: true });
+    mocks.health.mockResolvedValue({ data: { transcription: { ready: 0 } }, error: null });
 
     const response = await GET(new Request("https://ajani.test/api/cron/process-intake-jobs", {
       headers: { authorization: "Bearer cron-secret" },
@@ -44,7 +47,7 @@ describe("intake worker cron", () => {
       transcriptions: { succeeded: 1 },
       retention: { purged: true },
     });
-    expect(mocks.notifications).toHaveBeenCalledWith({ limit: 4 });
-    expect(mocks.transcriptions).toHaveBeenCalledWith({ limit: 1 });
+    expect(mocks.notifications).toHaveBeenCalledWith({ limit: 25, deadlineAt: expect.any(Number) });
+    expect(mocks.transcriptions).toHaveBeenCalledWith({ limit: 10, deadlineAt: expect.any(Number) });
   });
 });

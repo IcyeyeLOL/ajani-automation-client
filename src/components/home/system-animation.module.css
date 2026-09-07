@@ -1,214 +1,897 @@
 .wrap {
-  --cycle: 7.2s;
+  --cycle: var(--route-cycle, 7.2s);
+  display: grid;
+  justify-items: center;
+  width: 100%;
+}
+
+.sceneViewport,
+.staticFallback {
   display: grid;
   justify-items: center;
   gap: 14px;
   width: 100%;
 }
 
-.svg { width: 100%; max-width: 100%; height: auto; overflow: visible; }
+.sceneViewport {
+  will-change: opacity, transform;
+  animation: sceneLifecycle var(--cycle) var(--ease-standard) infinite;
+}
 
-/* One shared clock coordinates every stage of the story. */
-.wave {
+.staticFallback { display: none; }
+
+.svg {
+  display: block;
+  width: min(100%, 730px);
+  height: auto;
+  overflow: visible;
+}
+
+.mobileScene { display: none; }
+
+.scene {
   transform-box: fill-box;
   transform-origin: center;
-  animation: waveform var(--cycle) cubic-bezier(.22, .8, .28, 1) infinite;
 }
 
-.bar {
-  fill: var(--sand);
-  opacity: .9;
-}
-
-.link {
-  stroke: #6a5b55;
-  stroke-width: 1.8;
-  stroke-dasharray: 72;
-  stroke-dashoffset: 72;
-  animation-duration: var(--cycle);
-  animation-timing-function: cubic-bezier(.22, .8, .28, 1);
-  animation-iteration-count: infinite;
-}
-.link[data-step="1"] { animation-name: drawOne; }
-.link[data-step="2"] { animation-name: drawTwo; }
-.link[data-step="3"] { animation-name: drawThree; }
-
-.node {
-  fill: #2b2523;
-  stroke: #7a6a62;
-  stroke-width: 1.5;
-  opacity: 0;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation-duration: var(--cycle);
-  animation-timing-function: cubic-bezier(.22, .8, .28, 1);
-  animation-iteration-count: infinite;
-}
-[data-step="1"] .node { animation-name: nodeOne; }
-[data-step="2"] .node { animation-name: nodeTwo; }
-[data-step="3"] .node { animation-name: nodeThree; }
-[data-step="4"] .node { animation-name: nodeFour; }
-
-.core {
-  fill: url(#ajaniActive);
-  opacity: 0;
-  animation-duration: var(--cycle);
-  animation-timing-function: ease-out;
-  animation-iteration-count: infinite;
-}
-[data-step="1"] .core { animation-name: coreOne; }
-[data-step="2"] .core { animation-name: coreTwo; }
-[data-step="3"] .core { animation-name: coreThree; }
-[data-step="4"] .core { animation-name: coreFour; }
-
-.pulse {
+.trackShadow,
+.track,
+.activeTrack {
   fill: none;
-  stroke: url(#ajaniActive);
-  stroke-width: 2.2;
-  opacity: 0;
-  transform-origin: center;
-  transform-box: fill-box;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.trackShadow { stroke: #e2d7cd; stroke-width: 8; }
+.track { stroke: #fffaf5; stroke-width: 2.4; }
+
+.activeTrack {
+  stroke: #ce8357;
+  stroke-width: 3;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
   animation-duration: var(--cycle);
-  animation-timing-function: ease-out;
-  animation-iteration-count: infinite;
-}
-[data-step="1"] .pulse { animation-name: ringOne; }
-[data-step="2"] .pulse { animation-name: ringTwo; }
-[data-step="3"] .pulse { animation-name: ringThree; }
-[data-step="4"] .pulse { animation-name: ringFour; }
-
-.packet,
-.packetTrail {
-  fill: var(--sand);
-  opacity: 0;
-  animation: travel var(--cycle) linear infinite;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-standard);
 }
 
-.packetTrail {
-  fill: #c8865f;
-  animation-name: travelTrail;
+.activeTrack[data-segment="1"] { animation-name: drawSegmentOne; }
+.activeTrack[data-segment="2"] { animation-name: drawSegmentTwo; }
+.activeTrack[data-segment="3"] { animation-name: drawSegmentThree; }
+
+.station {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-duration: var(--cycle);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-standard);
 }
 
-.tag {
-  fill: #a2958f;
+.station[data-stage="1"] { animation-name: stationSignal; }
+.station[data-stage="2"] { animation-name: stationContext; }
+.station[data-stage="3"] { animation-name: stationRoute; }
+.station[data-stage="4"] { animation-name: stationReview; }
+
+.stationShadow { fill: rgba(65, 42, 29, .12); }
+
+.stationBack {
+  fill: #edc6a0;
+  stroke: #c98d68;
+  stroke-opacity: .38;
+  stroke-width: 1;
+}
+
+.stationFace {
+  fill: #fffdf9;
+  stroke: #d0c2b8;
+  stroke-width: 1.15;
+}
+
+.stationLabel,
+.stationIndex,
+.awaitingPill text {
   font-family: var(--font-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.stationLabel {
+  fill: #3f3530;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .07em;
+}
+
+.stationIndex {
+  fill: #a96d4d;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-anchor: end;
+}
+
+.noteSheet,
+.contextPaper,
+.routeCanvas,
+.reviewTray {
+  fill: #f7eee5;
+  stroke: #e0d4ca;
+  stroke-width: 1;
+}
+
+.noteSheet {
+  fill: #fffaf5;
+  stroke: #dfcbbb;
+}
+
+.sourceWave {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sourceWave var(--cycle) var(--ease-standard) 1 both;
+}
+
+.sourceBar { fill: #ce8357; }
+
+.noteRule {
+  fill: none;
+  stroke: #d7c7bb;
+  stroke-linecap: round;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.contextChips {
+  fill: #e7d8cc;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: contextChips var(--cycle) var(--ease-enter) 1 both;
+}
+
+.contextChips rect:first-child { fill: #edc6a0; }
+.contextChips rect:nth-child(2) { fill: #dfc4af; }
+
+.scanPlane {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: contextScan var(--cycle) linear 1 both;
+}
+
+.scanPlane rect { fill: #edc6a0; fill-opacity: .42; }
+.scanPlane path {
+  fill: none;
+  stroke: #c8754d;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.routeDiagram {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: routeResolve var(--cycle) var(--ease-standard) 1 both;
+}
+
+.routeStem,
+.routeSelected,
+.routeAlternate {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.routeStem { stroke: #b4a297; stroke-width: 2; }
+
+.routeSelected,
+.routeAlternate {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: drawBranches var(--cycle) var(--ease-standard) 1 both;
+}
+
+.routeSelected { stroke: #ce8357; stroke-width: 3.2; }
+.routeAlternate { stroke: #a89a91; stroke-width: 2; }
+
+.decision {
+  fill: #edc6a0;
+  stroke: #c98258;
+  stroke-width: 1;
+}
+
+.routeTarget { fill: #ce8357; stroke: #fffaf5; stroke-width: 1.4; }
+.routeTargetMuted { fill: #d2c6bd; stroke: #fffaf5; stroke-width: 1.2; }
+
+.reviewTray {
+  fill: #f2e7dc;
+  stroke: #d8c6b9;
+}
+
+.summarySheet {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: summaryArrive var(--cycle) var(--ease-enter) 1 both;
+}
+
+.summarySheet rect {
+  fill: #fffdf9;
+  stroke: #d7c8bd;
+  stroke-width: 1;
+}
+
+.summarySheet path {
+  fill: none;
+  stroke: #c6b6ab;
+  stroke-linecap: round;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.reviewer {
+  fill: #edc6a0;
+  stroke: #765749;
+  stroke-linecap: round;
+  stroke-width: 1.35;
+}
+
+.reviewer path { fill: none; }
+
+.reviewGate {
+  fill: none;
+  stroke: #790018;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.awaitingPill {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: awaitingReview var(--cycle) var(--ease-standard) 1 both;
+}
+
+.awaitingPill rect { fill: #edc6a0; }
+
+.awaitingPill text {
+  fill: #5d4337;
   font-size: 9.5px;
-  letter-spacing: .1em;
+  font-weight: 650;
+  letter-spacing: .055em;
+  text-anchor: middle;
+}
+
+/* Signal map ------------------------------------------------------------- */
+.networkTrack,
+.networkPath {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.networkTrack {
+  stroke: #e1d6cd;
+  stroke-width: 7;
+}
+
+.networkPath {
+  stroke: #ce8357;
+  stroke-width: 2.7;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation-duration: var(--cycle);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-standard);
+}
+
+.networkPath[data-lane="input"] { animation-name: networkInputDraw; }
+.networkPath[data-lane="output"] { animation-name: networkOutputDraw; }
+.networkPath[data-path-index="1"],
+.networkPath[data-path-index="4"] { opacity: .86; }
+.networkPath[data-path-index="2"],
+.networkPath[data-path-index="5"] { opacity: .7; }
+
+.networkShadow,
+.mindShadow { fill: rgba(65, 42, 29, .13); }
+
+.networkSources > g {
+  opacity: 0;
+  animation-duration: var(--cycle);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-enter);
+}
+
+.networkSources > g:nth-child(1) { animation-name: networkSourceOne; }
+.networkSources > g:nth-child(2) { animation-name: networkSourceTwo; }
+.networkSources > g:nth-child(3) { animation-name: networkSourceThree; }
+
+.networkNodeBack {
+  fill: #edc6a0;
+  stroke: #c98d68;
+  stroke-opacity: .35;
+}
+
+.networkNodeFace {
+  fill: #fffdf9;
+  stroke: #d0c2b8;
+  stroke-width: 1.1;
+}
+
+.networkSeed {
+  fill: #edc6a0;
+  stroke: #c97950;
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: networkSeedPulse var(--cycle) var(--ease-standard) 1 both;
+}
+
+.networkSeedMark {
+  fill: none;
+  stroke: #7c5947;
+  stroke-linecap: round;
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+}
+
+.networkLabel,
+.networkHubLabel,
+.outputLabel,
+.mindEyebrow,
+.mindTitle,
+.mindNodeLabel {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.networkLabel {
+  fill: #665b54;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
   text-anchor: middle;
   text-transform: uppercase;
+}
+
+.networkHub {
+  opacity: 0;
+  animation: networkHubArrive var(--cycle) var(--ease-enter) 1 both;
+}
+
+.networkHubBack,
+.outputBack,
+.mindCoreBack,
+.mindNodeBack {
+  fill: #edc6a0;
+  stroke: #c98d68;
+  stroke-opacity: .34;
+  stroke-width: 1;
+}
+
+.networkHubFace {
+  fill: #fffdf9;
+  stroke: #cdbdb1;
+  stroke-width: 1.2;
+}
+
+.networkHubLabel {
+  fill: #453a34;
+  font-size: 11.5px;
+  font-weight: 680;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+}
+
+.networkMatrix path {
+  fill: none;
+  stroke: #c9b8aa;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  stroke-linecap: round;
+  stroke-width: 1.45;
+  vector-effect: non-scaling-stroke;
+  animation: networkMatrixDraw var(--cycle) var(--ease-standard) 1 both;
+}
+
+.networkMatrix circle:not(.networkCore) {
+  fill: #f6e6d8;
+  stroke: #ca8d68;
+  stroke-width: 1.15;
+}
+
+.networkCore {
+  fill: #ce8357;
+  stroke: #fffaf5;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: networkCorePulse var(--cycle) var(--ease-standard) 1 both;
+}
+
+.networkOutputs > g {
   opacity: 0;
   animation-duration: var(--cycle);
-  animation-timing-function: ease;
-  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-enter);
 }
-[data-step="1"] .tag { animation-name: tagOne; }
-[data-step="2"] .tag { animation-name: tagTwo; }
-[data-step="3"] .tag { animation-name: tagThree; }
-[data-step="4"] .tag { animation-name: tagFour; }
+
+.networkOutputs > g:nth-child(1) { animation-name: networkOutputOne; }
+.networkOutputs > g:nth-child(2) { animation-name: networkOutputTwo; }
+.networkOutputs > g:nth-child(3) { animation-name: networkOutputThree; }
+
+.outputFace {
+  fill: #fffdf9;
+  stroke: #d0c2b8;
+  stroke-width: 1.1;
+}
+
+.outputStatus {
+  fill: #edc6a0;
+  stroke: #c97e54;
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: outputStatusPulse var(--cycle) var(--ease-standard) 1 both;
+}
+
+.networkOutputs > g:nth-child(2) .outputStatus { fill: #dca77d; }
+.networkOutputs > g:nth-child(3) .outputStatus { fill: #c9b5a6; }
+
+.outputLabel {
+  fill: #50453f;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .045em;
+}
+
+/* Handoff mind map ------------------------------------------------------- */
+.mindTrack,
+.mindBranch {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.mindTrack {
+  stroke: #e1d6cd;
+  stroke-width: 8;
+}
+
+.mindBranch {
+  stroke: #ce8357;
+  stroke-width: 2.8;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation-duration: var(--cycle);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-standard);
+}
+
+.mindBranch[data-phase="early"] { animation-name: mindBranchEarly; }
+.mindBranch[data-phase="middle"] { animation-name: mindBranchMiddle; }
+.mindBranch[data-phase="late"] { animation-name: mindBranchLate; }
+.mindBranch[data-path-index="1"],
+.mindBranch[data-path-index="3"] { opacity: .78; }
+
+.mindCore {
+  opacity: 0;
+  animation: mindCoreArrive var(--cycle) var(--ease-enter) 1 both;
+}
+
+.mindCoreFace {
+  fill: #fffdf9;
+  stroke: #ccbbae;
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mindCoreBreathe var(--cycle) var(--ease-standard) 1 both;
+}
+
+.mindEyebrow {
+  fill: #a96d4d;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .11em;
+  text-anchor: middle;
+  text-transform: uppercase;
+}
+
+.mindTitle {
+  fill: #413630;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  text-anchor: middle;
+}
+
+.mindChips { fill: #e8dfd8; }
+.mindChips rect:first-child { animation: mindChipOne var(--cycle) steps(1, end) 1 both; }
+.mindChips rect:nth-child(2) { animation: mindChipTwo var(--cycle) steps(1, end) 1 both; }
+.mindChips rect:nth-child(3) { animation: mindChipThree var(--cycle) steps(1, end) 1 both; }
+
+.mindNode {
+  opacity: 0;
+  animation-duration: var(--cycle);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: var(--ease-enter);
+}
+
+.mindNode[data-phase="early"] { animation-name: mindNodeEarly; }
+.mindNode[data-phase="middle"] { animation-name: mindNodeMiddle; }
+.mindNode[data-phase="late"] { animation-name: mindNodeLate; }
+
+.mindNodeFace {
+  fill: #fffdf9;
+  stroke: #d0c2b8;
+  stroke-width: 1.1;
+}
+
+.mindNodeMark {
+  fill: #edc6a0;
+  stroke: #c77d55;
+  stroke-width: 1;
+}
+
+.mindNodeLabel {
+  fill: #4f443e;
+  font-size: 10.5px;
+  font-weight: 670;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.mindHuman .mindNodeFace {
+  fill: #fff9f6;
+  stroke: #b99a8d;
+}
+
+.mindHuman .mindNodeMark { fill: #790018; stroke: #790018; }
+
+.mindGate {
+  fill: none;
+  stroke: #790018;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
 
 .caption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   margin: 0;
-  color: #a2958f;
+  color: #706a63;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10.5px;
+  font-size: 10px;
   letter-spacing: .08em;
+  text-align: center;
   text-transform: uppercase;
 }
-.caption i { color: var(--sand); font-style: normal; }
 
-@keyframes waveform {
-  0%       { opacity: 1; transform: scaleX(.96) scaleY(.78); }
-  6%       { opacity: 1; transform: scaleX(1) scaleY(1); }
-  12%      { opacity: 1; transform: scaleX(.99) scaleY(.72); }
-  17%      { opacity: 1; transform: scaleX(1) scaleY(.92); }
-  25%      { opacity: 0; transform: scaleX(.26) scaleY(.18); }
-  93%      { opacity: 0; transform: scaleX(.26) scaleY(.18); }
-  100%     { opacity: 1; transform: scaleX(.96) scaleY(.78); }
+.caption i { display: inline-block; color: #a36343; font-style: normal; }
+
+.sceneViewport .caption {
+  animation: captionArrive var(--cycle) var(--ease-standard) 1 both;
 }
 
-@keyframes drawOne {
-  0%, 18%  { opacity: 0; stroke-dashoffset: 72; }
-  19%      { opacity: 1; }
-  24%, 92% { opacity: 1; stroke-dashoffset: 0; }
-  100%     { opacity: 0; stroke-dashoffset: 0; }
-}
-@keyframes drawTwo {
-  0%, 23%  { opacity: 0; stroke-dashoffset: 72; }
-  24%      { opacity: 1; }
-  29%, 92% { opacity: 1; stroke-dashoffset: 0; }
-  100%     { opacity: 0; stroke-dashoffset: 0; }
-}
-@keyframes drawThree {
-  0%, 28%  { opacity: 0; stroke-dashoffset: 72; }
-  29%      { opacity: 1; }
-  34%, 92% { opacity: 1; stroke-dashoffset: 0; }
-  100%     { opacity: 0; stroke-dashoffset: 0; }
+.sceneViewport .caption i {
+  animation: captionArrow var(--cycle) var(--ease-standard) 1 both;
 }
 
-@keyframes nodeOne {
-  0%, 17%  { opacity: 0; transform: scale(.72); }
-  22%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
-  100%     { opacity: 0; transform: scale(.92); }
-}
-@keyframes nodeTwo {
-  0%, 21%  { opacity: 0; transform: scale(.72); }
-  26%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
-  100%     { opacity: 0; transform: scale(.92); }
-}
-@keyframes nodeThree {
-  0%, 25%  { opacity: 0; transform: scale(.72); }
-  30%, 92% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
-  100%     { opacity: 0; transform: scale(.92); }
-}
-@keyframes nodeFour {
-  0%, 29%  { opacity: 0; transform: scale(.72); }
-  34%, 71% { opacity: 1; transform: scale(1); fill: #2b2523; stroke: #7a6a62; }
-  76%, 92% { opacity: 1; transform: scale(1); fill: #352a25; stroke: #c99e75; }
-  100%     { opacity: 0; transform: scale(.92); }
+.wrap[data-paused="true"] .sceneViewport,
+.wrap[data-paused="true"] .sceneViewport * {
+  animation-play-state: paused !important;
 }
 
-@keyframes travel {
-  0%, 33%   { opacity: 0; transform: translateX(0); }
-  34%       { opacity: 1; transform: translateX(0); }
-  72%, 92%  { opacity: 1; transform: translateX(309px); }
-  100%      { opacity: 0; transform: translateX(309px); }
-}
-@keyframes travelTrail {
-  0%, 34%   { opacity: 0; transform: translateX(0); }
-  36%       { opacity: .16; transform: translateX(0); }
-  74%, 91%  { opacity: .16; transform: translateX(309px); }
-  100%      { opacity: 0; transform: translateX(309px); }
+@keyframes sceneLifecycle {
+  0% { opacity: 0; transform: translate3d(0, 8px, 0) scale(.992); }
+  7%, 93% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  100% { opacity: 0; transform: translate3d(0, -6px, 0) scale(.994); }
 }
 
-@keyframes coreOne { 0%, 33% { opacity: 0; } 35%, 43% { opacity: 1; } 47%, 92% { opacity: .42; } 100% { opacity: 0; } }
-@keyframes coreTwo { 0%, 45% { opacity: 0; } 47%, 55% { opacity: 1; } 59%, 92% { opacity: .42; } 100% { opacity: 0; } }
-@keyframes coreThree { 0%, 58% { opacity: 0; } 60%, 68% { opacity: 1; } 72%, 92% { opacity: .42; } 100% { opacity: 0; } }
-@keyframes coreFour { 0%, 70% { opacity: 0; } 72%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes stationSignal {
+  0% { opacity: .72; transform: translateY(0); }
+  3%, 15% { opacity: 1; transform: translateY(-5px); }
+  21%, 93% { opacity: .8; transform: translateY(0); }
+  100% { opacity: .72; transform: translateY(0); }
+}
 
-@keyframes ringOne { 0%, 33% { opacity: 0; transform: scale(.92); } 35% { opacity: .62; } 44%, 100% { opacity: 0; transform: scale(1.46); } }
-@keyframes ringTwo { 0%, 45% { opacity: 0; transform: scale(.92); } 47% { opacity: .62; } 56%, 100% { opacity: 0; transform: scale(1.46); } }
-@keyframes ringThree { 0%, 58% { opacity: 0; transform: scale(.92); } 60% { opacity: .62; } 69%, 100% { opacity: 0; transform: scale(1.46); } }
-@keyframes ringFour { 0%, 70% { opacity: 0; transform: scale(.92); } 72% { opacity: .72; } 82%, 100% { opacity: 0; transform: scale(1.46); } }
+@keyframes stationContext {
+  0%, 15% { opacity: .42; transform: translateY(0); }
+  20% { opacity: .62; transform: translateY(0); }
+  27%, 42% { opacity: 1; transform: translateY(-4px); }
+  49%, 93% { opacity: .82; transform: translateY(0); }
+  100% { opacity: .42; transform: translateY(0); }
+}
 
-@keyframes tagOne { 0%, 18% { opacity: 0; } 23%, 92% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes tagTwo { 0%, 22% { opacity: 0; } 27%, 92% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes tagThree { 0%, 26% { opacity: 0; } 31%, 92% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes tagFour { 0%, 30% { opacity: 0; } 35%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes stationRoute {
+  0%, 31% { opacity: .42; transform: translateY(0); }
+  36% { opacity: .62; transform: translateY(0); }
+  45%, 63% { opacity: 1; transform: translateY(-4px); }
+  70%, 93% { opacity: .86; transform: translateY(0); }
+  100% { opacity: .42; transform: translateY(0); }
+}
 
-/* Reduced motion keeps the finished route on screen unless the site has
-   explicitly selected its full-motion presentation. */
+@keyframes stationReview {
+  0%, 52% { opacity: .42; transform: translateY(0); }
+  58% { opacity: .64; transform: translateY(0); }
+  68%, 93% { opacity: 1; transform: translateY(-4px); }
+  100% { opacity: .42; transform: translateY(0); }
+}
+
+@keyframes drawSegmentOne {
+  0%, 12% { opacity: 0; stroke-dashoffset: 100; }
+  14% { opacity: 1; stroke-dashoffset: 100; }
+  27%, 93% { opacity: 1; stroke-dashoffset: 0; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+
+@keyframes drawSegmentTwo {
+  0%, 28% { opacity: 0; stroke-dashoffset: 100; }
+  30% { opacity: 1; stroke-dashoffset: 100; }
+  48%, 93% { opacity: 1; stroke-dashoffset: 0; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+
+@keyframes drawSegmentThree {
+  0%, 49% { opacity: 0; stroke-dashoffset: 100; }
+  51% { opacity: 1; stroke-dashoffset: 100; }
+  68%, 93% { opacity: 1; stroke-dashoffset: 0; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+
+@keyframes sourceWave {
+  0% { opacity: .72; transform: scaleY(.68); }
+  3.5% { opacity: 1; transform: scaleY(1.14); }
+  7% { opacity: 1; transform: scaleY(.76); }
+  11% { opacity: 1; transform: scaleY(1); }
+  16% { opacity: .9; transform: scaleY(.62); }
+  22%, 93% { opacity: .5; transform: scaleX(.72) scaleY(.4); }
+  100% { opacity: .72; transform: scaleY(.68); }
+}
+
+@keyframes contextChips {
+  0%, 19% { opacity: .12; transform: translateX(-12px); }
+  24% { opacity: .45; transform: translateX(-5px); }
+  31%, 93% { opacity: 1; transform: translateX(0); }
+  100% { opacity: .12; transform: translateX(-12px); }
+}
+
+@keyframes contextScan {
+  0%, 20% { opacity: 0; transform: translateY(0); }
+  23% { opacity: .72; transform: translateY(0); }
+  39% { opacity: .72; transform: translateY(58px); }
+  43%, 100% { opacity: 0; transform: translateY(58px); }
+}
+
+@keyframes routeResolve {
+  0%, 36% { opacity: .18; transform: scale(.96); }
+  43%, 93% { opacity: 1; transform: scale(1); }
+  100% { opacity: .18; transform: scale(.96); }
+}
+
+@keyframes drawBranches {
+  0%, 40% { stroke-dashoffset: 100; }
+  57%, 93% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 100; }
+}
+
+@keyframes summaryArrive {
+  0%, 57% { opacity: 0; transform: translateX(-28px); }
+  63% { opacity: .55; transform: translateX(-13px); }
+  71%, 93% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-28px); }
+}
+
+@keyframes awaitingReview {
+  0%, 68% { opacity: 0; transform: scale(.96); }
+  73% { opacity: .72; transform: scale(.98); }
+  80% { opacity: 1; transform: scale(1); }
+  87% { opacity: .76; transform: scale(.99); }
+  93% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.96); }
+}
+
+@keyframes networkInputDraw {
+  0%, 9% { opacity: 0; stroke-dashoffset: 100; }
+  13% { opacity: 1; stroke-dashoffset: 100; }
+  38%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes networkOutputDraw {
+  0%, 41% { opacity: 0; stroke-dashoffset: 100; }
+  45% { opacity: 1; stroke-dashoffset: 100; }
+  70%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes networkSourceOne {
+  0%, 4% { opacity: 0; }
+  9%, 100% { opacity: 1; }
+}
+
+@keyframes networkSourceTwo {
+  0%, 8% { opacity: 0; }
+  14%, 100% { opacity: 1; }
+}
+
+@keyframes networkSourceThree {
+  0%, 12% { opacity: 0; }
+  18%, 100% { opacity: 1; }
+}
+
+@keyframes networkSeedPulse {
+  0%, 8% { opacity: .45; transform: scale(.72); }
+  13% { opacity: 1; transform: scale(1.18); }
+  18%, 100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes networkHubArrive {
+  0%, 22% { opacity: 0; }
+  30%, 100% { opacity: 1; }
+}
+
+@keyframes networkMatrixDraw {
+  0%, 28% { opacity: .12; stroke-dashoffset: 100; }
+  52%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes networkCorePulse {
+  0%, 25% { opacity: .35; transform: scale(.72); }
+  33% { opacity: 1; transform: scale(1.2); }
+  39%, 88% { opacity: 1; transform: scale(1); }
+  92% { transform: scale(1.1); }
+  96%, 100% { transform: scale(1); }
+}
+
+@keyframes networkOutputOne {
+  0%, 51% { opacity: 0; }
+  58%, 100% { opacity: 1; }
+}
+
+@keyframes networkOutputTwo {
+  0%, 57% { opacity: 0; }
+  64%, 100% { opacity: 1; }
+}
+
+@keyframes networkOutputThree {
+  0%, 63% { opacity: 0; }
+  70%, 100% { opacity: 1; }
+}
+
+@keyframes outputStatusPulse {
+  0%, 52% { opacity: .25; transform: scale(.72); }
+  64% { opacity: 1; transform: scale(1.18); }
+  70%, 100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mindCoreArrive {
+  0%, 4% { opacity: 0; }
+  12%, 100% { opacity: 1; }
+}
+
+@keyframes mindCoreBreathe {
+  0%, 5% { transform: scale(.94); }
+  14% { transform: scale(1.015); }
+  20%, 84% { transform: scale(1); }
+  89% { transform: scale(1.012); }
+  95%, 100% { transform: scale(1); }
+}
+
+@keyframes mindBranchEarly {
+  0%, 13% { opacity: 0; stroke-dashoffset: 100; }
+  18% { opacity: 1; stroke-dashoffset: 100; }
+  39%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes mindBranchMiddle {
+  0%, 35% { opacity: 0; stroke-dashoffset: 100; }
+  40% { opacity: 1; stroke-dashoffset: 100; }
+  61%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes mindBranchLate {
+  0%, 57% { opacity: 0; stroke-dashoffset: 100; }
+  62% { opacity: 1; stroke-dashoffset: 100; }
+  78%, 100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes mindNodeEarly {
+  0%, 24% { opacity: 0; }
+  33%, 100% { opacity: 1; }
+}
+
+@keyframes mindNodeMiddle {
+  0%, 46% { opacity: 0; }
+  55%, 100% { opacity: 1; }
+}
+
+@keyframes mindNodeLate {
+  0%, 67% { opacity: 0; }
+  76%, 100% { opacity: 1; }
+}
+
+@keyframes mindChipOne {
+  0%, 31% { fill: #e8dfd8; }
+  32%, 100% { fill: #edc6a0; }
+}
+
+@keyframes mindChipTwo {
+  0%, 54% { fill: #e8dfd8; }
+  55%, 100% { fill: #edc6a0; }
+}
+
+@keyframes mindChipThree {
+  0%, 75% { fill: #e8dfd8; }
+  76%, 100% { fill: #edc6a0; }
+}
+
+@keyframes captionArrive {
+  0%, 13% { opacity: 0; transform: translateY(4px); }
+  20%, 93% { opacity: 1; transform: translateY(0); }
+  100% { opacity: .7; transform: translateY(0); }
+}
+
+@keyframes captionArrow {
+  0%, 18% { opacity: .25; transform: translateX(-4px); }
+  28%, 82% { opacity: 1; transform: translateX(0); }
+  88% { transform: translateX(3px); }
+  94%, 100% { opacity: 1; transform: translateX(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :global(html:not([data-motion="full"])) .bar,
-  :global(html:not([data-motion="full"])) .wave,
-  :global(html:not([data-motion="full"])) .pulse,
-  :global(html:not([data-motion="full"])) .packet,
-  :global(html:not([data-motion="full"])) .packetTrail { display: none; animation: none; }
-  :global(html:not([data-motion="full"])) .link,
-  :global(html:not([data-motion="full"])) .link[data-step] { animation: none; stroke-dashoffset: 0; }
-  :global(html:not([data-motion="full"])) .node { animation: none; opacity: 1; }
-  :global(html:not([data-motion="full"])) .core { animation: none; opacity: 1; }
-  :global(html:not([data-motion="full"])) .tag { animation: none; opacity: 1; }
+  :global(html:not([data-motion="full"])) .sceneViewport {
+    display: none;
+    animation: none;
+  }
+
+  :global(html:not([data-motion="full"])) .staticFallback { display: grid; }
+
+  :global(html:not([data-motion="full"])) .staticFallback * {
+    animation: none !important;
+  }
+
+  :global(html:not([data-motion="full"])) .staticFallback .scene,
+  :global(html:not([data-motion="full"])) .staticFallback .activeTrack,
+  :global(html:not([data-motion="full"])) .staticFallback .station,
+  :global(html:not([data-motion="full"])) .staticFallback .sourceWave,
+  :global(html:not([data-motion="full"])) .staticFallback .contextChips,
+  :global(html:not([data-motion="full"])) .staticFallback .routeDiagram,
+  :global(html:not([data-motion="full"])) .staticFallback .routeSelected,
+  :global(html:not([data-motion="full"])) .staticFallback .routeAlternate,
+  :global(html:not([data-motion="full"])) .staticFallback .summarySheet,
+  :global(html:not([data-motion="full"])) .staticFallback .awaitingPill {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
+  }
+
+  :global(html:not([data-motion="full"])) .staticFallback .activeTrack,
+  :global(html:not([data-motion="full"])) .staticFallback .routeSelected,
+  :global(html:not([data-motion="full"])) .staticFallback .routeAlternate {
+    stroke-dashoffset: 0;
+  }
+
+  :global(html:not([data-motion="full"])) .staticFallback .scanPlane {
+    display: none;
+    animation: none;
+  }
+
+  :global(html:not([data-motion="full"])) .staticFallback [data-stage="4"] .stationFace {
+    fill: #f9ecdf;
+    stroke: #bd9670;
+  }
+}
+
+@media (max-width: 620px) {
+  .wrap { gap: 11px; }
+  .desktopScene { display: none; }
+  .mobileScene { display: block; width: min(100%, 440px); }
+  .caption { max-width: 32ch; font-size: 9.5px; }
 }

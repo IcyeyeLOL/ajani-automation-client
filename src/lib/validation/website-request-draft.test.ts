@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { CURRENT_HANDOFF_POLICY_VERSION } from "@/lib/legal/policy-versions";
 import { websiteRequestDraftSchema } from "@/lib/validation/website-request-draft";
 
 const valid = {
+  legalAcceptanceAcknowledged: true as const,
+  legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
   title: "After-hours lead handoff",
   transcript: "The current lead follow-up is inconsistent after business hours.",
   clarificationAnswer: "When the lead shares a real date or budget.",
@@ -24,6 +27,26 @@ describe("website request draft validation", () => {
         { question: "Who owns the handoff?", answer: "The shared sales queue." },
       ],
     }).success).toBe(true);
+  });
+
+  it("requires an affirmative legal acknowledgment", () => {
+    const withoutAcknowledgment: Partial<typeof valid> = { ...valid };
+    delete withoutAcknowledgment.legalAcceptanceAcknowledged;
+    expect(websiteRequestDraftSchema.safeParse(withoutAcknowledgment).success).toBe(false);
+    expect(websiteRequestDraftSchema.safeParse({ ...valid, legalAcceptanceAcknowledged: false }).success).toBe(false);
+    expect(websiteRequestDraftSchema.safeParse({ ...valid, legalAcceptanceAcknowledged: "true" }).success).toBe(false);
+  });
+
+  it("requires the complete presented policy bundle", () => {
+    const incompleteVersions = {
+      noticeVersion: valid.legalAcceptanceVersions.noticeVersion,
+      privacyVersion: valid.legalAcceptanceVersions.privacyVersion,
+      termsVersion: valid.legalAcceptanceVersions.termsVersion,
+    };
+    expect(websiteRequestDraftSchema.safeParse({
+      ...valid,
+      legalAcceptanceVersions: incompleteVersions,
+    }).success).toBe(false);
   });
 
   it("caps clarification rounds at five", () => {

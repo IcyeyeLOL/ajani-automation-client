@@ -7,7 +7,17 @@ export async function mockAutomationBrief(page: Page) {
       action?: unknown;
       transcript?: unknown;
       clarificationAnswers?: unknown;
+      processingAcknowledged?: unknown;
+      processingNoticeVersion?: unknown;
     };
+    if (body.processingAcknowledged !== true || body.processingNoticeVersion !== "request-processing-2026-09-02") {
+      await route.fulfill({
+        contentType: "application/json",
+        status: 428,
+        body: JSON.stringify({ error: "Current processing acknowledgment required" }),
+      });
+      return;
+    }
     const transcript = typeof body.transcript === "string" ? body.transcript : "";
     const result = body.action === "shape"
       ? fallbackAutomationShape(

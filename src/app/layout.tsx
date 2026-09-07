@@ -3,12 +3,39 @@ import type { Metadata } from "next";
 import { AccountAccessProvider } from "@/components/account-access-dialog";
 import { ajaniClerkAppearance, ajaniClerkLocalization } from "@/lib/clerk/appearance";
 import { hasClerkCredentials } from "@/lib/clerk/config";
+import { MOTION_POLICY_VERSION } from "@/lib/motion/preference";
 import { display, mono } from "./fonts";
 import "./globals.css";
 
+const siteUrl = new URL("https://ajaniflow.com");
+const siteTitle = "Ajani Automation";
+const siteDescription = "Operational systems that make the work move.";
+
 export const metadata: Metadata = {
-  title: "Ajani Automation",
-  description: "Operational systems that make the work move.",
+  metadataBase: siteUrl,
+  title: siteTitle,
+  description: siteDescription,
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: siteTitle,
+    title: siteTitle,
+    description: siteDescription,
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "Ajani Automation",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -26,11 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   ) : app;
 
   return (
-    <html
-      className={`${display.variable} ${mono.variable}`}
-      data-motion="full"
-      lang="en"
-    >
+    <html className={`${display.variable} ${mono.variable}`} data-motion="full" data-motion-policy={MOTION_POLICY_VERSION} lang="en">
       <body>
         {configuredApp}
       </body>

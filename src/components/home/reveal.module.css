@@ -1,26 +1,29 @@
 .reveal {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.armed {
   opacity: 0;
-  filter: blur(7px);
-  transform: translate3d(0, 32px, 0);
-  transition:
-    opacity var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms),
-    filter var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms),
-    transform var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms);
-  will-change: opacity, filter, transform;
+  transform: translate3d(0, 18px, 0);
+  will-change: opacity, transform;
 }
 
 .shown {
   opacity: 1;
-  filter: blur(0);
   transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms),
+    transform var(--motion-slow) var(--ease-enter) var(--reveal-delay, 0ms);
+  will-change: auto;
 }
 
-/* Reduced motion: the component sets shown immediately, and this removes the
-   transition entirely so nothing eases in. */
+/* Motion is an enhancement, never a visibility requirement. */
 @media (prefers-reduced-motion: reduce) {
-  :global(html:not([data-motion="full"])) .reveal {
+  :global(html:not([data-motion="full"])) .reveal,
+  :global(html:not([data-motion="full"])) .armed,
+  :global(html:not([data-motion="full"])) .shown {
     opacity: 1;
-    filter: none;
     transform: none;
     transition: none;
     will-change: auto;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getReducedMotionPreference, subscribeToMotionPreference } from "@/lib/motion/preference";
 import { RecordNoteAction } from "@/components/record-note-action";
 import styles from "./mobile-demo-theatre.module.css";
 
@@ -70,7 +71,9 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   const [mode, setMode] = useState<PlaybackMode>("idle");
   const [reducedMotion, setReducedMotion] = useState(false);
   const [autoCycle, setAutoCycle] = useState(false);
+  const [environmentPaused, setEnvironmentPaused] = useState(false);
   const autoCycleRef = useRef(false);
+  const focusPlayerOnOpen = useRef(false);
   const playerRef = useRef<HTMLElement>(null);
   const playerHeading = useRef<HTMLHeadingElement>(null);
   const chooserButtons = useRef<Array<HTMLButtonElement | null>>([]);
@@ -93,30 +96,30 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   useEffect(() => {
     if (!window.matchMedia("(max-width: 768px)").matches) return;
     const frame = window.requestAnimationFrame(() => {
-      autoCycleRef.current = true;
-      setAutoCycle(true);
+      const reduce = getReducedMotionPreference();
+      autoCycleRef.current = !reduce;
+      setAutoCycle(!reduce);
       setScenarioIndex(0);
       setActiveStep(1);
-      setMode("playing");
+      setMode(reduce ? "paused" : "playing");
       setView("player");
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updatePreference = () => {
-      const shouldReduceMotion = preference.matches && document.documentElement.dataset.motion !== "full";
+    return subscribeToMotionPreference((shouldReduceMotion) => {
       setReducedMotion(shouldReduceMotion);
-      if (shouldReduceMotion && !autoCycleRef.current) setMode((current) => current === "playing" ? "paused" : current);
-    };
-    updatePreference();
-    preference.addEventListener("change", updatePreference);
-    return () => preference.removeEventListener("change", updatePreference);
+      if (shouldReduceMotion) {
+        autoCycleRef.current = false;
+        setAutoCycle(false);
+        setMode((current) => current === "playing" ? "paused" : current);
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (mode !== "playing" || (reducedMotion && !autoCycle)) return;
+    if (environmentPaused || mode !== "playing" || (reducedMotion && !autoCycle)) return;
     const timer = window.setTimeout(() => {
       if (activeStep >= totalSteps) {
         setMode("complete");
@@ -125,28 +128,52 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
       setActiveStep((step) => step + 1);
     }, STEP_DURATION);
     return () => window.clearTimeout(timer);
-  }, [activeStep, autoCycle, mode, reducedMotion, totalSteps]);
+  }, [activeStep, autoCycle, environmentPaused, mode, reducedMotion, totalSteps]);
 
   useEffect(() => {
-    if (!autoCycle || mode !== "complete") return;
+    if (environmentPaused || !autoCycle || mode !== "complete") return;
     const timer = window.setTimeout(() => {
       setScenarioIndex((index) => (index + 1) % scenarios.length);
       setActiveStep(1);
       setMode("playing");
     }, AUTO_HOLD_DURATION);
     return () => window.clearTimeout(timer);
-  }, [autoCycle, mode, scenarios.length]);
+  }, [autoCycle, environmentPaused, mode, scenarios.length]);
 
   useEffect(() => {
-    const pauseWhenHidden = () => {
-      if (document.hidden) setMode((current) => current === "playing" ? "paused" : current);
+    const mobileViewport = window.matchMedia("(max-width: 768px)");
+    let inView = true;
+    const syncEnvironment = () => {
+      const unavailable = document.hidden || !mobileViewport.matches;
+      setEnvironmentPaused(unavailable || !inView);
+      if (unavailable) {
+        // Stop the between-scenario hold too: a completed route must not start
+        // another workflow after the user backgrounds or leaves mobile view.
+        autoCycleRef.current = false;
+        setAutoCycle(false);
+        setMode((current) => current === "playing" ? "paused" : current);
+      }
     };
-    document.addEventListener("visibilitychange", pauseWhenHidden);
-    return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
-  }, []);
+    const observer = typeof IntersectionObserver === "function" && playerRef.current
+      ? new IntersectionObserver(([entry]) => {
+          inView = entry.isIntersecting;
+          syncEnvironment();
+        }, { threshold: 0 })
+      : null;
+    if (observer && playerRef.current) observer.observe(playerRef.current);
+    syncEnvironment();
+    document.addEventListener("visibilitychange", syncEnvironment);
+    mobileViewport.addEventListener("change", syncEnvironment);
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener("visibilitychange", syncEnvironment);
+      mobileViewport.removeEventListener("change", syncEnvironment);
+    };
+  }, [view]);
 
   useEffect(() => {
-    if (view !== "player") return;
+    if (view !== "player" || !focusPlayerOnOpen.current) return;
+    focusPlayerOnOpen.current = false;
     const frame = window.requestAnimationFrame(() => {
       playerRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
       playerHeading.current?.focus({ preventScroll: true });
@@ -161,14 +188,12 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const chooseScenario = (index: number) => {
-    const shouldReduceMotion = reducedMotion || (
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      && document.documentElement.dataset.motion !== "full"
-    );
+    const shouldReduceMotion = getReducedMotionPreference();
     setAutoCycle(false);
     setScenarioIndex(index);
     setActiveStep(1);
     setMode(shouldReduceMotion ? "paused" : "playing");
+    focusPlayerOnOpen.current = true;
     setView("player");
   };
 
@@ -178,6 +203,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
     setScenarioIndex(0);
     setActiveStep(1);
     setMode("playing");
+    focusPlayerOnOpen.current = true;
     setView("player");
   };
 
@@ -276,7 +302,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   }
 
   return <div className={styles.mobileOnly}>
-    <section aria-labelledby="mobile-player-heading" className={styles.player} data-auto={autoCycle ? "true" : undefined} data-mode={mode} ref={playerRef}>
+    <section aria-labelledby="mobile-player-heading" className={styles.player} data-auto={autoCycle ? "true" : undefined} data-mode={environmentPaused && mode === "playing" ? "paused" : mode} ref={playerRef}>
       <header className={styles.playerHeader}>
         <button className={styles.changeButton} onClick={changeScenario} type="button"><ControlIcon name="back" /> Change</button>
         <div>

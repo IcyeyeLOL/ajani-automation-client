@@ -136,6 +136,17 @@ describe("POST /api/transcribe-voice", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it("rejects provider processing without the current acknowledgment", async () => {
+    const response = await POST(audioRequest({ acknowledged: false }));
+
+    expect(response.status).toBe(428);
+    await expect(response.json()).resolves.toEqual({
+      error: "Review the current processing notice before transcribing this note.",
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.transcribe).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["an unapproved MIME type", new Blob([new Uint8Array(VALID_WEBM_HEADER)], { type: "application/octet-stream" })],
     ["bytes that do not match the declared MIME type", new Blob([new TextEncoder().encode("not a webm recording")], { type: "audio/webm" })],
@@ -230,16 +241,20 @@ describe("transcription request validation", () => {
 });
 
 function audioRequest({
+  acknowledged = true,
   audio = new Blob([new Uint8Array(VALID_WEBM_HEADER)], { type: "audio/webm" }),
   origin = "http://localhost:3001",
   url = LOCAL_URL,
 }: {
+  acknowledged?: boolean;
   audio?: Blob;
   origin?: string | null;
   url?: string;
 } = {}) {
   const body = new FormData();
   body.set("audio", audio, "voice-note");
+  body.set("processingAcknowledged", String(acknowledged));
+  body.set("processingNoticeVersion", "request-processing-2026-09-02");
   const headers = new Headers();
   if (origin) headers.set("origin", origin);
   return new Request(url, { method: "POST", headers, body });

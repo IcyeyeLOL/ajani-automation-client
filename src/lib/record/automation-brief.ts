@@ -18,7 +18,7 @@ export const automationClarificationSchema = z.object({
 export const automationEmailBriefSchema = z.object({
   subject: z.string().trim().min(3).max(120),
   overview: z.string().trim().min(1).max(1_000),
-  implementationNotes: z.array(z.string().trim().min(1).max(500)).min(1).max(8),
+  implementationNotes: z.array(z.string().trim().min(1).max(500)).max(8),
   assumptions: z.array(z.string().trim().min(1).max(500)).max(6),
 });
 
@@ -40,7 +40,9 @@ export const automationShapeResponseSchema = z.object({
     kind: z.enum(["trigger", "reply", "qualify", "handoff", "custom"]),
     title: z.string().trim().min(1).max(120),
     detail: z.string().trim().min(1).max(1_000),
-  })).min(3).max(8),
+  })).min(3).max(8).refine((blocks) => blocks.some((block) => block.kind === "handoff"), {
+    message: "The proposed route must include a human handoff.",
+  }),
   emailBrief: automationEmailBriefSchema,
 }).merge(generationMetadataSchema);
 
@@ -49,6 +51,22 @@ export type AutomationEmailBrief = z.infer<typeof automationEmailBriefSchema>;
 export type AutomationIntakeResponse = z.infer<typeof automationIntakeResponseSchema>;
 export type AutomationShapeResponse = z.infer<typeof automationShapeResponseSchema>;
 export type AutomationClarificationAnswer = { question: string; answer: string };
+
+/** The internal brief must describe the exact route the customer approved. */
+export function approvedAutomationEmailBrief(
+  blocks: SystemBlock[],
+  problem: AutomationProblem,
+  previous: AutomationEmailBrief | null,
+): AutomationEmailBrief {
+  return {
+    subject: `${blocks[0]?.title ?? "Automation request"} → ${blocks.at(-1)?.title ?? "human handoff"}`.slice(0, 120),
+    overview: problem.desiredOutcome.slice(0, 1_000),
+    // The complete approved blocks travel as systemBlocks. Do not maintain a
+    // second, potentially stale or truncated route inside summary metadata.
+    implementationNotes: [],
+    assumptions: previous?.assumptions ?? [],
+  };
+}
 
 export function fallbackAutomationIntake(transcript: string): AutomationIntakeResponse {
   const analysis = analyzeTypedNote(transcript);

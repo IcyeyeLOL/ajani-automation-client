@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await processBuildRequestNotifications({ limit: 25 });
+    const result = await processBuildRequestNotifications({ limit: 25, deadlineAt: Date.now() + 50_000 });
     return Response.json(result);
   } catch (error) {
     console.error("Build request notification sweep failed", {

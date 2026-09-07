@@ -315,9 +315,11 @@
 .privacy > span { color: var(--sand); }
 .privacy p { margin: 0; font-size: 13px; line-height: 1.45; }
 .privacy strong { color: #e5dbd6; font-weight: 600; }
+.privacy a { color: #eed2b7; font-weight: 620; text-decoration: underline; text-underline-offset: 3px; }
 .panel[data-phase="paused"] .privacy { border-color: #d8cec5; background: #ece6df; color: #665d57; }
 .panel[data-phase="paused"] .privacy > span { color: #8c5f62; }
 .panel[data-phase="paused"] .privacy strong { color: var(--ink); }
+.panel[data-phase="paused"] .privacy a { color: var(--crimson); }
 .panel[data-phase="paused"] .transcriptEditor textarea:focus-visible {
   border-color: #8c5f62;
   outline: 2px solid rgba(140, 95, 98, .48);

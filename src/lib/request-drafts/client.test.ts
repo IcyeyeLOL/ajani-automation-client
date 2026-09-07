@@ -12,11 +12,14 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
-import {
+let {
+  acknowledgeSavedWebsiteRequestDraft,
   claimSavedWebsiteRequestDraft,
   clearSavedWebsiteRequestCapability,
+  getSavedWebsiteRequestDraft,
   saveWebsiteRequestDraft,
-} from "@/lib/request-drafts/client";
+} = await import("@/lib/request-drafts/client");
+import { CURRENT_HANDOFF_POLICY_VERSION } from "@/lib/legal/policy-versions";
 
 const newDraft = {
   id: "bfa16669-b62c-49e5-a356-9ac634a969bb",
@@ -25,6 +28,8 @@ const newDraft = {
 };
 const newToken = "new-capability-token-that-is-long-enough-for-validation";
 const draftInput = {
+  legalAcceptanceAcknowledged: true as const,
+  legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
   title: "After-hours lead handoff",
   transcript: "After-hours leads need a timely response and clear ownership.",
   clarificationAnswer: "Send qualified replies to the team queue.",
@@ -48,7 +53,9 @@ const draftInput = {
 describe("website request draft client", () => {
   let values: Map<string, string>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ acknowledgeSavedWebsiteRequestDraft, claimSavedWebsiteRequestDraft, clearSavedWebsiteRequestCapability, getSavedWebsiteRequestDraft, saveWebsiteRequestDraft } = await import("@/lib/request-drafts/client"));
     values = new Map([
       ["ajani_request_draft_id", "prior-draft-id"],
       ["ajani_request_draft_token", "prior-capability-token"],
@@ -98,8 +105,10 @@ describe("website request draft client", () => {
 
     await expect(saveWebsiteRequestDraft(draftInput, voiceBlob())).resolves.toEqual(newDraft);
 
-    expect(values.get("ajani_request_draft_id")).toBe(newDraft.id);
-    expect(values.get("ajani_request_draft_token")).toBe(newToken);
+    expect(JSON.parse(values.get("ajani_request_draft_capability_v1")!)).toEqual({ draftId: newDraft.id, draftToken: newToken });
+    expect(getSavedWebsiteRequestDraft()).toEqual({ id: newDraft.id, persistence: "session" });
+    expect(values.has("ajani_request_draft_id")).toBe(false);
+    expect(values.has("ajani_request_draft_token")).toBe(false);
   });
 
   it("claims the saved capability and only clears it after confirmed submission", async () => {
@@ -130,6 +139,90 @@ describe("website request draft client", () => {
     await expect(claimSavedWebsiteRequestDraft()).rejects.toThrow("Workspace unavailable");
     expect(values.get("ajani_request_draft_id")).toBe("prior-draft-id");
     expect(values.get("ajani_request_draft_token")).toBe("prior-capability-token");
+  });
+
+  it("records a fresh acknowledgment for a legacy saved capability", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ status: "acknowledged" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(acknowledgeSavedWebsiteRequestDraft(CURRENT_HANDOFF_POLICY_VERSION)).resolves.toEqual({
+      status: "acknowledged",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/request-drafts/acknowledge", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({
+        draftId: "prior-draft-id",
+        draftToken: "prior-capability-token",
+        legalAcceptanceAcknowledged: true,
+        legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
+      }),
+    }));
+  });
+
+  it("preserves an API status for legal-review recovery", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: "Review required" }, { status: 428 })));
+
+    await expect(claimSavedWebsiteRequestDraft()).rejects.toMatchObject({
+      message: "Review required",
+      status: 428,
+    });
+  });
+
+  it("can finish the current handoff in memory when every storage method is denied", async () => {
+    const denied = () => { throw new DOMException("Storage denied", "SecurityError"); };
+    vi.stubGlobal("sessionStorage", { getItem: denied, setItem: denied, removeItem: denied });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input) === "/api/request-drafts"
+      ? createdResponse()
+      : Response.json({ status: "submitted" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(saveWebsiteRequestDraft({ ...draftInput, voiceMemo: null })).resolves.toEqual(newDraft);
+    expect(getSavedWebsiteRequestDraft()).toEqual({ id: newDraft.id, persistence: "memory" });
+    await expect(claimSavedWebsiteRequestDraft(newDraft.id)).resolves.toMatchObject({ status: "submitted" });
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/request-drafts/claim", expect.objectContaining({
+      body: JSON.stringify({ draftId: newDraft.id, draftToken: newToken }),
+    }));
+    clearSavedWebsiteRequestCapability(newDraft.id);
+    expect(getSavedWebsiteRequestDraft()).toBeNull();
+    await expect(claimSavedWebsiteRequestDraft()).rejects.toThrow("no longer available");
+  });
+
+  it("never pairs a new token with a previous draft when persistence fails", async () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: () => { throw new DOMException("Quota exceeded", "QuotaExceededError"); },
+      removeItem: (key: string) => values.delete(key),
+    });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: RequestInfo | URL) => String(input) === "/api/request-drafts"
+      ? createdResponse()
+      : Response.json({ status: "submitted" })));
+    await saveWebsiteRequestDraft({ ...draftInput, voiceMemo: null });
+    expect(getSavedWebsiteRequestDraft()).toEqual({ id: newDraft.id, persistence: "memory" });
+    await expect(claimSavedWebsiteRequestDraft("prior-draft-id")).rejects.toThrow("saved request changed");
+    clearSavedWebsiteRequestCapability("prior-draft-id");
+    expect(getSavedWebsiteRequestDraft()?.id).toBe(newDraft.id);
+    expect(values.has("ajani_request_draft_id")).toBe(false);
+  });
+
+  it("does not revive a cleared capability when storage cleanup is blocked", () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      removeItem: () => { throw new DOMException("Storage denied", "SecurityError"); },
+    });
+    expect(getSavedWebsiteRequestDraft()?.id).toBe("prior-draft-id");
+    clearSavedWebsiteRequestCapability("prior-draft-id");
+    expect(getSavedWebsiteRequestDraft()).toBeNull();
+  });
+
+  it("does not claim or expose a memory-only capability after a full reload", async () => {
+    const denied = () => { throw new DOMException("Storage denied", "SecurityError"); };
+    vi.stubGlobal("sessionStorage", { getItem: denied, setItem: denied, removeItem: denied });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(createdResponse()));
+    await saveWebsiteRequestDraft({ ...draftInput, voiceMemo: null });
+    expect(getSavedWebsiteRequestDraft()?.persistence).toBe("memory");
+    vi.resetModules();
+    const reloadedClient = await import("@/lib/request-drafts/client");
+    expect(reloadedClient.getSavedWebsiteRequestDraft()).toBeNull();
+    await expect(reloadedClient.claimSavedWebsiteRequestDraft()).rejects.toThrow("no longer available");
   });
 });
 

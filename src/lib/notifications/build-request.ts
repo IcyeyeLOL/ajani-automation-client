@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withinDeadline } from "@/lib/operations/deadline";
 
 const MAX_ATTEMPTS = 5;
 const MAX_ERROR_LENGTH = 500;
@@ -41,8 +42,10 @@ export async function processBuildRequestNotifications(options: {
   buildRequestId?: string;
   limit?: number;
   admin?: AdminClient;
+  deadlineAt?: number;
 } = {}): Promise<NotificationSweepResult> {
   const admin = options.admin ?? createSupabaseAdminClient();
+  const deadlineAt = options.deadlineAt ?? Date.now() + 45_000;
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 25);
   const result: NotificationSweepResult = {
     claimed: 0,
@@ -52,14 +55,16 @@ export async function processBuildRequestNotifications(options: {
   };
 
   for (let index = 0; index < limit; index += 1) {
-    const job = await claimNotification(admin, options.buildRequestId);
+    // Leave enough time to deliver and persist the outcome before leasing more work.
+    if (deadlineAt - Date.now() < RESEND_TIMEOUT_MS + 2_000) break;
+    const job = await withinDeadline(claimNotification(admin, options.buildRequestId), deadlineAt - 2_000);
     if (!job) break;
     result.claimed += 1;
 
     try {
-      const request = await loadBuildRequest(admin, job.build_request_id);
-      const messageId = await sendBuildRequestEmail(request);
-      const { error } = await admin
+      const request = await withinDeadline(loadBuildRequest(admin, job.build_request_id), deadlineAt - 2_000);
+      const messageId = await withinDeadline(sendBuildRequestEmail(request, deadlineAt), deadlineAt - 2_000);
+      const { error } = await withinDeadline(admin
         .from("build_request_notification_jobs")
         .update({
           status: "sent",
@@ -69,12 +74,13 @@ export async function processBuildRequestNotifications(options: {
           last_error: null,
         })
         .eq("build_request_id", job.build_request_id)
-        .eq("status", "sending");
+        .eq("status", "sending")
+        .eq("attempt_count", job.attempt_count), deadlineAt);
       if (error) throw new Error(`notification_state_update_failed:${error.message}`);
       result.sent += 1;
     } catch (error) {
       const retryable = isRetryable(error) && job.attempt_count < MAX_ATTEMPTS;
-      const { error: stateError } = await admin
+      const { error: stateError } = await withinDeadline(admin
         .from("build_request_notification_jobs")
         .update({
           status: retryable ? "retryable_failed" : "terminal_failed",
@@ -82,7 +88,8 @@ export async function processBuildRequestNotifications(options: {
           last_error: safeErrorMessage(error),
         })
         .eq("build_request_id", job.build_request_id)
-        .eq("status", "sending");
+        .eq("status", "sending")
+        .eq("attempt_count", job.attempt_count), deadlineAt);
 
       if (stateError) {
         console.error("Build request notification state update failed", {
@@ -127,7 +134,7 @@ async function loadBuildRequest(admin: AdminClient, buildRequestId: string) {
   return { ...request, requester } as BuildRequestSummary;
 }
 
-async function sendBuildRequestEmail(request: BuildRequestSummary) {
+async function sendBuildRequestEmail(request: BuildRequestSummary, deadlineAt: number) {
   const apiKey = process.env.RESEND_API_KEY;
   const recipient = process.env.INTERNAL_NOTIFICATION_TO;
   const from = process.env.RESEND_FROM;
@@ -145,16 +152,17 @@ async function sendBuildRequestEmail(request: BuildRequestSummary) {
   const systemBlocks = Array.isArray(request.system_definition)
     ? request.system_definition.map(asRecord).filter((item) => typeof item.title === "string" && typeof item.detail === "string")
     : [];
-  const implementationNotes = stringArray(emailBrief.implementationNotes);
   const assumptions = stringArray(emailBrief.assumptions);
   const requesterName = stringValue(request.requester?.full_name);
   const requesterEmail = stringValue(request.requester?.email);
   const requesterPhone = stringValue(request.requester?.phone);
   if (!requesterEmail) throw new ConfigurationError("requester_email_missing");
   const appUrl = safeAppUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const remaining = deadlineAt - Date.now() - 2_000;
+  if (remaining <= 0) throw new Error("notification_deadline_exceeded");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
+    signal: AbortSignal.timeout(Math.min(RESEND_TIMEOUT_MS, remaining)),
     headers: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
@@ -163,7 +171,7 @@ async function sendBuildRequestEmail(request: BuildRequestSummary) {
     body: JSON.stringify({
       from,
       to: [recipient],
-      subject: `New Ajani build request: ${stringValue(emailBrief.subject) || request.title}`,
+      subject: `New Ajani build request: ${request.title}`,
       html: renderBuildRequestEmail({
         title: request.title,
         organization: organization || "New client workspace",
@@ -173,13 +181,12 @@ async function sendBuildRequestEmail(request: BuildRequestSummary) {
         requesterEmail,
         requesterPhone,
         adminUrl: `${appUrl}/admin`,
-        overview: stringValue(emailBrief.overview) || stringValue(developmentBrief.desiredOutcome) || "A new automation route is ready for implementation review.",
+        overview: stringValue(developmentBrief.desiredOutcome) || stringValue(request.plain_language_scope) || "A new automation route is ready for implementation review.",
         problem: stringValue(developmentBrief.workThatSlips),
         moment: stringValue(developmentBrief.momentItHappens),
         protection: stringValue(developmentBrief.protection),
-        implementationNotes: implementationNotes.length > 0
-          ? implementationNotes
-          : systemBlocks.map((block) => `${stringValue(block.title)}: ${stringValue(block.detail)}`),
+        // The persisted approved route is canonical. Generated notes may predate edits.
+        implementationNotes: systemBlocks.map((block) => `${stringValue(block.title)}: ${stringValue(block.detail)}`),
         decisions: clarificationAnswers.map((item) => `${stringValue(item.question)}: ${stringValue(item.answer)}`),
         assumptions,
       }),

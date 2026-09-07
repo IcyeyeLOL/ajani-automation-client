@@ -61,6 +61,65 @@ describe("request draft body parsing", () => {
   });
 });
 
+describe("request draft legal acceptance", () => {
+  it("rejects a save before database access when acknowledgment is missing", async () => {
+    const response = await POST(new Request("https://ajani.test/api/request-drafts", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://ajani.test" },
+      body: JSON.stringify({
+        draft: {
+          title: "Route new leads",
+          transcript: "Send each new website lead to the right team member.",
+          clarificationAnswer: "",
+          clarificationAnswers: [],
+          systemBlocks: [{
+            id: "trigger-1",
+            kind: "trigger",
+            title: "New lead arrives",
+            detail: "Capture a completed website form.",
+          }],
+          voiceMemo: null,
+        },
+      }),
+    }));
+
+    expect(response.status).toBe(400);
+    expect(routeMocks.createAdmin).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale browser policy tuple before database access", async () => {
+    const response = await POST(new Request("https://ajani.test/api/request-drafts", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://ajani.test" },
+      body: JSON.stringify({
+        draft: {
+          legalAcceptanceAcknowledged: true,
+          legalAcceptanceVersions: {
+            noticeVersion: "handoff-notice-stale",
+            acceptableUseVersion: "stale",
+            privacyVersion: "stale",
+            termsVersion: "stale",
+          },
+          title: "Route new leads",
+          transcript: "Send each new website lead to the right team member.",
+          clarificationAnswer: "",
+          clarificationAnswers: [],
+          systemBlocks: [{
+            id: "trigger-1",
+            kind: "trigger",
+            title: "New lead arrives",
+            detail: "Capture a completed website form.",
+          }],
+          voiceMemo: null,
+        },
+      }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(routeMocks.createAdmin).not.toHaveBeenCalled();
+  });
+});
+
 describe("public request allowance", () => {
   it("retries one transient database failure before allowing the save", async () => {
     const rpc = vi.fn()
@@ -118,27 +177,25 @@ describe("post-response request demand analysis", () => {
     const draftId = "bfa16669-b62c-49e5-a356-9ac634a969bb";
     const insertState = vi.fn().mockResolvedValue({ error: null });
     const insertRun = vi.fn().mockResolvedValue({ error: null });
-    const finalStateFilter = vi.fn().mockResolvedValue({ error: null });
-    const transcriptFilter = vi.fn(() => ({ eq: finalStateFilter }));
-    const updateState = vi.fn(() => ({ eq: transcriptFilter }));
     const rateLimit = vi.fn().mockResolvedValue({ data: true, error: null });
     const deleteDraft = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) }));
+    const insertDraft = vi.fn(() => ({
+      select: () => ({
+        single: vi.fn().mockResolvedValue({
+          data: { id: draftId, status: "ready_to_submit", updated_at: "2026-08-27T00:00:00.000Z" },
+          error: null,
+        }),
+      }),
+    }));
     const from = vi.fn((table: string) => {
       if (table === "request_drafts") {
         return {
-          insert: () => ({
-            select: () => ({
-              single: vi.fn().mockResolvedValue({
-                data: { id: draftId, status: "ready_to_submit", updated_at: "2026-08-27T00:00:00.000Z" },
-                error: null,
-              }),
-            }),
-          }),
+          insert: insertDraft,
           delete: deleteDraft,
         };
       }
       if (table === "request_draft_ai_states") {
-        return { insert: insertState, update: updateState };
+        return { insert: insertState };
       }
       if (table === "request_draft_ai_runs") return { insert: insertRun };
       throw new Error(`Unexpected table: ${table}`);
@@ -169,6 +226,13 @@ describe("post-response request demand analysis", () => {
       headers: { "content-type": "application/json", origin: "https://ajani.test" },
       body: JSON.stringify({
         draft: {
+          legalAcceptanceAcknowledged: true,
+          legalAcceptanceVersions: {
+            noticeVersion: "handoff-notice-2026-09-02",
+            acceptableUseVersion: "2026-09-02",
+            privacyVersion: "2026-09-02",
+            termsVersion: "2026-09-02",
+          },
           title: "Route new leads",
           transcript: "Send each new website lead to the right team member.",
           clarificationAnswer: "",
@@ -186,6 +250,20 @@ describe("post-response request demand analysis", () => {
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({ draft: { id: draftId } });
+    expect(insertDraft).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        legalAcceptance: expect.objectContaining({
+          acknowledged: true,
+          acceptedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+          action: "request_handoff",
+          method: "affirmative_checkbox",
+          noticeVersion: "handoff-notice-2026-09-02",
+          acceptableUseVersion: "2026-09-02",
+          privacyVersion: "2026-09-02",
+          termsVersion: "2026-09-02",
+        }),
+      }),
+    }));
     expect(routeMocks.extractDemand).not.toHaveBeenCalled();
     expect(insertState).toHaveBeenCalledWith(expect.objectContaining({
       confidence: null,
@@ -197,14 +275,14 @@ describe("post-response request demand analysis", () => {
 
     expect(routeMocks.extractDemand).toHaveBeenCalledOnce();
     expect(insertRun).toHaveBeenCalledOnce();
-    expect(updateState).toHaveBeenCalledWith(expect.objectContaining({
-      confidence: 0.91,
-      latest_extraction: expect.objectContaining({
+    expect(rateLimit).toHaveBeenCalledWith("persist_request_demand_analysis", expect.objectContaining({
+      p_draft_id: draftId,
+      p_transcript_fingerprint: expect.any(String),
+      p_confidence: 0.91,
+      p_latest_extraction: expect.objectContaining({
         demand: expect.objectContaining({ demandCategory: "Lead Follow-up" }),
       }),
     }));
-    expect(transcriptFilter).toHaveBeenCalledWith("request_draft_id", draftId);
-    expect(finalStateFilter).toHaveBeenCalledWith("transcript_fingerprint", expect.any(String));
     expect(deleteDraft).not.toHaveBeenCalled();
   });
 

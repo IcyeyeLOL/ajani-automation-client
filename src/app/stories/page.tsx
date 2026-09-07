@@ -16,7 +16,7 @@ const featured = {
   kicker: "Clinics & practices · Frederick’s dental practice",
   title: "The after-hours calls that stopped ending at voicemail.",
   lede: "Patients still called when the front desk was closed. The practice needed a response that could capture the reason for the call, understand urgency and leave the team with useful context.",
-  body: "Ajani built a HIPAA-aware voice system that answers after hours, gathers patient details, supports insurance eligibility verification and routes urgent cases. The practice gets structured information instead of a voicemail somebody has to decode the next morning.",
+  body: "Ajani built a voice system for the practice that answers after hours, gathers the configured call context, supports insurance eligibility verification and routes urgent cases. The practice gets structured information instead of a voicemail somebody has to decode the next morning.",
   log: [
     { at: "After hours", event: "A patient calls while the front desk is closed", tone: "in" },
     { at: "On the call", event: "The voice agent answers and captures the reason for calling", tone: "act" },
@@ -46,7 +46,7 @@ const stories: Story[] = [
     kicker: "Clinics & practices",
     title: "The after-hours call that arrived team-ready.",
     before: "Patient calls outside office hours became voicemails, and the front desk had to reconstruct the request the next morning.",
-    after: "A HIPAA-aware voice system captures the request, supports eligibility checks and routes urgent cases with context attached.",
+    after: "A practice voice system captures the request, supports eligibility checks and routes urgent cases with context attached.",
     route: ["Call answered", "Context captured", "Case routed"],
     image: "/images/stories/clinics-practices.webp",
     imageAlt: "Clinic phone, patient intake card, and routing line showing an after-hours call becoming an organized handoff",
@@ -76,7 +76,7 @@ const stories: Story[] = [
     kicker: "Property & real estate",
     title: "The same 35 leads that started booking calls.",
     before: "A real-estate client was spending $800 a month for roughly 35 leads, but near-zero conversations were becoming booked calls.",
-    after: "Ajani added immediate text follow-up, 24- and 48-hour nudges and a 21-day email sequence. Six calls booked in the first month.",
+    after: "Ajani added immediate text follow-up, 24- and 48-hour nudges and a 21-day email sequence. The client reported six calls booked in the first month.",
     route: ["Lead arrives", "Follow-up runs", "Call booked"],
     image: "/images/stories/property-real-estate.webp",
     imageAlt: "House, phone, key, and appointment marker connected by a real-estate lead follow-up route",
@@ -197,7 +197,7 @@ export default function StoriesPage() {
           <div className={styles.headMain}>
             <p className={styles.label}>Real client system</p>
             <h2>Inside Frederick&apos;s <em>after-hours route.</em></h2>
-            <p className={styles.clientSystemIntro}>A live healthcare build where the call comes in, the system gathers what matters, and the right context reaches the practice.</p>
+            <p className={styles.clientSystemIntro}>A documented healthcare-client build where the call comes in, the system gathers what matters, and the right context reaches the practice. Public intake is not approved for health information.</p>
           </div>
         </Reveal>
 

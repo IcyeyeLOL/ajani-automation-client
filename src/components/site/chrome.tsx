@@ -1,83 +1,68 @@
 import Link from "next/link";
 import { HeaderUserMenu } from "@/components/header-user-menu";
 import { RecordNoteAction } from "@/components/record-note-action";
+import { MobileSiteMenu } from "@/components/site/mobile-site-menu";
 import styles from "./chrome.module.css";
 
 type Nav = "approach" | "demos" | "home" | "stories" | null;
-
-const mobileLinks = [
-  { href: "/demos", label: "Demos", note: "See the systems move", value: "demos" },
-  { href: "/stories", label: "Stories", note: "Real client work and proof", value: "stories" },
-] as const;
+type ChromeTone = "dark" | "light";
+type ChromeVariant = "marketing" | "funnel";
 
 /**
- * The marketing header and footer, shared so the pages a visitor moves between
- * do not each carry their own copy. The recorder page deliberately does not use
- * this — it runs a stripped header with a single way back, because it is the
- * end of the funnel and every extra link there is an exit.
+ * The marketing header and footer stay shared so pages do not drift apart.
+ * The recorder opts into the stripped funnel variant: one way back and no
+ * competing navigation at the point where a visitor is preparing a request.
  */
-export function SiteTop({ active = null }: { active?: Nav }) {
+export function SiteTop({
+  active = null,
+  subtitle,
+  tone = "dark",
+  variant = "marketing",
+}: {
+  active?: Nav;
+  subtitle?: string;
+  tone?: ChromeTone;
+  variant?: ChromeVariant;
+}) {
+  const isFunnel = variant === "funnel";
+
   return (
     <>
       <a className={styles.skipLink} href="#main-content">Skip to main content</a>
-      <header className={styles.header}>
+      <header className={styles.header} data-tone={tone} data-variant={variant}>
         <div className={styles.headerInner}>
-          <Link className={styles.brand} href="/">ajani<i>.</i></Link>
-          <nav className={styles.nav}>
-            <Link
-              aria-current={active === "demos" ? "page" : undefined}
-              className={styles.link}
-              href="/demos"
-            >
-              Demos
-            </Link>
-            <Link
-              aria-current={active === "stories" ? "page" : undefined}
-              className={styles.link}
-              href="/stories"
-            >
-              Stories
-            </Link>
-            <RecordNoteAction className={styles.cta}>Record a note</RecordNoteAction>
-            <HeaderUserMenu signedOutFallback={null} />
-          </nav>
-          <div className={styles.mobileControls}>
-            <HeaderUserMenu className={styles.mobileAccount} signedOutFallback={null} />
-            <details className={styles.mobileMenu}>
-              <summary aria-label="Open navigation menu" className={styles.mobileMenuTrigger}>
-                <span aria-hidden="true" className={styles.menuIcon}><i /><i /><i /></span>
-              </summary>
-              <div className={styles.mobileMenuPanel}>
-                <div className={styles.mobileMenuHead}>
-                  <span>Explore Ajani</span>
-                </div>
-                <h2 className={styles.mobileMenuTitle}>Where do you want to go?</h2>
-                <nav aria-label="Mobile navigation" className={styles.mobileMenuLinks}>
-                  {mobileLinks.map((link, index) => (
-                    <Link
-                      aria-current={active === link.value ? "page" : undefined}
-                      href={link.href}
-                      key={link.href}
-                    >
-                      <small>0{index + 1}</small>
-                      <span><b>{link.label}</b><em>{link.note}</em></span>
-                      <i aria-hidden="true">→</i>
-                    </Link>
-                  ))}
-                </nav>
-                <RecordNoteAction className={styles.mobileCta}>
-                  <span>Record a note</span><i aria-hidden="true">→</i>
-                </RecordNoteAction>
-                <nav aria-label="Legal" className={styles.mobileMenuLegal}>
-                  <Link href="/legal">Legal</Link>
-                  <i aria-hidden="true">·</i>
-                  <Link href="/terms">Terms</Link>
-                  <i aria-hidden="true">·</i>
-                  <Link href="/privacy">Privacy</Link>
-                </nav>
-              </div>
-            </details>
+          <div className={styles.brandLockup}>
+            <Link aria-label="Ajani home" className={styles.brand} href="/">ajani<i>.</i></Link>
+            {subtitle ? <span className={styles.context}>{subtitle}</span> : null}
           </div>
+
+          {isFunnel ? (
+            <Link className={styles.funnelBack} href="/">
+              <i aria-hidden="true">←</i><span>Back home</span>
+            </Link>
+          ) : (
+            <>
+              <nav aria-label="Primary navigation" className={styles.nav}>
+                <Link
+                  aria-current={active === "demos" ? "page" : undefined}
+                  className={styles.link}
+                  href="/demos"
+                >
+                  Demos
+                </Link>
+                <Link
+                  aria-current={active === "stories" ? "page" : undefined}
+                  className={styles.link}
+                  href="/stories"
+                >
+                  Stories
+                </Link>
+                <RecordNoteAction className={styles.cta}>Record a note</RecordNoteAction>
+                <HeaderUserMenu signedOutFallback={null} />
+              </nav>
+              <MobileSiteMenu active={active} />
+            </>
+          )}
         </div>
       </header>
     </>
@@ -113,7 +98,7 @@ export function SiteFoot() {
               </div>
               <small className={styles.socialNote}>Instagram + Facebook coming soon</small>
             </div>
-            <div className={styles.footerGroup}>
+            <div className={styles.footerGroup} data-footer-legal="true">
               <span>Legal</span>
               <Link href="/legal">Legal overview</Link>
               <Link href="/terms">Terms of service</Link>

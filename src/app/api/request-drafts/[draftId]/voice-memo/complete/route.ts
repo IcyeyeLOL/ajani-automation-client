@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { processVoiceTranscriptions } from "@/lib/transcription/worker";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const completionSchema = z.object({
   draftToken: z.string().min(32).max(128),
@@ -14,6 +15,7 @@ const MAX_BODY_BYTES = 4_096;
 const MAX_AUDIO_BYTES = 15_728_640;
 
 export async function POST(request: Request, context: RouteContext<"/api/request-drafts/[draftId]/voice-memo/complete">) {
+  const deadlineAt = Date.now() + 50_000;
   if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin request rejected" }, { status: 403 });
   if (Number(request.headers.get("content-length") || 0) > MAX_BODY_BYTES) {
     return Response.json({ error: "Request body is too large" }, { status: 413 });
@@ -44,83 +46,61 @@ export async function POST(request: Request, context: RouteContext<"/api/request
 
   const { data: memo, error: memoError } = await admin
     .from("voice_memos")
-    .select("id,storage_path,mime_type,original_filename,byte_length")
+    .select("id,storage_path,mime_type,original_filename,byte_length,status")
     .eq("request_draft_id", draft.id)
     .maybeSingle();
   if (memoError || !memo) return Response.json({ error: "The voice note is unavailable." }, { status: 404 });
+  if (memo.status === "ready" || memo.status === "transcribing") {
+    return Response.json({ voiceMemo: { status: memo.status } });
+  }
 
   const { data: objectInfo, error: objectError } = await admin.storage.from("voice-memos").info(memo.storage_path);
   if (objectError || !objectInfo || !objectInfo.size) {
     return Response.json({ error: "The voice note upload is not complete." }, { status: 409 });
   }
   if (objectInfo.size > MAX_AUDIO_BYTES) {
-    await admin.storage.from("voice-memos").remove([memo.storage_path]);
     return Response.json({ error: "The voice note exceeds the 15 MB limit." }, { status: 413 });
   }
 
   if (memo.byte_length && objectInfo.size !== memo.byte_length) {
-    await admin.storage.from("voice-memos").remove([memo.storage_path]);
     return Response.json({ error: "The voice note upload does not match the captured recording." }, { status: 409 });
   }
 
   const { data: audio, error: downloadError } = await admin.storage.from("voice-memos").download(memo.storage_path);
   if (downloadError || !audio || !(await matchesAudioContainer(audio, memo.mime_type))) {
-    await admin.storage.from("voice-memos").remove([memo.storage_path]);
     return Response.json({ error: "The uploaded file is not a supported audio recording." }, { status: 415 });
   }
 
-  const payload = asRecord(draft.payload);
-  const voiceMemo = asRecord(payload.voiceMemo);
-  const { error: updateError } = await admin.from("voice_memos").update({
-    status: "uploaded",
-    byte_length: objectInfo.size,
-    mime_type: objectInfo.contentType || memo.mime_type,
-  }).eq("id", memo.id);
-  if (updateError) return unavailable();
+  const { data: updatedRows, error: payloadError } = await admin.rpc("complete_request_draft_voice_memo", {
+    p_draft_id: draft.id,
+    p_token_hash: tokenHash,
+    p_voice_memo_id: memo.id,
+    p_byte_length: objectInfo.size,
+    p_mime_type: objectInfo.contentType || memo.mime_type,
+  });
+  const updatedDraft = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+  if (payloadError || !updatedDraft?.voice_memo_id) return unavailable();
 
-  const { error: jobError } = await admin.from("voice_memo_transcription_jobs").upsert({
-    voice_memo_id: memo.id,
-    status: "queued",
-    next_attempt_at: new Date().toISOString(),
-  }, { onConflict: "voice_memo_id", ignoreDuplicates: true });
-  if (jobError) return unavailable();
-
-  const { error: payloadError } = await admin.from("request_drafts").update({
-    payload: {
-      ...payload,
-      voiceMemo: {
-        ...voiceMemo,
-        storagePath: memo.storage_path,
-        status: "uploaded",
-        fileName: memo.original_filename,
-        mimeType: objectInfo.contentType || memo.mime_type,
-        byteLength: objectInfo.size,
-      },
-    },
-  }).eq("id", draft.id);
-  if (payloadError) return unavailable();
-
-  after(async () => {
+  try { after(async () => {
     try {
-      await processVoiceTranscriptions({ voiceMemoId: memo.id, limit: 1 });
+      await processVoiceTranscriptions({ voiceMemoId: memo.id, limit: 1, deadlineAt });
     } catch (error) {
       console.error("Immediate voice transcription attempt failed", {
         voiceMemoId: memo.id,
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  });
+  }); } catch {
+    // Finalization is durable; the scheduled worker can recover the enqueue.
+    console.error("Immediate transcription scheduling unavailable", { voiceMemoId: memo.id });
+  }
 
-  return Response.json({ voiceMemo: { status: "uploaded" } });
+  return Response.json({ voiceMemo: { status: updatedDraft.voice_status } });
 }
 
 function isSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function unavailable() {

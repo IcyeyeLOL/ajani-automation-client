@@ -4,7 +4,12 @@ import { useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { claimSavedWebsiteRequestDraft, clearSavedWebsiteRequestCapability } from "@/lib/request-drafts/client";
+import {
+  claimSavedWebsiteRequestDraft,
+  clearSavedWebsiteRequestCapability,
+  getSavedWebsiteRequestDraft,
+  RequestDraftApiError,
+} from "@/lib/request-drafts/client";
 
 export function PendingRequestResumer() {
   const { setActive } = useClerk();
@@ -12,27 +17,36 @@ export function PendingRequestResumer() {
   const started = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requiresLegalReview, setRequiresLegalReview] = useState(false);
   const [submittedReference, setSubmittedReference] = useState<string | null>(null);
+  const [missingCapability, setMissingCapability] = useState(false);
 
   const resume = useCallback(async () => {
     if (started.current) return;
-    if (!sessionStorage.getItem("ajani_request_draft_id") || !sessionStorage.getItem("ajani_request_draft_token")) return;
+    const savedDraft = getSavedWebsiteRequestDraft();
+    if (!savedDraft) {
+      if (new URLSearchParams(window.location.search).get("handoff") === "pending") {
+        setMissingCapability(true);
+      }
+      return;
+    }
+    setMissingCapability(false);
     started.current = true;
     setError(null);
     setMessage("Connecting your saved request to this workspace…");
 
     try {
-      let result = await claimSavedWebsiteRequestDraft();
+      let result = await claimSavedWebsiteRequestDraft(savedDraft.id);
       if (result.status === "organization_activation_required" && result.organizationId) {
         await setActive({ organization: result.organizationId });
-        result = await claimSavedWebsiteRequestDraft();
+        result = await claimSavedWebsiteRequestDraft(savedDraft.id);
       }
       if (result.status !== "submitted" && result.status !== "claimed") {
         throw new Error(result.error || "Your saved request could not be resumed.");
       }
 
       if (result.status === "submitted") {
-        clearSavedWebsiteRequestCapability();
+        clearSavedWebsiteRequestCapability(savedDraft.id);
         setMessage(null);
         setSubmittedReference(result.buildRequest?.build_request_id?.slice(0, 8).toUpperCase() ?? "RECEIVED");
       } else {
@@ -41,6 +55,12 @@ export function PendingRequestResumer() {
       router.refresh();
     } catch (reason) {
       setMessage(null);
+      if (reason instanceof RequestDraftApiError && reason.status === 428) {
+        setRequiresLegalReview(true);
+        setError(null);
+        started.current = false;
+        return;
+      }
       setError(reason instanceof Error ? reason.message : "Your saved request could not be resumed.");
       started.current = false;
     }
@@ -61,6 +81,19 @@ export function PendingRequestResumer() {
       <div><Link href="/portal/builds">View build history</Link><button onClick={() => setSubmittedReference(null)} type="button">Continue to workspace</button></div>
     </div>
   </section>;
+
+  if (requiresLegalReview) return <div aria-live="polite" className="portal-request-resume legal-review" role="status">
+    <i aria-hidden="true" />
+    <span>This saved brief predates the current legal acknowledgment. Review the current Terms, Acceptable Use Policy, and Privacy Policy before sending it.</span>
+    <Link href="/record">Review and continue</Link>
+  </div>;
+
+  if (missingCapability) return <div aria-live="polite" className="portal-request-resume error" role="status">
+    <i aria-hidden="true" />
+    <span>This tab no longer has access to the saved request. If browser storage was blocked, reloading or changing tabs may have cleared that access. Check build history before starting again.</span>
+    <Link href="/portal/builds">Check build history</Link>
+    <Link href="/record">Start another request</Link>
+  </div>;
 
   if (!message && !error) return null;
   return <div aria-live="polite" className={`portal-request-resume${error ? " error" : ""}`} role="status">

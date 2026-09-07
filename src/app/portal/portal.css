@@ -29,7 +29,8 @@
   background: var(--crimson);
 }
 
-.portal-request-resume button {
+.portal-request-resume button,
+.portal-request-resume > a {
   margin-left: auto;
   border: 0;
   background: transparent;
@@ -38,6 +39,14 @@
   font: 600 11px "Consolas", monospace;
   text-decoration: underline;
 }
+
+.portal-request-resume.legal-review {
+  border-color: #ddc8b3;
+  background: #f7f1eb;
+  color: #6f5148;
+}
+
+.portal-request-resume.legal-review i { background: #ad7657; }
 
 .portal-handoff-screen {
   position: fixed;

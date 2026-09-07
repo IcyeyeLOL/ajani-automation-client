@@ -2,7 +2,18 @@ import { z } from "zod";
 import { automationEmailBriefSchema } from "@/lib/record/automation-brief";
 import { systemBlockSchema } from "@/lib/validation/build-request";
 
+export const handoffPolicyVersionSchema = z.object({
+  noticeVersion: z.string().trim().min(1).max(80),
+  acceptableUseVersion: z.string().trim().min(1).max(40),
+  privacyVersion: z.string().trim().min(1).max(40),
+  termsVersion: z.string().trim().min(1).max(40),
+}).strict();
+
+export type HandoffPolicyVersionInput = z.infer<typeof handoffPolicyVersionSchema>;
+
 export const websiteRequestDraftSchema = z.object({
+  legalAcceptanceAcknowledged: z.literal(true),
+  legalAcceptanceVersions: handoffPolicyVersionSchema,
   title: z.string().trim().min(3).max(120),
   transcript: z.string().trim().max(20_000),
   clarificationAnswer: z.string().trim().max(2_000),

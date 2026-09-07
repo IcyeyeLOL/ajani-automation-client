@@ -438,20 +438,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scenarioChoice,
-  .autoShowcase,
-  .progressTrack i,
-  .progressNav button > span,
-  .stepScene,
-  .player:not([data-auto="true"]) .routeFill,
-  .player:not([data-auto="true"]) .systemIcon,
-  .player:not([data-auto="true"]) .exchangePayload { animation: none !important; transition: none !important; }
-  .player:not([data-auto="true"])[data-mode="playing"] .state i,
-  .player:not([data-auto="true"]) .signalPacket,
-  .player:not([data-auto="true"]) .systemIcon::before,
-  .player:not([data-auto="true"]) .stepTimer > i,
-  .player:not([data-auto="true"]) .activityFeed li > i,
-  .player:not([data-auto="true"]) .autoAdvance i { animation: none !important; }
+  :global(html:not([data-motion="full"])) .scenarioChoice,
+  :global(html:not([data-motion="full"])) .autoShowcase,
+  :global(html:not([data-motion="full"])) .progressTrack i,
+  :global(html:not([data-motion="full"])) .progressNav button > span,
+  :global(html:not([data-motion="full"])) .stepScene,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .routeFill,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .systemIcon,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .exchangePayload { animation: none !important; transition: none !important; }
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"])[data-mode="playing"] .state i,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .signalPacket,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .systemIcon::before,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .stepTimer > i,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .activityFeed li > i,
+  :global(html:not([data-motion="full"])) .player:not([data-auto="true"]) .autoAdvance i { animation: none !important; }
 }
 
 @keyframes mobile-scene-in {
