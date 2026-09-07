@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/delete-expired-drafts",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/cron/process-intake-jobs",
-      "schedule": "* * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
