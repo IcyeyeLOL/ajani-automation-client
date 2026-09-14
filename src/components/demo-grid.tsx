@@ -1,9 +1,11 @@
 "use client";
 
-import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { DemoArtifact } from "@/components/demo-artifact";
 import { MobileDemoTheatre } from "@/components/mobile-demo-theatre";
 import { RecordNoteAction } from "@/components/record-note-action";
 import { getReducedMotionPreference, subscribeToMotionPreference } from "@/lib/motion/preference";
+import { useDemoTimer } from "@/lib/motion/use-demo-timer";
 import styles from "./demo-theatre.module.css";
 
 const DEMO_STEP_DURATION = 3_000;
@@ -133,6 +135,11 @@ export function DemoGrid() {
   const [activeStep, setActiveStep] = useState(0);
   const [mode, setMode] = useState<"idle" | "playing" | "paused" | "complete">("idle");
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [autoCycle, setAutoCycle] = useState(false);
+  const [environmentPaused, setEnvironmentPaused] = useState(true);
+  const [inspecting, setInspecting] = useState(false);
+  const pendingAutostart = useRef(true);
+  const desktopStage = useRef<HTMLDivElement>(null);
   const scenarioTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const scenario = scenarios[scenarioIndex];
   const totalSteps = scenario.nodes.length;
@@ -141,30 +148,72 @@ export function DemoGrid() {
   useEffect(() => {
     return subscribeToMotionPreference((shouldReduceMotion) => {
       setReducedMotion(shouldReduceMotion);
-      if (shouldReduceMotion) setMode((currentMode) => currentMode === "playing" ? "paused" : currentMode);
+      if (shouldReduceMotion) {
+        pendingAutostart.current = false;
+        setAutoCycle(false);
+        setMode((currentMode) => currentMode === "playing" ? "paused" : currentMode);
+      }
     });
   }, []);
 
   useEffect(() => {
-    const pauseWhenHidden = () => {
-      if (document.hidden) setMode((current) => current === "playing" ? "paused" : current);
+    const desktopViewport = window.matchMedia("(min-width: 769px)");
+    let inView = typeof IntersectionObserver !== "function";
+    const syncEnvironment = () => {
+      const unavailable = document.hidden || !desktopViewport.matches;
+      setEnvironmentPaused(unavailable || !inView);
+      if (unavailable) {
+        setAutoCycle(false);
+        setMode((current) => current === "playing" ? "paused" : current);
+        return;
+      }
+      if (inView && pendingAutostart.current && !getReducedMotionPreference()) {
+        pendingAutostart.current = false;
+        setAutoCycle(true);
+        setInspecting(false);
+        setActiveStep(1);
+        setMode("playing");
+      }
     };
-    document.addEventListener("visibilitychange", pauseWhenHidden);
-    return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
+    const observer = typeof IntersectionObserver === "function" && desktopStage.current
+      ? new IntersectionObserver(([entry]) => {
+          inView = entry.isIntersecting;
+          syncEnvironment();
+        }, { threshold: 0 })
+      : null;
+    if (observer && desktopStage.current) observer.observe(desktopStage.current);
+    syncEnvironment();
+    document.addEventListener("visibilitychange", syncEnvironment);
+    desktopViewport.addEventListener("change", syncEnvironment);
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener("visibilitychange", syncEnvironment);
+      desktopViewport.removeEventListener("change", syncEnvironment);
+    };
   }, []);
 
-  useEffect(() => {
-    if (mode !== "playing" || reducedMotion) return;
-
-    const timer = window.setTimeout(() => {
+  useDemoTimer(mode === "playing" && !reducedMotion && !environmentPaused,
+    `${scenario.id}:${activeStep}:${inspecting}`, DEMO_STEP_DURATION, () => {
       if (activeStep >= totalSteps) setMode("complete");
       else setActiveStep(activeStep + 1);
-    }, DEMO_STEP_DURATION);
+    });
 
-    return () => window.clearTimeout(timer);
-  }, [activeStep, mode, reducedMotion, totalSteps]);
+  useDemoTimer(autoCycle && mode === "complete" && !reducedMotion && !environmentPaused,
+    `${scenario.id}:${mode === "complete"}`, 2_200, () => {
+      setScenarioIndex((index) => (index + 1) % scenarios.length);
+      setInspecting(false);
+      setActiveStep(1);
+      setMode("playing");
+    });
+
+  const stopShowcase = () => {
+    pendingAutostart.current = false;
+    setAutoCycle(false);
+  };
 
   const resetRun = () => {
+    stopShowcase();
+    setInspecting(false);
     setActiveStep(0);
     setMode("idle");
   };
@@ -189,6 +238,8 @@ export function DemoGrid() {
   };
 
   const runOrPause = () => {
+    stopShowcase();
+    setInspecting(false);
     const shouldReduceMotion = reducedMotion || getReducedMotionPreference();
     if (shouldReduceMotion) {
       const nextStep = mode === "complete" || activeStep === 0
@@ -214,12 +265,16 @@ export function DemoGrid() {
   };
 
   const goBack = () => {
+    stopShowcase();
+    setInspecting(true);
     const nextStep = Math.max(activeStep - 1, 0);
     setActiveStep(nextStep);
     setMode(nextStep === 0 ? "idle" : "paused");
   };
 
   const goForward = () => {
+    stopShowcase();
+    setInspecting(true);
     if (activeStep >= totalSteps) {
       setMode("complete");
       return;
@@ -231,6 +286,8 @@ export function DemoGrid() {
   };
 
   const toggleStepPlayback = (step: number) => {
+    stopShowcase();
+    setInspecting(mode === "playing" && step !== activeStep);
     setActiveStep(step);
     if (reducedMotion) {
       setMode(step === totalSteps ? "complete" : "paused");
@@ -239,108 +296,96 @@ export function DemoGrid() {
     setMode((currentMode) => currentMode === "playing" ? "paused" : "playing");
   };
 
-  const modeLabel = mode === "idle" ? "Ready" : mode === "playing" ? "Running" : mode === "paused" ? "Paused" : "Complete";
-  const routeProgress = activeStep === 0 ? 0 : Math.min((activeStep / totalSteps) * 100, 100);
-  return <section aria-label="Automation theatre" className={styles.theatre} data-mode={mode}>
+  const runShowcase = () => {
+    pendingAutostart.current = false;
+    if (autoCycle) {
+      setAutoCycle(false);
+      setMode((current) => current === "playing" ? "paused" : current);
+      return;
+    }
+    setAutoCycle(true);
+    setInspecting(false);
+    setScenarioIndex(0);
+    setActiveStep(1);
+    setMode("playing");
+    desktopStage.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const effectiveMode = environmentPaused && mode === "playing" ? "paused" : mode;
+  const modeLabel = effectiveMode === "idle" ? "Ready" : effectiveMode === "playing" ? "Running" : effectiveMode === "paused" ? "Paused" : "Complete";
+  return <section aria-label="Automation theatre" className={styles.theatre} data-mode={effectiveMode} data-showcase={autoCycle}>
     <div className={styles.scenarioBar}>
-      <div>
-        <p className="eyebrow">LIVE AUTOMATION THEATRE</p>
-        <h2>Watch the work<br />move <em>play by play.</em></h2>
-      </div>
-      <p>Choose a common gap, then run the exact route that turns a signal into a useful next action.</p>
+      <h2>Three everyday moments. <span>A better next step.</span></h2>
+      <div className={styles.collectionControls}><p><i aria-hidden="true" /> Illustrative workflows</p><button aria-label="Watch all workflows" aria-pressed={autoCycle} className={styles.showcaseControl} disabled={reducedMotion} onClick={runShowcase} type="button"><PlaybackIcon name={autoCycle ? "pause" : "play"} />{autoCycle ? "Showcase playing" : "Watch all three"}</button></div>
     </div>
-
     <div className={styles.mobileDemo}><MobileDemoTheatre scenarios={scenarios} /></div>
-
     <div className={styles.desktopDemo}>
-
-    <div aria-label="Choose an automation scenario" className={styles.scenarioTabs} role="tablist">
-      {scenarios.map((item, index) => <button aria-controls="automation-stage" aria-selected={index === scenarioIndex} className={styles.scenarioTab} id={`scenario-tab-${item.id}`} key={item.id} onClick={() => chooseScenario(index)} onKeyDown={(event) => moveScenarioFocus(event, index)} ref={(node) => { scenarioTabs.current[index] = node; }} role="tab" tabIndex={index === scenarioIndex ? 0 : -1} type="button">
-        <span>0{index + 1}</span>
-        <strong>{item.label}</strong>
-        <small>{item.subtitle}</small>
-        <b>{item.metric}<i>{item.metricLabel}</i></b>
-      </button>)}
-    </div>
-
-    <div aria-labelledby={`scenario-tab-${scenario.id}`} className={styles.controlRoom} id="automation-stage" role="tabpanel">
-      <header className={styles.roomHeader} key={`header-${scenario.id}`}>
-        <div>
-          <span className={styles.liveMark}><i /> {modeLabel} route</span>
-          <h3>{scenario.label}</h3>
-          <p>{scenario.summary}</p>
-        </div>
-        <div className={styles.routeReadout}>
-          <span>ROUTE PROGRESS</span>
-          <strong>{String(activeStep).padStart(2, "0")}<i> / 04</i></strong>
-        </div>
-      </header>
-
-      <div className={styles.theatreGrid} key={`grid-${scenario.id}`}>
-        <div className={styles.graphPanel}>
-          <div className={styles.graphHeader}>
-            <span>SYSTEM MAP</span>
-            <span>{activeStep === 0 ? "Awaiting signal" : activeStep === totalSteps ? "Outcome ready" : `Processing node ${activeStep}`}</span>
+      <div aria-label="Choose an automation scenario" className={styles.scenarioTabs} role="tablist">
+        {scenarios.map((item, index) => <button aria-controls="automation-stage" aria-selected={index === scenarioIndex} className={styles.scenarioTab} id={"scenario-tab-" + item.id} key={item.id} onClick={() => chooseScenario(index)} onKeyDown={(event) => moveScenarioFocus(event, index)} ref={(node) => { scenarioTabs.current[index] = node; }} role="tab" tabIndex={index === scenarioIndex ? 0 : -1} type="button">
+          <span>0{index + 1}</span><strong>{item.label}</strong><small>{item.subtitle}</small><i aria-hidden="true">↗</i>
+        </button>)}
+      </div>
+      <div aria-labelledby={"scenario-tab-" + scenario.id} className={styles.controlRoom} id="automation-stage" ref={desktopStage} role="tabpanel">
+        <header className={styles.roomHeader}>
+          <div className={styles.windowTitle}>
+            <span aria-hidden="true" className={styles.windowDots}>{scenarios.map((item, index) => <i data-filled={index <= scenarioIndex} key={item.id} />)}</span>
+            <span className={styles.wordmark}>ajani<span>.</span></span>
+            <span className={styles.windowDivider} aria-hidden="true" />
+            <h3>{scenario.label}</h3>
           </div>
-          <div className={styles.graph} style={{ "--route-progress": `${routeProgress}%` } as CSSProperties}>
-            <svg aria-hidden="true" className={styles.graphLines} preserveAspectRatio="none" viewBox="0 0 1000 230">
-              {[0, 1, 2].map((connection) => <path className={activeStep > connection + 1 ? styles.completedPath : activeStep === connection + 1 && mode === "playing" ? styles.activePath : styles.pendingPath} d={`M ${174 + (connection * 250)} 115 C ${224 + (connection * 250)} 115, ${276 + (connection * 250)} 115, ${326 + (connection * 250)} 115`} key={connection} pathLength="1" />)}
-            </svg>
-            <div className={styles.graphNodes}>
-              {scenario.nodes.map((node, index) => {
-                const nodeStep = index + 1;
-                const state = activeStep > nodeStep ? "complete" : activeStep === nodeStep ? "active" : "pending";
-                const stepAction = mode === "playing" ? "Pause at" : "Run from";
-                return <button aria-label={`${stepAction} step ${nodeStep}: ${node.label}`} className={styles.graphNode} data-icon={node.icon} data-state={state} key={node.label} onClick={() => toggleStepPlayback(nodeStep)} type="button">
-                  <span className={styles.nodeNumber}>0{nodeStep}</span>
-                  <span className={styles.nodeIcon} data-icon={node.icon}><NodeIcon name={node.icon} /></span>
-                  <b>{node.label}</b>
-                  <small>{node.detail}</small>
-                  <i>{state === "complete" ? "COMPLETE" : state === "active" ? "IN FOCUS" : "WAITING"}</i>
-                </button>;
-              })}
+          <div className={styles.headerPlayback}>
+            <span className={styles.liveMark}><i /> {modeLabel}</span>
+            <button aria-label={mode === "playing" ? "Pause this workflow" : "Play this workflow"} className={styles.headerPlay} onClick={runOrPause} type="button"><PlaybackIcon name={mode === "playing" ? "pause" : "play"} />{mode === "playing" ? "Pause" : mode === "complete" ? "Replay" : "Play workflow"}</button>
+          </div>
+        </header>
+        <div className={styles.theatreGrid} key={scenario.id}>
+          <div className={styles.graphPanel}>
+            <div className={styles.sceneHeader}><span>FROM SIGNAL TO NEXT STEP</span><span>EXAMPLE {String(scenarioIndex + 1).padStart(2, "0")} / 03</span></div>
+            <DemoArtifact scenarioId={scenario.id} step={activeStep} mode={effectiveMode} motionAllowed={!reducedMotion} settled={inspecting} />
+            <div className={styles.graph}>
+              <svg aria-hidden="true" className={styles.graphLines} preserveAspectRatio="none" viewBox="0 0 1000 230">
+                {[0, 1, 2].map((connection) => <path className={activeStep > connection + 1 ? styles.completedPath : activeStep === connection + 1 && mode === "playing" ? styles.activePath : styles.pendingPath} d={"M " + (174 + connection * 250) + " 115 C " + (224 + connection * 250) + " 115, " + (276 + connection * 250) + " 115, " + (326 + connection * 250) + " 115"} key={connection} pathLength="1" />)}
+              </svg>
+              <div className={styles.graphNodes}>
+                {scenario.nodes.map((node, index) => {
+                  const nodeStep = index + 1;
+                  const state = mode === "complete" || activeStep > nodeStep ? "complete" : activeStep === nodeStep ? "active" : "pending";
+                  return <button aria-label={(mode === "playing" ? "Pause at" : "Run from") + " step " + nodeStep + ": " + node.label} aria-current={activeStep === nodeStep ? "step" : undefined} title={node.detail} className={styles.graphNode} data-icon={node.icon} data-state={state} key={node.label} onClick={() => toggleStepPlayback(nodeStep)} type="button">
+                    <span className={styles.nodeNumber}>0{nodeStep}</span>
+                    <span className={styles.nodeIcon} data-icon={node.icon}><NodeIcon name={node.icon} /></span>
+                    <b>{node.label}</b><i>{state === "complete" ? "COMPLETE" : state === "active" ? "IN FOCUS" : "WAITING"}</i>
+                  </button>;
+                })}
+              </div>
             </div>
           </div>
-          <div className={styles.timeline}>
-            {scenario.nodes.map((node, index) => <button aria-current={activeStep === index + 1 ? "step" : undefined} aria-label={`${mode === "playing" ? "Pause at" : "Run from"} ${node.label}`} className={styles.timelineStop} data-state={activeStep > index + 1 ? "complete" : activeStep === index + 1 ? "active" : "pending"} key={node.label} onClick={() => toggleStepPlayback(index + 1)} type="button"><i /><span>{String(index + 1).padStart(2, "0")}</span></button>)}
-          </div>
+          <aside className={styles.observatory}>
+            <div className={styles.observatoryHead}><span>THE PLAY BY PLAY</span><span>{String(activeStep).padStart(2, "0")} / 04</span></div>
+            <article className={styles.chapter} key={activeStep}>
+              <h4>{activeStep === 0 ? scenario.subtitle : activeEvent.label}</h4>
+              <p>{activeStep === 0 ? "Press play. Follow the signal from arrival to handoff." : scenario.nodes[activeStep - 1].detail}</p>
+            </article>
+            <ol aria-label="Automation event ledger" className={styles.eventLedger}>
+              {scenario.events.map((event, index) => <li data-state={mode === "complete" || activeStep > index + 1 ? "complete" : activeStep === index + 1 ? "active" : "pending"} key={event.label}>
+                <time>{event.timestamp}</time><div><b>{event.label}</b></div><i>{mode === "complete" || activeStep > index + 1 ? "✓" : activeStep === index + 1 ? "●" : "·"}</i>
+              </li>)}
+            </ol>
+            <div className={styles.outcome} data-visible={activeStep === totalSteps}>
+              <span>THE HUMAN HANDOFF</span>
+              <strong>{scenario.outcome}</strong>
+            </div>
+          </aside>
         </div>
-
-        <aside className={styles.observatory}>
-          <div className={styles.observatoryHead}>
-            <span>LIVE OUTPUT</span>
-            <span>{activeStep === 0 ? "STANDBY" : activeStep === totalSteps ? "DELIVERED" : "UPDATING"}</span>
+        <footer className={styles.playback}>
+          <div className={styles.playbackControls}>
+            <button aria-label="Go back one automation step" className={styles.iconControl} disabled={activeStep === 0} onClick={goBack} type="button"><PlaybackIcon name="back" /></button>
+            <button aria-label={(mode === "playing" ? "Pause " : "Run ") + scenario.label + " automation"} className={styles.playControl} onClick={runOrPause} type="button"><PlaybackIcon name={mode === "playing" ? "pause" : "play"} /><span>{mode === "playing" ? "PAUSE" : mode === "complete" ? "RUN AGAIN" : activeStep === 0 ? "RUN DEMO" : "CONTINUE"}</span></button>
+            <button aria-label="Advance one automation step" className={styles.iconControl} disabled={activeStep === totalSteps} onClick={goForward} type="button"><PlaybackIcon name="next" /></button>
+            <button aria-label="Restart automation demo" className={styles.restartControl} onClick={resetRun} type="button"><PlaybackIcon name="restart" /> RESTART</button>
           </div>
-          <article className={styles.artifact} data-active={activeStep > 0}>
-            <span>{activeStep === 0 ? "ON DECK" : activeEvent.artifactLabel}</span>
-            <strong>{activeStep === 0 ? "A live signal will enter this route." : activeEvent.artifactValue}</strong>
-            <small>{activeStep === 0 ? "Press Run demo or advance one node at a time." : activeEvent.artifactMeta}</small>
-          </article>
-          <ol aria-label="Automation event ledger" className={styles.eventLedger}>
-            {scenario.events.map((event, index) => <li data-state={activeStep > index + 1 ? "complete" : activeStep === index + 1 ? "active" : "pending"} key={event.label}>
-              <time>{event.timestamp}</time>
-              <div><b>{event.label}</b><span>{event.detail}</span></div>
-              <i>{activeStep > index + 1 ? "✓" : activeStep === index + 1 ? "●" : "·"}</i>
-            </li>)}
-          </ol>
-          <div className={styles.outcome} data-visible={activeStep === totalSteps}>
-            <span>CLIENT BENEFIT</span>
-            <strong>{scenario.outcome}</strong>
-          </div>
-        </aside>
+          <p aria-live="polite" className={styles.runStatus} role="status">{mode === "idle" ? "Ready to trace the system." : mode === "playing" ? "Playing automation: " + scenario.nodes[activeStep - 1]?.label + "." : mode === "paused" ? "Paused at " + scenario.nodes[activeStep - 1]?.label + "." : "Automation route complete."}{reducedMotion && " Motion is simplified for this device."}</p>
+          <RecordNoteAction>RECORD A NOTE ABOUT THIS <span>→</span></RecordNoteAction>
+        </footer>
       </div>
-
-      <footer className={styles.playback}>
-        <div className={styles.playbackControls}>
-          <button aria-label="Go back one automation step" className={styles.iconControl} disabled={activeStep === 0} onClick={goBack} type="button"><PlaybackIcon name="back" /></button>
-          <button aria-label={mode === "playing" ? `Pause ${scenario.label} automation` : `Run ${scenario.label} automation`} className={styles.playControl} onClick={runOrPause} type="button"><PlaybackIcon name={mode === "playing" ? "pause" : "play"} /> <span>{mode === "playing" ? "PAUSE" : mode === "complete" ? "RUN AGAIN" : activeStep === 0 ? "RUN DEMO" : "CONTINUE"}</span></button>
-          <button aria-label="Advance one automation step" className={styles.iconControl} disabled={activeStep === totalSteps} onClick={goForward} type="button"><PlaybackIcon name="next" /></button>
-          <button aria-label="Restart automation demo" className={styles.restartControl} onClick={resetRun} type="button"><PlaybackIcon name="restart" /> RESTART</button>
-        </div>
-        <p aria-live="polite" className={styles.runStatus} role="status">{mode === "idle" ? "Ready to trace the system." : mode === "playing" ? `Playing automation: ${scenario.nodes[activeStep - 1]?.label}.` : mode === "paused" ? `Paused at ${scenario.nodes[activeStep - 1]?.label}.` : "Automation route complete."}{reducedMotion && " Motion is simplified for this device."}</p>
-        <RecordNoteAction>RECORD A NOTE ABOUT THIS <span>→</span></RecordNoteAction>
-      </footer>
-    </div>
     </div>
   </section>;
 }

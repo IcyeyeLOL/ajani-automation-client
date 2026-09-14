@@ -12,11 +12,13 @@
   color: var(--ink);
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
   transform: translateY(calc(-100% - 16px));
   transition: transform .15s ease;
 }
-.skipLink:focus { transform: translateY(0); }
+.skipLink:focus {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  transform: translateY(0);
+}
 
 .header {
   position: sticky;
@@ -329,6 +331,18 @@
 
 @media (max-width: 760px) {
   .header { padding: 8px 0; }
+
+  /* Mobile Safari can extend sticky backdrop-filter layers into its browser
+     chrome. Keep the light mobile header opaque so photography never bleeds
+     through the bar or produces a seam that differs between Safari and in-app
+     browsers. */
+  .header[data-tone="light"] {
+    background: #fbfaf7;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
   .headerInner {
     width: min(100% - 32px, 1240px);
     min-height: 46px;

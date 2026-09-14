@@ -1,7 +1,10 @@
 "use client";
 
+import { DemoArtifact } from "@/components/demo-artifact";
+
 import { useEffect, useRef, useState } from "react";
 import { getReducedMotionPreference, subscribeToMotionPreference } from "@/lib/motion/preference";
+import { useDemoTimer } from "@/lib/motion/use-demo-timer";
 import { RecordNoteAction } from "@/components/record-note-action";
 import styles from "./mobile-demo-theatre.module.css";
 
@@ -24,13 +27,6 @@ type MobileScenario = {
 type SystemProfile = {
   channel: string;
   systems: [string, string, string, string];
-};
-
-const phaseLabels: Record<NodeKind, string> = {
-  trigger: "What arrived",
-  intelligence: "What Ajani decided",
-  action: "What was sent",
-  handoff: "Team handoff",
 };
 
 const systemProfiles: Record<string, SystemProfile> = {
@@ -72,6 +68,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   const [reducedMotion, setReducedMotion] = useState(false);
   const [autoCycle, setAutoCycle] = useState(false);
   const [environmentPaused, setEnvironmentPaused] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
   const autoCycleRef = useRef(false);
   const focusPlayerOnOpen = useRef(false);
   const playerRef = useRef<HTMLElement>(null);
@@ -118,27 +115,19 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
     });
   }, []);
 
-  useEffect(() => {
-    if (environmentPaused || mode !== "playing" || (reducedMotion && !autoCycle)) return;
-    const timer = window.setTimeout(() => {
-      if (activeStep >= totalSteps) {
-        setMode("complete");
-        return;
-      }
-      setActiveStep((step) => step + 1);
-    }, STEP_DURATION);
-    return () => window.clearTimeout(timer);
-  }, [activeStep, autoCycle, environmentPaused, mode, reducedMotion, totalSteps]);
+  useDemoTimer(!environmentPaused && mode === "playing" && (!reducedMotion || autoCycle),
+    `${scenario.id}:${activeStep}:${inspecting}`, STEP_DURATION, () => {
+      if (activeStep >= totalSteps) setMode("complete");
+      else setActiveStep((step) => step + 1);
+    });
 
-  useEffect(() => {
-    if (environmentPaused || !autoCycle || mode !== "complete") return;
-    const timer = window.setTimeout(() => {
+  useDemoTimer(!environmentPaused && autoCycle && mode === "complete",
+    `${scenario.id}:${mode === "complete"}`, AUTO_HOLD_DURATION, () => {
       setScenarioIndex((index) => (index + 1) % scenarios.length);
+      setInspecting(false);
       setActiveStep(1);
       setMode("playing");
-    }, AUTO_HOLD_DURATION);
-    return () => window.clearTimeout(timer);
-  }, [autoCycle, environmentPaused, mode, scenarios.length]);
+    });
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 768px)");
@@ -182,12 +171,14 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   }, [view]);
 
   const reset = () => {
+    setInspecting(false);
     setAutoCycle(false);
     setActiveStep(0);
     setMode("idle");
   };
 
   const chooseScenario = (index: number) => {
+    setInspecting(false);
     const shouldReduceMotion = getReducedMotionPreference();
     setAutoCycle(false);
     setScenarioIndex(index);
@@ -198,6 +189,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const runFullShowcase = () => {
+    setInspecting(false);
     autoCycleRef.current = true;
     setAutoCycle(true);
     setScenarioIndex(0);
@@ -215,6 +207,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const runOrPause = () => {
+    setInspecting(false);
     if (reducedMotion && !autoCycle) {
       if (mode === "complete") {
         setActiveStep(1);
@@ -241,6 +234,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const previous = () => {
+    setInspecting(true);
     setAutoCycle(false);
     if (mode === "complete") {
       setActiveStep(totalSteps - 1);
@@ -253,6 +247,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const next = () => {
+    setInspecting(true);
     setAutoCycle(false);
     if (activeStep >= totalSteps) {
       setMode("complete");
@@ -263,6 +258,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
   };
 
   const inspectStep = (step: number) => {
+    setInspecting(true);
     setAutoCycle(false);
     setActiveStep(step);
     setMode("paused");
@@ -283,7 +279,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
       <section aria-labelledby="mobile-demo-heading" className={styles.chooser}>
         <p className={styles.eyebrow}>Interactive demo</p>
         <h2 id="mobile-demo-heading">Choose a workflow to watch.</h2>
-        <p className={styles.chooserIntro}>Pick a workflow and watch the signal move through every connected system—live.</p>
+        <p className={styles.chooserIntro}>See the signal move through each step, from first contact to handoff.</p>
         <div aria-label="Automation scenarios" className={styles.scenarioList}>
           {scenarios.map((item, index) => <button className={styles.scenarioChoice} key={item.id} onClick={() => chooseScenario(index)} ref={(element) => { chooserButtons.current[index] = element; }} type="button">
             <span className={styles.choiceNumber}>0{index + 1}</span>
@@ -321,7 +317,7 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
 
           <div aria-hidden="true" className={styles.routeTrack}>
             <i className={styles.routeFill} style={{ width: `${mode === "complete" ? 100 : routePosition}%` }} />
-            {activeStep > 0 && activeStep < totalSteps && mode !== "complete" && <span className={styles.packetLane} key={`${scenario.id}-${activeStep}`} style={{ left: `${packetPosition}%` }}><i className={styles.signalPacket} data-testid="signal-packet"><b /><b /><b /></i></span>}
+            {activeStep > 0 && activeStep < totalSteps && mode !== "complete" && <span className={styles.packetLane} key={`${scenario.id}-${activeStep}-${inspecting}`} style={{ left: `${packetPosition}%` }}><i className={styles.signalPacket} data-testid="signal-packet"><b /><b /><b /></i></span>}
           </div>
 
           <ol className={styles.systemNodes}>
@@ -338,37 +334,16 @@ export function MobileDemoTheatre({ scenarios }: { scenarios: MobileScenario[] }
             })}
           </ol>
 
-          <div aria-label={`${activeStep} of ${totalSteps} systems processed`} aria-valuemax={totalSteps} aria-valuemin={0} aria-valuenow={activeStep} className={styles.stepTimer} key={`${scenario.id}-${activeStep}`} role="progressbar"><i /></div>
+          <div aria-label={`${activeStep} of ${totalSteps} systems processed`} aria-valuemax={totalSteps} aria-valuemin={0} aria-valuenow={activeStep} className={styles.stepTimer} key={`${scenario.id}-${activeStep}-${inspecting}`} role="progressbar"><i /></div>
         </section>
 
         <section aria-label="Live workflow exchange" className={styles.liveExchange}>
-          {mode === "idle" && <div className={styles.standbyPanel}>
-            <span>Network ready</span>
-            <strong>Run the route to send a live signal through all four systems.</strong>
-            <p>{scenario.summary}</p>
-          </div>}
-
-          {mode !== "idle" && mode !== "complete" && <div className={styles.exchangePayload} key={`${scenario.id}-payload-${activeStep}`}>
-            <div className={styles.exchangeMeta}>
-              <span>{phaseLabels[node.kind]}</span>
-              <span>{profile.systems[stepIndex]} <i aria-hidden="true">→</i> {profile.systems[Math.min(stepIndex + 1, totalSteps - 1)]}</span>
-              <time>{event.timestamp}</time>
-            </div>
-            <div className={styles.exchangeBody}>
-              <span>{event.label}</span>
-              <strong>{event.artifactValue}</strong>
-              <p>{event.detail}</p>
-              <small>{event.artifactLabel} · {event.artifactMeta}</small>
-            </div>
-          </div>}
-
-          {mode === "complete" && <div className={styles.resultPanel}>
-            <div><span aria-hidden="true">✓</span><p><small>Route complete</small><strong>{scenario.metric}</strong></p></div>
-            <h3>{scenario.outcome}</h3>
+          <div className={styles.artifactCaption}><span>THE WORK, TAKING SHAPE</span><span>{mode === "complete" ? "Route complete" : mode === "idle" ? "Press play to begin" : event.label}</span></div>
+          <DemoArtifact compact key={scenario.id} mode={environmentPaused && mode === "playing" ? "paused" : mode} motionAllowed={!reducedMotion || autoCycle} scenarioId={scenario.id} step={activeStep} settled={inspecting} />
+          {mode === "complete" && <div className={styles.completionStrip}>
             <RecordNoteAction className={styles.completionCta}>Use this route for my work <span aria-hidden="true">→</span></RecordNoteAction>
             {autoCycle && <p className={styles.autoAdvance}><i /> Next workflow starts automatically</p>}
           </div>}
-
           <ol aria-label="Live automation activity" className={styles.activityFeed}>
             {scenario.events.map((item, index) => {
               const step = index + 1;

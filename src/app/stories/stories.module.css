@@ -1,5 +1,6 @@
 .shell {
   --shell-width: calc(100% - 64px);
+  --page-width: min(calc(100% - 176px), 1540px);
   --panel-edge: #423936;
   min-height: 100vh;
   background: var(--pearl);
@@ -33,7 +34,7 @@
 .heroInner {
   display: grid;
   gap: 0;
-  width: var(--shell-width);
+  width: var(--page-width);
   margin: 0 auto;
 }
 
@@ -82,7 +83,7 @@
 .note > p:last-child { max-width: 78ch; margin: 0; color: #b6a9a3; font-size: 14px; line-height: 1.55; }
 
 /* ---------- shared section chrome, same device as the homepage ---------- */
-.section { width: var(--shell-width); margin: 0 auto; padding: 46px 0; }
+.section { width: var(--page-width); margin: 0 auto; padding: 46px 0; }
 .sectionEnd { padding-bottom: 78px; }
 
 .sectionHead {
@@ -496,7 +497,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(360px, .92fr);
   align-items: center;
   gap: 56px;
-  width: var(--shell-width);
+  width: var(--page-width);
   margin: 0 auto;
   padding: 74px 0;
 }
@@ -557,7 +558,10 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 1040px) {
-  .shell { --shell-width: min(100% - 48px, 1240px); }
+  .shell {
+    --shell-width: min(100% - 48px, 1240px);
+    --page-width: min(100% - 48px, 1240px);
+  }
   .heroCopy { grid-template-columns: 1fr; gap: 0; }
   .heroCopy > p { grid-column: 1; grid-row: auto; max-width: 56ch; margin: 19px 0 0; }
   .note { grid-template-columns: 140px minmax(0, 1fr); }
@@ -571,7 +575,10 @@
 }
 
 @media (max-width: 620px) {
-  .shell { --shell-width: min(100% - 32px, 1240px); }
+  .shell {
+    --shell-width: min(100% - 32px, 1240px);
+    --page-width: min(100% - 32px, 1240px);
+  }
   .hero { padding: 31px 0 29px; }
   .heroCopy { display: block; padding-bottom: 25px; }
   .heroCopy h1 { font-size: clamp(42px, 12vw, 50px); line-height: .97; }
@@ -644,4 +651,138 @@
   :global(html:not([data-motion="full"])) .heroCopy h1,
   :global(html:not([data-motion="full"])) .heroCopy > p,
   :global(html:not([data-motion="full"])) .note { animation: none; }
+}
+
+/* Keep the shared navigation at its established width while giving the Stories
+   composition the same tighter, zoomed-out desktop rhythm as the homepage. */
+@media (min-width: 1041px) {
+  .shell { --page-width: clamp(960px, 88vw, 1525px); }
+
+  .label,
+  .kicker { font-size: 10px; }
+
+  .hero { padding: 33px 0 20px; }
+  .heroCopy {
+    grid-template-columns: minmax(0, 1.08fr) minmax(300px, .72fr);
+    gap: 0 45px;
+    padding-bottom: 20px;
+  }
+  .heroCopy h1 {
+    margin-top: 9px;
+    font-size: clamp(36px, 3.5vw, 61px);
+  }
+  .heroCopy > p { max-width: 43ch; font-size: 14.5px; }
+  .note {
+    grid-template-columns: minmax(130px, .28fr) minmax(0, 1fr);
+    gap: 24px;
+    padding-top: 12px;
+  }
+  .note > p:last-child { max-width: 74ch; font-size: 11.5px; }
+
+  .section { padding: 32px 0; }
+  .sectionEnd { padding-bottom: 54px; }
+  .sectionHead {
+    gap: 18px 44px;
+    padding-top: 20px;
+  }
+  .headMain h2 {
+    margin-top: 11px;
+    font-size: clamp(29px, 2.65vw, 38px);
+  }
+  .headAside p,
+  .clientSystemIntro { font-size: 14.5px; }
+  .clientSystemIntro { margin-top: 15px; }
+
+  .clientSection { padding-top: 36px; }
+  .clientProof {
+    max-width: 1320px;
+    gap: 18px;
+    margin: 24px auto 0;
+  }
+  .clientVideo,
+  .clientQuote { border-radius: 17px; }
+  .videoHead {
+    min-height: 43px;
+    padding-inline: 16px;
+    font-size: 9px;
+  }
+  .videoFoot {
+    min-height: 60px;
+    padding: 8px 16px;
+  }
+  .clientAvatar { width: 32px; height: 32px; font-size: 14px; }
+  .videoFoot b { font-size: 12px; }
+  .videoFoot small { font-size: 10px; }
+  .clientQuote { padding: 21px 23px; }
+  .clientQuote blockquote {
+    margin-top: 15px;
+    font-size: clamp(20.5px, 1.85vw, 25px);
+  }
+  .clientQuote > p:not(.label) { margin-top: 16px; font-size: 13px; }
+  .proofTags { margin-top: 18px; }
+  .proofTags span { padding: 6px 8px; font-size: 8px; }
+  .clientQuote > a { margin-top: 15px; font-size: 12.5px; }
+
+  .feature {
+    max-width: 1320px;
+    gap: 32px;
+    margin: 24px auto 0;
+  }
+  .featureLog { border-radius: 16px; }
+  .logHead { padding: 12px 18px; font-size: 9.5px; }
+  .log { padding: 6px 18px 16px; }
+  .log li {
+    grid-template-columns: 68px minmax(0, 1fr) 11px;
+    gap: 12px;
+    padding: 12px 0;
+  }
+  .log b { font-size: 10px; }
+  .log span { font-size: 13px; }
+  .featureCopy h3 {
+    margin-top: 12px;
+    font-size: clamp(26px, 2.4vw, 33px);
+  }
+  .lede { margin-top: 15px; font-size: 15.5px; }
+  .featureCopy > p:last-of-type { margin-top: 12px; font-size: 14.5px; }
+  .outcomes {
+    gap: 12px 32px;
+    margin-top: 26px;
+    padding-top: 17px;
+  }
+  .outcomes li { grid-template-columns: 22px minmax(0, 1fr); font-size: 13.5px; }
+
+  .grid { gap: 11px; margin-top: 25px; }
+  .card { border-radius: 16px; }
+  .cardBody { padding: 14px 15px 15px; }
+  .card h3 { margin-top: 10px; font-size: 18px; }
+  .comparison { margin-top: 14px; }
+  .before,
+  .after {
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 12px;
+    padding: 11px 0;
+    font-size: 12.5px;
+  }
+  .before b,
+  .after b { min-height: 21px; font-size: 8px; }
+  .route { padding-top: 15px; }
+  .route span { min-height: 50px; padding: 8px 10px; }
+  .route small { font-size: 7.5px; }
+  .route b { margin-top: 5px; font-size: 8.5px; }
+
+  .closeInner { gap: 44px; padding: 59px 0; }
+  .closeCopy h2 {
+    margin-top: 12px;
+    font-size: clamp(29px, 3.1vw, 44px);
+  }
+  .closeCopy > p { margin-top: 15px; font-size: 15px; }
+  .primaryCta {
+    min-height: 48px;
+    margin-top: 24px;
+    padding-inline: 22px;
+    font-size: 14px;
+  }
+  .sample { padding: 22px 24px 20px; border-radius: 17px; }
+  .sample blockquote { margin-top: 14px; font-size: 15px; }
+  .sampleFoot { margin-top: 14px; font-size: 12.5px; }
 }

@@ -30,9 +30,12 @@ type RecorderProps = {
   id?: string;
   embedded?: boolean;
   processingAllowed?: boolean;
+  processingNoticeAcknowledged?: boolean;
+  startRequest?: number;
   onCaptured?: (capture: VoiceMemoCapture) => void;
   onInvalidated?: () => void;
   onActiveChange?: (active: boolean) => void;
+  onProcessingRequired?: () => void;
   onTranscriptChange?: (transcript: string) => void;
   savedCapture?: VoiceMemoCapture | null;
   transcript?: string;
@@ -80,9 +83,12 @@ export function VoiceRecorder({
   id,
   embedded = false,
   processingAllowed = true,
+  processingNoticeAcknowledged = false,
+  startRequest = 0,
   onActiveChange,
   onCaptured,
   onInvalidated,
+  onProcessingRequired,
   onTranscriptChange,
   savedCapture = null,
   transcript = "",
@@ -108,10 +114,16 @@ export function VoiceRecorder({
   const transcriptRef = useRef(transcript);
   const transcriptSourceRef = useRef<VoiceMemoCapture["transcriptSource"]>(savedCapture?.transcriptSource ?? "none");
   const manuallyEdited = useRef(savedCapture?.transcriptSource === "manual");
+  const handledStartRequest = useRef(startRequest);
+  const onCapturedRef = useRef(onCaptured);
 
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
+
+  useEffect(() => {
+    onCapturedRef.current = onCaptured;
+  }, [onCaptured]);
 
   useEffect(() => {
     onActiveChange?.(phase === "requesting" || phase === "recording" || phase === "paused");
@@ -277,8 +289,11 @@ export function VoiceRecorder({
     return () => window.clearTimeout(timer);
   }, [elapsedRecordingMs, finish, phase]);
 
-  const start = async () => {
-    if (!processingAllowed) return;
+  const start = useCallback(async () => {
+    if (!processingAllowed) {
+      onProcessingRequired?.();
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setPhase("error");
       return;
@@ -376,12 +391,13 @@ export function VoiceRecorder({
         // up instead of discarding it because the display never reached 00:01.
         const durationSeconds = Math.min(MAX_SECONDS, Math.max(1, Math.ceil(recordedMs.current / 1_000)));
         audioUrlRef.current = nextUrl;
-        urlTransferred.current = Boolean(onCaptured);
+        const captureHandler = onCapturedRef.current;
+        urlTransferred.current = Boolean(captureHandler);
         setAudioUrl(nextUrl);
         setSize(bytes);
         setSeconds(durationSeconds);
         setPhase("ready");
-        onCaptured?.({ blob, seconds: durationSeconds, bytes, mimeType, objectUrl: nextUrl, transcriptSource: transcriptSourceRef.current });
+        captureHandler?.({ blob, seconds: durationSeconds, bytes, mimeType, objectUrl: nextUrl, transcriptSource: transcriptSourceRef.current });
       };
       nextRecorder.start(1_000);
       recordingStartedAt.current = performance.now();
@@ -397,7 +413,13 @@ export function VoiceRecorder({
       const permissionDenied = reason instanceof DOMException && (reason.name === "NotAllowedError" || reason.name === "SecurityError");
       setPhase(permissionDenied ? "blocked" : "error");
     }
-  };
+  }, [invalidateCapture, onProcessingRequired, onTranscriptChange, pauseRecordingClock, processingAllowed, releaseStream, startRecognition, stopRecognition]);
+
+  useEffect(() => {
+    if (!processingAllowed || startRequest === handledStartRequest.current) return;
+    handledStartRequest.current = startRequest;
+    void start();
+  }, [processingAllowed, start, startRequest]);
 
   const pause = () => {
     if (recorder.current?.state !== "recording") return;
@@ -509,7 +531,7 @@ export function VoiceRecorder({
             </div>
             <audio aria-label="Review your voice note" controls preload="metadata" src={audioUrl} />
             <div className={styles.readyActions}>
-              <button disabled={!processingAllowed} onClick={() => void start()} type="button">Redo note</button>
+              <button onClick={() => void start()} type="button">Redo note</button>
               <button onClick={discard} type="button">Discard</button>
             </div>
           </div>
@@ -534,7 +556,7 @@ export function VoiceRecorder({
                 <button
                   aria-label="Start recording your voice note"
                   className={styles.record}
-                  disabled={phase === "requesting" || !processingAllowed}
+                  disabled={phase === "requesting"}
                   onClick={() => void start()}
                   type="button"
                 >
@@ -560,7 +582,7 @@ export function VoiceRecorder({
                       : "Up to three minutes. Explain what happens today, where it gets stuck, and what a better outcome would look like."}
                 </small>
                 {phase === "blocked" || phase === "error" ? (
-                  <button className={styles.retry} disabled={!processingAllowed} onClick={() => void start()} type="button">Try microphone again</button>
+                  <button className={styles.retry} onClick={() => void start()} type="button">Try microphone again</button>
                 ) : null}
               </>
             )}
@@ -568,10 +590,12 @@ export function VoiceRecorder({
         )}
       </div>
 
-      <footer className={styles.privacy}>
-        <span aria-hidden="true">◇</span>
-        <p><strong>Before you record.</strong> Ajani keeps its recorded copy in this tab while you record. Your browser or operating-system speech service may process speech for live text. After you finish, Ajani may send the recording to Deepgram unless you already provided enough written text. Ajani uploads the original only if you send the handoff. Record only yourself unless you gave required notice and obtained required permission. Do not include sensitive or regulated information. <Link href="/privacy#notice-at-collection">Privacy details</Link>.</p>
-      </footer>
+      {!processingNoticeAcknowledged ? (
+        <footer className={styles.privacy}>
+          <span aria-hidden="true">◇</span>
+          <p><strong>Before you record.</strong> Ajani keeps its recorded copy in this tab while you record. Your browser or operating-system speech service may process speech for live text. After you finish, Ajani may send the recording to Deepgram unless you already provided enough written text. Ajani uploads the original only if you send the handoff. Record only yourself unless you gave required notice and obtained required permission. Do not include sensitive or regulated information. <Link href="/privacy#notice-at-collection">Privacy details</Link>.</p>
+        </footer>
+      ) : null}
 
       {embedded ? null : (
         <div className={styles.actions}>

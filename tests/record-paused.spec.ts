@@ -3,8 +3,11 @@ import { expect, test } from "@playwright/test";
 test("paused recording is a calm, readable editing state", async ({ page }) => {
   await page.setViewportSize({ width: 690, height: 760 });
   await page.goto("/record");
-  await page.getByRole("checkbox", { name: /I confirm I am 18 or older/ }).check();
   await page.getByRole("button", { name: "Start recording your voice note" }).click();
+  const confirmation = page.getByRole("dialog", { name: "Before you record.", exact: true });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("checkbox", { name: /I confirm I am 18 or older/ }).check();
+  await confirmation.getByRole("button", { name: "Confirm & start recording", exact: true }).click();
   await expect(page.getByText("Recording", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pause & edit", exact: true }).click();
 

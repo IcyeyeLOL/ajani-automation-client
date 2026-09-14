@@ -16,6 +16,10 @@ import {
 import { flushSync } from "react-dom";
 import { useAccountAccess } from "@/components/account-access-dialog";
 import { VoiceRecorder, type VoiceMemoCapture } from "@/components/home/voice-recorder";
+import {
+  ProcessingConfirmationDialog,
+  type ProcessingConfirmationIntent,
+} from "@/components/record/processing-confirmation-dialog";
 import type { SystemBlock } from "@/lib/domain/types";
 import {
   CURRENT_HANDOFF_POLICY_VERSION,
@@ -327,6 +331,8 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
   const [mobileActiveBlockId, setMobileActiveBlockId] = useState(fallbackBlocks[0]?.id ?? "");
   const [mobileRouteAnnouncement, setMobileRouteAnnouncement] = useState("Step 1 selected");
   const [processingAcknowledged, setProcessingAcknowledged] = useState(false);
+  const [processingConfirmationIntent, setProcessingConfirmationIntent] = useState<ProcessingConfirmationIntent | null>(null);
+  const [voiceStartRequest, setVoiceStartRequest] = useState(0);
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -386,9 +392,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     capturedNoteReady
     || (!capture && writtenReady)
   );
-  const noteHint = !processingAcknowledged
-    ? "Review and acknowledge the processing notice before continuing"
-    : voiceRecordingActive
+  const noteHint = voiceRecordingActive
     ? "Finish the voice note before continuing"
     : capture && voiceTranscriptionStatus === "transcribing"
       ? "Putting your voice note into writing…"
@@ -397,7 +401,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         : automationStatus === "clarifying"
           ? "Reading your note and writing the questions that change this build…"
         : noteReady
-          ? undefined
+          ? processingAcknowledged ? undefined : "One quick confirmation comes next"
           : "Record a note or write at least 21 characters to continue";
   const analysis = useMemo<TypedNoteAnalysis | null>(() => {
     if (!writtenReady) return null;
@@ -632,9 +636,9 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   }, [blocks, dragged]);
 
-  const go = (index: number) => {
+  const go = (index: number, acknowledgmentOverride = false) => {
     const target = Math.max(0, Math.min(index, stages.length - 1));
-    if (target > 0 && !processingAcknowledged) return;
+    if (target > 0 && !processingAcknowledged && !acknowledgmentOverride) return;
     if (reviewDraft && target !== stage) {
       setReviewEditMessage("Save or cancel this file before leaving the development brief.");
       firstReviewEditField.current?.focus();
@@ -673,12 +677,15 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     setInputMode(mode);
   };
 
-  const continueFromNote = async () => {
-    if (!processingAcknowledged) return;
+  const continueFromNote = async (acknowledgmentOverride = false) => {
+    if (!processingAcknowledged && !acknowledgmentOverride) {
+      setProcessingConfirmationIntent("continue");
+      return;
+    }
     if (capture && (!writtenReady || voiceTranscriptionStatus !== "ready")) return;
     if (!writtenReady || automationStatus === "clarifying") return;
     if (automationMethod && clarifications.length > 0) {
-      go(1);
+      go(1, acknowledgmentOverride);
       return;
     }
 
@@ -717,6 +724,16 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     }
     setStage(1);
     setReached((high) => Math.max(high, 1));
+  };
+
+  const confirmProcessing = (intent: ProcessingConfirmationIntent) => {
+    setProcessingAcknowledged(true);
+    setProcessingConfirmationIntent(null);
+    if (intent === "voice") {
+      setVoiceStartRequest((request) => request + 1);
+      return;
+    }
+    void continueFromNote(true);
   };
 
   const updateWritten = (value: string) => {
@@ -1366,6 +1383,15 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       data-hydrated={hydrated ? "true" : "false"}
       inert={hydrated ? undefined : true}
     >
+      <ProcessingConfirmationDialog
+        intent={processingConfirmationIntent}
+        onConfirm={confirmProcessing}
+        onOpenChange={(open) => {
+          if (!open) setProcessingConfirmationIntent(null);
+        }}
+        open={processingConfirmationIntent !== null}
+      />
+
       <nav aria-label="Build request progress" className={styles.steps}>
         <div className={styles.mobileProgress}>
           <span>{handoffComplete ? "Request complete" : `Step ${stage + 1} of ${stages.length}`}</span>
@@ -1407,36 +1433,6 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
             <button aria-pressed={inputMode === "type"} disabled={!hydrated} onClick={() => chooseInputMode("type")} type="button">Type</button>
           </div>
 
-          <p className={styles.processingDisclosure}>
-            <i aria-hidden="true" />
-            Your note may be sent to Ajani&apos;s transcription or AI providers to create editable text, questions, and a proposed route. Do not include sensitive or regulated personal information. <Link href="/privacy#notice-at-collection">How processing works</Link>.
-          </p>
-
-          <div className={styles.processingConsent}>
-            <input
-              checked={processingAcknowledged}
-              disabled={voiceRecordingActive}
-              id="request-processing-acceptance"
-              onChange={(event) => {
-                setProcessingAcknowledged(event.target.checked);
-                if (!event.target.checked) {
-                  cancelAutomation();
-                  setAutomationStatus("idle");
-                  cancelTranscription();
-                  if (voiceTranscriptionStatus === "transcribing") {
-                    setVoiceTranscriptionStatus("failed");
-                    setVoiceTranscriptionError("Processing paused. Review the notice before retrying this recording.");
-                  }
-                }
-              }}
-              type="checkbox"
-            />
-            <div>
-              <label htmlFor="request-processing-acceptance"><strong>I confirm I am 18 or older, am authorized to share this note, and have permission from anyone recorded.</strong></label>
-              <span>I acknowledge that Ajani may process the note as described in the <Link href="/privacy#notice-at-collection">Privacy Policy</Link>. The <Link href="/terms">Terms of Service</Link> also apply to this request tool.</span>
-            </div>
-          </div>
-
           <div className={styles.split}>
             <div className={styles.inputSurface} data-mode={inputMode} key={inputMode}>
               {inputMode === "speak" ? (
@@ -1447,9 +1443,12 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
                     onActiveChange={setVoiceRecordingActive}
                     onCaptured={(nextCapture) => void handleVoiceCaptured(nextCapture)}
                     onInvalidated={resetVoiceCapture}
+                    onProcessingRequired={() => setProcessingConfirmationIntent("voice")}
                     onTranscriptChange={updateWritten}
                     processingAllowed={processingAcknowledged}
+                    processingNoticeAcknowledged={processingAcknowledged}
                     savedCapture={capture}
+                    startRequest={voiceStartRequest}
                     transcript={written}
                   />
                   {capture && voiceTranscriptionStatus !== "ready" ? (
@@ -1501,7 +1500,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
             hint={noteHint}
             onPrimary={() => void continueFromNote()}
             primary={automationStatus === "clarifying" ? "Writing your questions…" : "Continue to clarify"}
-            primaryDisabled={!processingAcknowledged || !noteReady}
+            primaryDisabled={!noteReady}
           />
         </Stage>
       ) : null}

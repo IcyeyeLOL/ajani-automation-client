@@ -13,29 +13,21 @@ export const metadata: Metadata = {
 export default function DemosPage() {
   return (
     <div className={styles.shell}>
-      <SiteTop active="demos" />
+      <SiteTop active="demos" tone="light" />
 
-      <main id="main-content" tabIndex={-1}>
+      <main className={styles.main} id="main-content" tabIndex={-1}>
 
       <section className={styles.hero}>
         <div className={styles.heroInner}>
           <Reveal className={styles.heroCopy}>
-            <p className={styles.label}>Demos</p>
+            <p className={styles.label}>The workflow collection / 01—03</p>
             <h1>Watch the system work. <em>Then decide if it fits.</em></h1>
             <p>
-              Choose a common business gap and run the route yourself. Every step
-              shows what arrives, what Ajani decides, and what your team receives.
+              A late-night inquiry. A scattered brief. A client ready to return.
+              See how a small signal becomes something your team can act on.
             </p>
           </Reveal>
 
-          <Reveal as="aside" className={styles.guide} delay={130}>
-            <p className={styles.label}>This is interactive</p>
-            <ol>
-              <li><b>01</b><span>Choose a scenario.</span></li>
-              <li><b>02</b><span>Run it or move one step at a time.</span></li>
-              <li><b>03</b><span>Inspect the output your team would see.</span></li>
-            </ol>
-          </Reveal>
         </div>
       </section>
 

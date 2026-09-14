@@ -1,4 +1,22 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+async function readBackdropFilters(element: Locator) {
+  return element.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      standard: style.backdropFilter,
+      webkit: style.getPropertyValue("-webkit-backdrop-filter")
+        || (style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter,
+      webkitSupported: CSS.supports("(-webkit-backdrop-filter: blur(1px))"),
+    };
+  });
+}
+
+async function expectBackdropFilter(element: Locator, expected: string) {
+  const filters = await readBackdropFilters(element);
+  expect(filters.standard).toBe(expected);
+  if (filters.webkitSupported) expect(filters.webkit).toBe(expected);
+}
 
 async function openNavigation(page: Page) {
   await page.getByRole("button", { name: "Open navigation menu" }).click();
@@ -54,6 +72,53 @@ test("mobile navigation traps keyboard focus and supports repeated open and clos
     await expect(dialog).toHaveCount(0);
     await expect(page.locator("body")).not.toHaveAttribute("data-scroll-locked");
   }
+});
+
+test("mobile home header stays opaque over scrolling photography", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const header = page.locator('header[data-variant="marketing"][data-tone="light"]');
+  await expect(header).toHaveCount(1);
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expectBackdropFilter(header, "none");
+
+  const initialBounds = await header.boundingBox();
+  expect(initialBounds?.height).toBeCloseTo(63, 1);
+
+  const audienceImage = page.getByAltText("Home services workspace showing a new lead becoming a prepared contract");
+  await audienceImage.evaluate((image) => {
+    window.scrollTo({ top: window.scrollY + image.getBoundingClientRect().top, behavior: "instant" });
+  });
+
+  const scrollState = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    scrollY: window.scrollY,
+  }));
+  const scrolledHeaderBounds = await header.boundingBox();
+  const imageBounds = await audienceImage.boundingBox();
+
+  expect(scrollState.scrollY).toBeGreaterThan(0);
+  expect(scrollState.overflow).toBeLessThanOrEqual(1);
+  expect(Math.abs(scrolledHeaderBounds?.y ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(1);
+  expect(imageBounds?.y).toBeLessThanOrEqual(scrolledHeaderBounds?.height ?? 0);
+  expect((imageBounds?.y ?? 0) + (imageBounds?.height ?? 0)).toBeGreaterThan(0);
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expectBackdropFilter(header, "none");
+  expect(scrolledHeaderBounds?.height).toBeCloseTo(63, 1);
+});
+
+test("light header opacity changes at the mobile navigation breakpoint", async ({ page }) => {
+  const header = page.locator('header[data-variant="marketing"][data-tone="light"]');
+
+  await page.setViewportSize({ width: 760, height: 844 });
+  await page.goto("/");
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expectBackdropFilter(header, "none");
+
+  await page.setViewportSize({ width: 761, height: 844 });
+  await expect(header).toHaveCSS("background-color", "rgba(251, 250, 247, 0.76)");
+  await expectBackdropFilter(header, "blur(18px) saturate(1.1)");
 });
 
 test("mobile menu dismisses on desktop resize without leaving an invisible modal", async ({ page }) => {

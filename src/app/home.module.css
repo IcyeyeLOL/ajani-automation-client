@@ -1,5 +1,5 @@
 .shell {
-  --shell-width: calc(100% - 64px);
+  --shell-width: min(calc(100% - 128px), 1680px);
   --home-ground: #f4f1eb;
   --home-paper: #fffdfa;
   --home-ink: #181615;
@@ -65,7 +65,7 @@
   max-width: 850px;
   margin: 21px 0 0;
   color: var(--home-ink);
-  font-size: clamp(58px, 5.45vw, 112px);
+  font-size: clamp(47px, 4.15vw, 84px);
   font-weight: 650;
   line-height: .94;
   letter-spacing: -.064em;
@@ -83,9 +83,9 @@
 
 .heroLede {
   max-width: 49ch;
-  margin: 28px 0 0;
+  margin: 23px 0 0;
   color: var(--home-muted);
-  font-size: 18px;
+  font-size: 15.5px;
   line-height: 1.55;
   letter-spacing: -.015em;
 }
@@ -95,7 +95,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-top: 30px;
+  margin-top: 24px;
 }
 
 .primaryCta,
@@ -104,10 +104,10 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  min-height: 54px;
-  padding: 0 22px;
+  min-height: 47px;
+  padding: 0 19px;
   border-radius: 999px;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 650;
   letter-spacing: -.01em;
 }
@@ -151,7 +151,7 @@
 }
 
 .heroProof {
-  margin: 21px 0 0;
+  margin: 16px 0 0;
   color: var(--home-muted);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 10px;
@@ -159,6 +159,8 @@
 }
 
 .heroVisual {
+  justify-self: end;
+  width: 88%;
   min-width: 0;
   overflow: hidden;
   border: 1px solid #cec6be;
@@ -327,10 +329,10 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  min-height: 360px;
+  min-height: 300px;
   overflow: hidden;
   place-items: center;
-  padding: 34px 32px 28px;
+  padding: 27px 25px 23px;
   background:
     radial-gradient(circle at 50% 47%, rgba(199, 139, 93, .12), transparent 29%),
     linear-gradient(#fffdfa, #f3eee8);
@@ -520,11 +522,25 @@
 /* ---------- audience proof ---------- */
 .audienceSection {
   position: relative;
-  padding-top: 84px;
+  padding-top: 64px;
+  padding-bottom: 70px;
   border-top: 1px solid var(--soft-line);
 }
 
-.audienceSection > :last-child { margin-top: 48px; }
+.audienceSection > :last-child { margin-top: 34px; }
+
+.audienceSection .sectionHead {
+  gap: 22px 58px;
+}
+
+.audienceSection .headMain h2 {
+  max-width: 700px;
+  font-size: clamp(42px, 3.7vw, 60px);
+}
+
+.audienceSection .headAside p {
+  font-size: 15px;
+}
 
 /* ---------- real client proof ---------- */
 .proofSection {
@@ -847,16 +863,16 @@
 
 @media (min-width: 1500px) {
   .heroInner {
-    grid-template-columns: minmax(0, .82fr) minmax(700px, 1.18fr);
-    min-height: min(820px, calc(100svh - 73px));
-    gap: clamp(68px, 5vw, 108px);
-    padding-block: 54px 62px;
+    grid-template-columns: minmax(0, .88fr) minmax(610px, 1.12fr);
+    min-height: min(720px, calc(100svh - 73px));
+    gap: clamp(58px, 4.5vw, 94px);
+    padding-block: 48px 56px;
   }
-  .heroLede { max-width: 54ch; font-size: 21px; }
-  .primaryCta, .secondaryCta { min-height: 62px; padding-inline: 29px; font-size: 16px; }
-  .heroProof { font-size: 12px; }
-  .heroVisualHead { min-height: 68px; padding-inline: 28px; font-size: 11.5px; }
-  .heroVisualBody { min-height: 500px; padding: 46px 42px 38px; }
+  .heroLede { max-width: 54ch; font-size: 17px; }
+  .primaryCta, .secondaryCta { min-height: 52px; padding-inline: 23px; font-size: 13.5px; }
+  .heroProof { font-size: 10.5px; }
+  .heroVisualHead { min-height: 58px; padding-inline: 23px; font-size: 10px; }
+  .heroVisualBody { min-height: 390px; padding: 34px 31px 29px; }
   .section { padding-block: 80px; }
   .sectionHead { grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr); gap: 34px 86px; }
   .headMain h2 { max-width: 900px; font-size: clamp(60px, 4.2vw, 80px); }
@@ -866,9 +882,11 @@
   .modelStep { min-height: 310px; padding: 32px 34px 34px; }
   .modelStep h3 { margin-top: 72px; font-size: 31px; }
   .modelStep p { font-size: 15.5px; }
-  .audienceSection,
+  .audienceSection { padding-top: 60px; padding-bottom: 64px; }
   .proofSection,
   .processSection { padding-top: 72px; }
+  .audienceSection .headMain h2 { max-width: 760px; font-size: 62px; }
+  .audienceSection .headAside p { font-size: 16px; }
   .proofSection { grid-template-columns: minmax(420px, .78fr) minmax(0, 1.22fr); }
   .proofCopy h2,
   .trustCopy h2 { max-width: 780px; font-size: clamp(58px, 4.3vw, 82px); }

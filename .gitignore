@@ -18,6 +18,11 @@
 /supabase/.temp/
 /.tmp/
 
+# local visual review captures
+/.codex-*.png
+/hero-*.png
+/audit/*.png
+
 # next.js
 /.next/
 /out/

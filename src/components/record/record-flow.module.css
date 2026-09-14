@@ -244,69 +244,6 @@
 .guide span { display: block; margin-top: 5px; color: var(--quiet); font-size: 14px; line-height: 1.45; }
 .callout { margin: 17px 0 0; padding: 14px 15px; border-left: 3px solid var(--sand); background: #f1ebe5; color: #5f534d; font-size: 14px; line-height: 1.45; }
 
-.processingDisclosure {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 16px 0 -4px;
-  padding: 13px 15px;
-  border: 1px solid #ded4cb;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .58);
-  color: #655b56;
-  font-size: 12px;
-  line-height: 1.52;
-}
-
-.processingDisclosure > i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--sand-deep);
-}
-
-.processingDisclosure a {
-  color: var(--crimson);
-  font-weight: 650;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.processingConsent {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 11px;
-  margin: 12px 0 20px;
-  padding: 15px;
-  border: 1px solid rgba(121, 0, 24, .16);
-  border-radius: 10px;
-  background: #fff9f7;
-}
-.processingConsent input {
-  width: 18px;
-  height: 18px;
-  margin: 1px 0 0;
-  accent-color: var(--crimson);
-  cursor: pointer;
-}
-.processingConsent input:disabled { cursor: not-allowed; }
-.processingConsent label { cursor: pointer; }
-.processingConsent strong {
-  display: block;
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.processingConsent span {
-  display: block;
-  margin-top: 5px;
-  color: var(--quiet);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.processingConsent a,
 .legalAcceptance span a {
   color: var(--crimson);
   font-weight: 650;

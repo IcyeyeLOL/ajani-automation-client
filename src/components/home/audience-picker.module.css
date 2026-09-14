@@ -683,6 +683,91 @@
   .examplePrototype .outcomeRail { grid-column: 1 / -1; width: 100%; }
 }
 
+@media (min-width: 901px) {
+  .picker { margin-top: 24px; }
+
+  .tabs {
+    gap: 7px;
+    padding-bottom: 19px;
+  }
+
+  .tab {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 12.5px;
+  }
+
+  .panel {
+    grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr);
+    column-gap: 34px;
+    row-gap: 20px;
+    padding-top: 24px;
+  }
+
+  .copy h3 { font-size: clamp(22px, 2vw, 29px); }
+  .problem { margin-top: 12px; font-size: 14px; }
+
+  .panelCta {
+    min-height: 40px;
+    margin-top: 17px;
+    padding: 0 16px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .examplePrototype figcaption {
+    min-height: 46px;
+    padding-right: 14px;
+    padding-left: 16px;
+  }
+
+  .examplePrototype .exampleHeading b { font-size: 9px; }
+  .examplePrototype .exampleMeta > span { font-size: 8.5px; }
+
+  .exampleMeta button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .exampleMeta button svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .examplePrototype .exampleRoute {
+    grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .examplePrototype .exampleStep {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    min-height: 88px;
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+
+  .examplePrototype .exampleStep > b {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    font-size: 9px;
+  }
+
+  .examplePrototype .exampleStep small { font-size: 8.5px; }
+  .examplePrototype .exampleStep p { margin-top: 6px; font-size: 12.5px; line-height: 1.42; }
+  .examplePrototype .exampleConnector { padding-inline: 12px; }
+  .examplePrototype .exampleConnector span { padding: 6px 8px; font-size: 8px; }
+
+  .examplePrototype > footer {
+    min-height: 48px;
+    padding: 7px 16px;
+  }
+
+  .outcomeMark { width: 22px; height: 22px; border-radius: 7px; }
+  .outcomeCopy strong { font-size: 11.5px; }
+}
+
 @media (max-width: 620px) {
   .tabs {
     flex-wrap: nowrap;

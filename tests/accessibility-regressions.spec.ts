@@ -26,6 +26,9 @@ test("home process copy reflows without horizontal scrolling at 320px", async ({
 test("the reduced-motion fallback stays safe when the full-motion override is absent", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/demos");
+  await page.locator("#automation-stage").scrollIntoViewIfNeeded();
+  const theatre = page.getByRole("region", { name: "Automation theatre" });
+  await expect(theatre).toHaveAttribute("data-mode", "playing");
   await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
 
   await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
@@ -33,6 +36,8 @@ test("the reduced-motion fallback stays safe when the full-motion override is ab
   await expect(firstScenario).toHaveCSS("animation-name", "none");
 
   await expect(page.getByRole("status")).toContainText("Motion is simplified for this device");
+  await theatre.getByRole("button", { name: "Restart automation demo", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Ready to trace the system");
   await page.getByRole("button", { name: "Run After-hours leads automation" }).click();
   await expect(page.getByRole("status")).toContainText("Paused at Lead signal");
   await page.waitForTimeout(3_200);
@@ -82,7 +87,7 @@ test("secondary route mastheads keep their headings and supporting copy on mobil
 
   await page.goto("/demos");
   await expect(page.getByRole("heading", { name: "Watch the system work. Then decide if it fits." })).toBeVisible();
-  await expect(page.getByText(/Choose a common business gap and run the route yourself/)).toBeVisible();
+  await expect(page.getByText(/A late-night inquiry\. A scattered brief\. A client ready to return\./)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
     .toBeLessThanOrEqual(1);
 

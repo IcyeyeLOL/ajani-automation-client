@@ -18,27 +18,49 @@ async function finishClarifications(page: Page) {
   await page.getByRole("button", { name: "Build the first route" }).click();
 }
 
-async function acknowledgeRequestProcessing(page: Page) {
-  const acknowledgment = page.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
+async function confirmRequestProcessing(page: Page, intent: "voice" | "continue") {
+  const confirmation = page.getByRole("dialog", {
+    name: intent === "voice" ? "Before you record." : "Before Ajani continues.",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  const acknowledgment = confirmation.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
   await expect(acknowledgment).not.toBeChecked();
   await acknowledgment.check();
+  await confirmation.getByRole("button", {
+    name: intent === "voice" ? "Confirm & start recording" : "Confirm & continue",
+    exact: true,
+  }).click();
+  await expect(confirmation).not.toBeVisible();
 }
 
-test("withdrawing the processing acknowledgment blocks a return to AI-assisted stages", async ({ page }) => {
+test("withdrawing a pending processing confirmation blocks AI-assisted stages", async ({ page }) => {
+  const processingRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/automation-brief") processingRequests.push(request.method());
+  });
   await page.goto("/record");
-  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
     "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
   );
   await page.getByRole("button", { name: "Continue to clarify" }).click();
-  await expect(page.getByRole("heading", { name: "Clarify the details that change the route." })).toBeVisible();
-
-  await page.getByRole("button", { name: /Tell us/ }).click();
-  const acknowledgment = page.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
+  const confirmation = page.getByRole("dialog", { name: "Before Ajani continues.", exact: true });
+  await expect(confirmation).toBeVisible();
+  const acknowledgment = confirmation.getByRole("checkbox", { name: /I confirm I am 18 or older/ });
+  await acknowledgment.check();
+  await expect(confirmation.getByRole("button", { name: "Confirm & continue", exact: true })).toBeEnabled();
   await acknowledgment.uncheck();
-  await expect(page.getByRole("button", { name: /Clarify/ })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeDisabled();
+  await expect(confirmation.getByRole("button", { name: "Confirm & continue", exact: true })).toBeDisabled();
+  await confirmation.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(confirmation).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tell us where the work gets stuck." })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("button", { name: /Clarify/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeEnabled();
+  await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await expect(confirmation).toBeVisible();
+  await expect(acknowledgment).not.toBeChecked();
+  expect(processingRequests).toEqual([]);
 });
 
 test("a new record flow starts empty and only advances with user data", async ({ page }) => {
@@ -49,7 +71,6 @@ test("a new record flow starts empty and only advances with user data", async ({
   await expect(page.getByRole("group", { name: "Choose how to share your note" })).toHaveCSS("animation-name", /stage-control-in/);
   await expect(page.getByRole("region", { name: "Voice note recorder" })).toHaveCSS("animation-name", /recorder-panel-in/);
   await expect(page.getByRole("heading", { name: "Tell us where the work gets stuck." }).locator("../../..")).toHaveAttribute("data-direction", "forward");
-  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).locator("../..")).toHaveCSS("animation-name", /input-surface-in/);
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
@@ -57,6 +78,7 @@ test("a new record flow starts empty and only advances with user data", async ({
   );
   await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
   await expect(page.getByRole("heading", { name: "Clarify the details that change the route." })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Clarify the details that change the route." }).locator("../../..")).toHaveAttribute("data-direction", "forward");
   const clarificationNote = page.getByRole("textbox", { name: "Add or confirm the written version" });
@@ -93,12 +115,12 @@ test("a new record flow starts empty and only advances with user data", async ({
 test("every development brief file can be edited without leaving check", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/record");
-  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(
     "After-hours website leads wait until morning, and the sales team needs a clear follow-up route.",
   );
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
   await finishClarifications(page);
   await page.getByRole("button", { name: "Check this route" }).click();
 
@@ -163,9 +185,11 @@ test("the voice recorder captures, pauses, resumes, and finishes a note", async 
   await page.context().grantPermissions(["microphone"], { origin: new URL(page.url()).origin });
 
   await expect(page.getByText("Ready to record", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start recording your voice note" })).toBeDisabled();
-  await acknowledgeRequestProcessing(page);
+  await expect(page.getByRole("button", { name: "Start recording your voice note" })).toBeEnabled();
   await page.getByRole("button", { name: "Start recording your voice note" }).click();
+  await expect(page.getByRole("dialog", { name: "Before you record.", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Voice note recorder", includeHidden: true })).toHaveAttribute("data-phase", "idle");
+  await confirmRequestProcessing(page, "voice");
   await expect(page.getByText("Recording", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pause & edit", exact: true }).click();
   await expect(page.getByRole("region", { name: "Voice note recorder" }).getByRole("status")).toHaveText("Recording paused");
@@ -259,13 +283,13 @@ test("a visitor can complete the public funnel and open account access without l
   });
   await page.goto("/record");
 
-  await acknowledgeRequestProcessing(page);
   await page.getByRole("button", { name: "Type", exact: true }).click();
   const writtenBrief = page.getByRole("textbox", { name: "Tell us where the work gets stuck" });
   await writtenBrief.fill(
     "Website enquiries arrive after hours and our team misses the follow-up.",
   );
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
 
   const clarifyHeading = page.getByRole("heading", { name: "Clarify the details that change the route." });
   await expect(clarifyHeading).toBeFocused();
@@ -423,7 +447,6 @@ test("the recorder keeps compact progress, focus, and motion safe at narrow widt
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/record");
-  await acknowledgeRequestProcessing(page);
   await page.locator("html").evaluate((element) => element.setAttribute("data-motion", "system"));
   await expect(page.locator("html")).not.toHaveAttribute("data-motion", "full");
 
@@ -442,6 +465,7 @@ test("the recorder keeps compact progress, focus, and motion safe at narrow widt
   const mobileStressNote = "After-hours leads arrive from several channels, but the follow-up waits until the next morning and nobody can see whether a colleague already replied. ".repeat(12);
   await page.getByRole("textbox", { name: "Tell us where the work gets stuck" }).fill(mobileStressNote);
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
 
   const clarifyHeading = page.getByRole("heading", {
     name: "Clarify the details that change the route.",
@@ -559,7 +583,6 @@ test("the recorder keeps compact progress, focus, and motion safe at narrow widt
 test("the recorder remains usable at 320 by 800", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("/record");
-  await acknowledgeRequestProcessing(page);
 
   await expect(page.getByText("Step 1 of 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Build request progress" }).getByRole("list")).toBeHidden();
@@ -571,6 +594,7 @@ test("the recorder remains usable at 320 by 800", async ({ page }) => {
     "After-hours leads arrive, but the follow-up waits until the next morning.",
   );
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
 
   const clarifyHeading = page.getByRole("heading", {
     name: "Clarify the details that change the route.",
@@ -618,7 +642,6 @@ test("a failed recorder save is announced and can be retried", async ({ page }) 
     });
   });
   await page.goto("/record");
-  await acknowledgeRequestProcessing(page);
 
   await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Type", exact: true }).click();
@@ -626,6 +649,7 @@ test("a failed recorder save is announced and can be retried", async ({ page }) 
     "After-hours leads arrive, but the follow-up waits until the next morning.",
   );
   await page.getByRole("button", { name: "Continue to clarify" }).click();
+  await confirmRequestProcessing(page, "continue");
   await page.getByRole("radio", {
     name: /When the lead shares a real date, budget, or project detail/,
   }).check();
@@ -721,6 +745,7 @@ test("automation theatre runs play by play with accessible controls", async ({ p
   await expect(page.getByRole("heading", { name: /Watch the system work/i })).toBeVisible();
   await expect(page.getByRole("link", { name: "Demos" }).first()).toHaveAttribute("aria-current", "page");
   const theatre = page.getByRole("region", { name: "Automation theatre" });
+  await theatre.getByRole("button", { name: "Restart automation demo", exact: true }).click();
   await expect(theatre.getByRole("tab", { name: /After-hours leads/i })).toHaveAttribute("aria-selected", "true");
   const runAutomation = theatre.getByRole("button", { name: "Run After-hours leads automation" });
   const pauseAutomation = theatre.getByRole("button", { name: "Pause After-hours leads automation" });
@@ -742,6 +767,7 @@ test("automation boxes start and pause the selected route", async ({ page }) => 
   await page.goto("/demos");
 
   const theatre = page.getByRole("region", { name: "Automation theatre" });
+  await theatre.getByRole("button", { name: "Restart automation demo", exact: true }).click();
   const status = theatre.getByRole("status");
 
   await theatre.getByRole("button", { name: "Run from step 2: Intent scan" }).click();
@@ -780,6 +806,7 @@ test("automation theatre fallback stays manual when the full-motion override is 
   await page.emulateMedia({ reducedMotion: "reduce" });
 
   const theatre = page.getByRole("region", { name: "Automation theatre" });
+  await theatre.getByRole("button", { name: "Restart automation demo", exact: true }).click();
   const status = theatre.getByRole("status");
   await expect(status).toContainText("Motion is simplified for this device");
   await theatre.getByRole("button", { name: "Run After-hours leads automation" }).click();

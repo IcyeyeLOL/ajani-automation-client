@@ -292,7 +292,7 @@
   .systemIcon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
   .systemIcon > i { position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border: 2px solid #171616; border-radius: 50%; background: #4e4947; }
   .systemNodes small { max-width: 72px; margin-top: 5px; overflow: hidden; color: #aaa5a1; font-size: 9px; line-height: 1.12; text-overflow: ellipsis; white-space: nowrap; }
-  .systemNodes strong { max-width: 74px; color: #77716e; font-size: 10px; font-weight: 650; line-height: 1.12; }
+  .systemNodes strong { max-width: 74px; color: #aaa5a1; font-size: 10px; font-weight: 650; line-height: 1.12; }
   .systemNodes li[data-state="complete"] .systemIcon { border-color: #d8d5d2; background: #f6f4f1; color: #111; }
   .systemNodes li[data-state="complete"] .systemIcon > i { background: #d00b37; }
   .systemNodes li[data-state="complete"] strong { color: #d8d5d2; }
@@ -330,7 +330,7 @@
   .exchangeBody > small { display: block; margin-top: 10px; color: #7c7672; font-size: 10px; line-height: 1.3; }
 
   .activityFeed { display: grid; gap: 1px; margin: 9px 0 0; padding: 0; overflow: hidden; border: 1px solid #d8d5d2; border-radius: 13px; background: #d8d5d2; list-style: none; }
-  .activityFeed li { display: grid; grid-template-columns: 7px 37px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 29px; padding: 5px 10px; background: #fff; color: #9a9490; font-size: 10px; }
+  .activityFeed li { display: grid; grid-template-columns: 7px 37px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 29px; padding: 5px 10px; background: #fff; color: #68625f; font-size: 10px; }
   .activityFeed li > i { width: 6px; height: 6px; border-radius: 50%; background: #c7c2be; }
   .activityFeed time { font: 9px/1 var(--font-mono), ui-monospace, monospace; }
   .activityFeed li > span { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -486,4 +486,60 @@
 
 @keyframes activity-pulse {
   50% { box-shadow: 0 0 0 7px rgba(196, 10, 52, .03); }
+}
+/* Match the shared signal studio; preserve the mobile playback surface. */
+@media (max-width:768px) {
+  .mobileOnly { width:100%; max-width:560px; }
+  .chooser { padding:16px 0 24px; }
+  .eyebrow,.choiceNumber,.choiceMetric b { color:#a72541; }
+  .chooser h2 { font-size:clamp(32px,9vw,43px); max-width:15ch; }
+  .chooserIntro { font-size:14px; margin-top:13px; color:#68717d; }
+  .scenarioList { margin-top:22px; }
+  .scenarioChoice { border-color:#d9dee5; background:#ffffff; }
+  .autoShowcase { background:#171b22; border-color:#171b22; }
+  .autoShowcase > svg { color:#ff6b86; }
+  .player { border-color:#343940; background:#111318; box-shadow:0 22px 50px -20px #11131845; }
+  .playerHeader { min-height:68px; background:#111318; border-bottom:1px solid #303640; }
+  .playerHeader h2 { color:#f4f6f8; }
+  .state { font-size:8px; color:#c1c8d2; }
+  .state i { background:#e83e59; box-shadow:0 0 0 4px #e83e591a; }
+  .changeButton,.restartButton { color:#c1c8d2; }
+  .systemShowcase { background:#111318; }
+  .workflowMap { min-height:131px; padding-top:11px; background:#171b22; border-bottom:1px solid #303640; }
+  .mapHeader { color:#9ca7b7; font-size:8px; }
+  .mapHeader > span { color:#c1c8d2; }
+  .networkDot { width:5px; height:5px; background:#e83e59; box-shadow:0 0 0 3px #e83e591a; }
+  .routeTrack { background:#3c434e; margin-top:26px; }
+  .routeFill { background:#e83e59; box-shadow:0 0 8px #e83e5970; }
+  .signalPacket { background:#ff8094; box-shadow:0 0 0 3px #e83e5922,0 0 14px #e83e5988; }
+  .systemNodes button { min-height:79px; }
+  .systemNodes strong { color:#c1c8d2; font-size:10px; }
+  .systemNodes small { color:#9ca7b7; font-size:8px; }
+  .systemIcon { width:34px; height:34px; border-color:#434a55; color:#9ca7b7; background:#242a33; }
+  .systemIcon > i { border-color:#171b22; }
+  .systemNodes li[data-state="active"] .systemIcon { border-color:#ff6b86; background:#e83e59; color:#ffffff; box-shadow:0 0 0 4px #e83e5915,0 6px 18px #e83e5925; }
+  .systemNodes li[data-state="complete"] .systemIcon { border-color:#46b997; background:#173b32; color:#a8e6d1; }
+  .systemNodes li[data-state="complete"] .systemIcon > i { background:#46b997; }
+  .systemNodes li[data-state="complete"] strong { color:#94d8c1; }
+  .stepTimer { background:#303640; }
+  .stepTimer > i { background:#e83e59; }
+  .liveExchange { padding:0; background:#f4f6f8; }
+  .artifactCaption { display:flex; align-items:center; justify-content:space-between; gap:9px; min-height:31px; padding:8px 13px 0; color:#68717d; font:8px/1.4 var(--font-mono),monospace; }
+  .artifactCaption > span:last-child { color:#a72541; text-align:right; }
+  .completionStrip { padding:0 10px 12px; }
+  .completionCta { margin:0; border-color:#171b22; background:#171b22; color:#ffffff; font-size:12px; }
+  .activityFeed { margin:0; padding:0 14px 14px; border-color:transparent; background:#f4f6f8; border-radius:0; }
+  .activityFeed li { border-color:#d9dee5; background:#ffffff; color:#68717d; }
+  .activityFeed li > i { background:#a7b1bf; }
+  .activityFeed li[data-state="complete"] { color:#276b56; }
+  .activityFeed li[data-state="complete"] > i { background:#278669; }
+  .activityFeed li[data-state="active"] { color:#95203a; background:#fff0f3; }
+  .activityFeed li[data-state="active"] > i { background:#e83e59; }
+  .activityFeed li[data-state="active"] > b { color:#95203a; }
+  .activityFeed time { color:#68717d; }
+  .activityFeed li b { color:#68717d; }
+  .autoAdvance { color:#68717d; }
+  .controls { border-color:#303640; background:#111318; padding:9px 10px; }
+  .controls > button { border-color:#434a55; background:#242a33; color:#ffffff; }
+  .controls .primaryControl { border-color:#c52a48; background:#c52a48; color:#ffffff; }
 }

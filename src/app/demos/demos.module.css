@@ -1,6 +1,8 @@
 .shell {
+  --pearl: #f5f6f8;
+  --sand: #ff8094;
   --shell-width: calc(100% - 64px);
-  --panel-edge: #423936;
+  --panel-edge: #343940;
   min-height: 100vh;
   background: var(--pearl);
   font-family: var(--font-display), system-ui, sans-serif;
@@ -16,8 +18,8 @@
 
 .hero {
   padding: 56px 0 34px;
-  background: radial-gradient(120% 90% at 12% 0%, #241d1f 0%, #171515 58%);
-  color: var(--pearl);
+  background: var(--pearl);
+  color: var(--ink);
 }
 
 .heroInner {
@@ -34,10 +36,11 @@
   align-items: end;
   gap: 0 70px;
   padding-bottom: 34px;
-  border-bottom: 1px solid rgba(237, 198, 160, .18);
+  border-bottom: 1px solid #d9dee5;
 }
 
-.heroCopy .label,
+.heroCopy .label { color: #a72541; }
+
 .guide .label,
 .closeCopy .label,
 .promise .label { color: var(--sand); }
@@ -56,7 +59,8 @@
   text-wrap: balance;
 }
 
-.heroCopy h1 em,
+.heroCopy h1 em { color: #b02847; font-style: normal; }
+
 .closeCopy h2 em {
   color: var(--sand);
   font-style: normal;
@@ -67,7 +71,7 @@
   grid-row: 1 / span 2;
   max-width: 48ch;
   margin: 0 0 5px;
-  color: #c3b7b1;
+  color: #68717d;
   font-size: 17.5px;
   line-height: 1.5;
 }
@@ -96,7 +100,7 @@
   min-height: 38px;
   padding: 3px 18px;
   border-left: 1px solid #352e2b;
-  color: #c3b7b1;
+  color: #b8c1ce;
   font-size: 14px;
 }
 
@@ -111,7 +115,7 @@
 .demoSection { background: var(--pearl); }
 
 .close {
-  background: radial-gradient(110% 90% at 78% 0%, #241d1f 0%, #171515 60%);
+  background: #111318;
   color: var(--pearl);
 }
 
@@ -150,8 +154,8 @@
   margin-top: 30px;
   padding: 0 26px;
   border-radius: 11px;
-  background: var(--sand);
-  color: #33241d;
+  background: #c52a48;
+  color: #fff;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -.015em;
@@ -159,8 +163,8 @@
 }
 
 .primaryCta:hover {
-  background: #d3ab82;
-  box-shadow: 0 12px 26px rgba(189, 150, 112, .22);
+  background: #a91e39;
+  box-shadow: 0 12px 26px #e83e5922;
 }
 
 .primaryCta:active { transform: translateY(1px); }
@@ -170,12 +174,12 @@
   padding: 26px 28px 24px;
   border: 1px solid var(--panel-edge);
   border-radius: 20px;
-  background: linear-gradient(160deg, #241f1e, #1a1717);
+  background: #1b2029;
 }
 
 .promise > p:nth-child(2) {
   margin: 16px 0 0;
-  color: #c3b7b1;
+  color: #b8c1ce;
   font-size: 15px;
   line-height: 1.5;
 }
@@ -188,7 +192,7 @@
   margin-top: 22px;
   padding-top: 18px;
   border-top: 1px solid var(--panel-edge);
-  color: #a99c95;
+  color: #9ca7b7;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: .06em;
@@ -239,4 +243,79 @@
   :global(html:not([data-motion="full"])) .heroCopy h1,
   :global(html:not([data-motion="full"])) .heroCopy > p,
   :global(html:not([data-motion="full"])) .guide { animation: none; }
+}
+
+/* Keep the shared chrome at its established width while giving the desktop
+   page content a composed, readable scale. */
+@media (min-width: 1041px) {
+  .main { --shell-width: clamp(1000px, 91vw, 1580px); }
+
+  .hero { padding: 35px 0 21px; }
+
+  .heroCopy {
+    grid-template-columns: minmax(0, 1.1fr) minmax(300px, .68fr);
+    gap: 0 48px;
+    padding-bottom: 21px;
+  }
+
+  .heroCopy h1 {
+    max-width: 660px;
+    margin-top: 10px;
+    font-size: clamp(35px, 3.4vw, 59px);
+  }
+
+  .heroCopy > p {
+    max-width: 44ch;
+    font-size: 14.5px;
+  }
+
+  .guide {
+    grid-template-columns: minmax(135px, .29fr) minmax(0, 1fr);
+    gap: 18px;
+    padding-top: 11px;
+  }
+
+  .guide li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+    min-height: 31px;
+    padding: 2px 13px;
+    font-size: 11.5px;
+  }
+
+  .closeInner {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, .86fr);
+    gap: 40px;
+    padding: 47px 0;
+  }
+
+  .closeCopy h2 { font-size: clamp(30px, 2.85vw, 43px); }
+
+  .closeCopy > p {
+    margin-top: 15px;
+    font-size: 15px;
+  }
+
+  .primaryCta {
+    min-height: 47px;
+    margin-top: 24px;
+    padding: 0 21px;
+    font-size: 14px;
+  }
+
+  .promise {
+    padding: 22px 24px 20px;
+    border-radius: 17px;
+  }
+
+  .promise > p:nth-child(2) {
+    margin-top: 13px;
+    font-size: 13.5px;
+  }
+
+  .promise > div {
+    margin-top: 18px;
+    padding-top: 15px;
+    font-size: 9px;
+  }
 }
