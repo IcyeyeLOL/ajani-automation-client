@@ -9,6 +9,10 @@
   --home-wine: #790018;
   --route-cycle: 7.2s;
   --soft-line: var(--home-line);
+  --site-safe-area-top: env(safe-area-inset-top, 0px);
+  --site-safe-area-right: env(safe-area-inset-right, 0px);
+  --site-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --site-safe-area-left: env(safe-area-inset-left, 0px);
   min-height: 100vh;
   overflow: clip;
   background: var(--home-ground);
@@ -847,7 +851,12 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
-  .shell { --shell-width: min(100% - 48px, 1280px); }
+  .shell {
+    --shell-width: min(
+      calc(100% - 48px - var(--site-safe-area-left) - var(--site-safe-area-right)),
+      1280px
+    );
+  }
   .heroInner { grid-template-columns: 1fr; align-items: start; gap: 42px; min-height: auto; }
   .heroCopy { max-width: 760px; }
   .heroCopy h1 { max-width: 760px; }
@@ -927,7 +936,12 @@
 }
 
 @media (max-width: 620px) {
-  .shell { --shell-width: min(100% - 32px, 1280px); }
+  .shell {
+    --shell-width: min(
+      calc(100% - 32px - var(--site-safe-area-left) - var(--site-safe-area-right)),
+      1280px
+    );
+  }
   .heroInner { padding: 40px 0 48px; gap: 24px; }
   .heroCopy h1 { margin-top: 16px; font-size: clamp(46px, 13vw, 60px); line-height: .93; }
   .heroLede { margin-top: 22px; font-size: 15.5px; }

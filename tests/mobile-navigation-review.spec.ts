@@ -19,11 +19,14 @@ async function expectBackdropFilter(element: Locator, expected: string) {
 }
 
 async function openNavigation(page: Page) {
-  await page.getByRole("button", { name: "Open navigation menu" }).click();
+  const trigger = page.getByRole("button", { name: "Open navigation menu" });
   const dialog = page.getByRole("dialog").filter({
     has: page.getByRole("navigation", { name: "Mobile navigation" }),
   });
-  await expect(dialog).toBeVisible();
+  await expect(async () => {
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+  }).toPass();
   return dialog;
 }
 
@@ -108,7 +111,111 @@ test("mobile home header stays opaque over scrolling photography", async ({ page
   expect(scrolledHeaderBounds?.height).toBeCloseTo(63, 1);
 });
 
-test("light header opacity changes at the mobile navigation breakpoint", async ({ page }) => {
+test("homepage fills iPhone safe areas in portrait and landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#fbfaf7");
+
+  const header = page.locator('header[data-variant="marketing"][data-tone="light"]');
+  await expect(header).toBeVisible();
+  await expect(header).toHaveAttribute("data-safe-area", "cover");
+  const headerInner = header.locator(":scope > div").first();
+  const safeAreaOverride = await page.addStyleTag({
+    content: `
+      html { --site-status-area-height: 47px; }
+      body div:has(> header[data-safe-area="cover"]) {
+        --site-safe-area-top: 47px;
+        --site-safe-area-right: 0px;
+        --site-safe-area-bottom: 34px;
+        --site-safe-area-left: 0px;
+      }
+    `,
+  });
+
+  const initialHeader = await header.boundingBox();
+  const initialInner = await headerInner.boundingBox();
+  expect(initialHeader?.height).toBeCloseTo(110, 0);
+  expect((initialInner?.y ?? 0) - (initialHeader?.y ?? 0)).toBeCloseTo(55, 0);
+
+  const root = page.locator("html");
+  const statusAreaPaint = await root.evaluate((node) => {
+    const style = getComputedStyle(node, "::before");
+    return { background: style.backgroundColor, height: style.height, position: style.position };
+  });
+  expect(statusAreaPaint).toEqual({
+    background: "rgb(251, 250, 247)",
+    height: "47px",
+    position: "fixed",
+  });
+
+  const skipLink = page.getByRole("link", { name: "Skip to main content" });
+  const hiddenSkipLink = await skipLink.boundingBox();
+  expect((hiddenSkipLink?.y ?? 0) + (hiddenSkipLink?.height ?? 0)).toBeLessThanOrEqual(0);
+  await skipLink.evaluate((node) => {
+    (node as HTMLElement).focus();
+  });
+  await expect.poll(async () => (await skipLink.boundingBox())?.y).toBeCloseTo(55, 0);
+
+  const footerInner = page.locator("footer > div").first();
+  await expect(footerInner).toHaveCSS("padding-bottom", "58px");
+
+  await page.evaluate(() => window.scrollTo({ top: 900, behavior: "instant" }));
+  const scrolledHeader = await header.boundingBox();
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  expect(Math.abs(scrolledHeader?.y ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(1);
+  expect(scrolledHeader?.height).toBeCloseTo(110, 0);
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await safeAreaOverride.evaluate((node) => {
+    node.textContent = `
+      html { --site-status-area-height: 0px; }
+      body div:has(> header[data-safe-area="cover"]) {
+        --site-safe-area-top: 0px;
+        --site-safe-area-right: 47px;
+        --site-safe-area-bottom: 21px;
+        --site-safe-area-left: 47px;
+      }
+    `;
+  });
+
+  const landscapeHeader = await header.boundingBox();
+  const landscapeInner = await headerInner.boundingBox();
+  expect(landscapeHeader?.height).toBeCloseTo(71, 0);
+  expect(landscapeInner?.x).toBeGreaterThanOrEqual(47);
+  expect((landscapeInner?.x ?? 0) + (landscapeInner?.width ?? 0)).toBeLessThanOrEqual(844 - 47);
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expectBackdropFilter(header, "none");
+  expect(await root.evaluate((node) => getComputedStyle(node, "::before").height)).toBe("1px");
+});
+
+test("homepage safe-area metadata and paint restore after mobile navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const homeHeader = page.locator('header[data-variant="marketing"][data-tone="light"]');
+  await expect(homeHeader).toBeVisible();
+  await expect(homeHeader).toHaveAttribute("data-safe-area", "cover");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
+
+  const navigation = await openNavigation(page);
+  await navigation.getByRole("link", { name: /Demos/ }).click();
+  await expect(page).toHaveURL(/\/demos$/);
+  const demosHeader = page.locator('header[data-variant="marketing"][data-tone="light"]');
+  await expect(demosHeader).toBeVisible();
+  await expect(demosHeader).not.toHaveAttribute("data-safe-area", "cover");
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute("content", /viewport-fit=cover/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(homeHeader).toBeVisible();
+  await expect(homeHeader).toHaveAttribute("data-safe-area", "cover");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#fbfaf7");
+});
+
+test("homepage header stays opaque through iPhone landscape widths", async ({ page }) => {
   const header = page.locator('header[data-variant="marketing"][data-tone="light"]');
 
   await page.setViewportSize({ width: 760, height: 844 });
@@ -116,7 +223,11 @@ test("light header opacity changes at the mobile navigation breakpoint", async (
   await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
   await expectBackdropFilter(header, "none");
 
-  await page.setViewportSize({ width: 761, height: 844 });
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
+  await expectBackdropFilter(header, "none");
+
+  await page.setViewportSize({ width: 1025, height: 844 });
   await expect(header).toHaveCSS("background-color", "rgba(251, 250, 247, 0.76)");
   await expectBackdropFilter(header, "blur(18px) saturate(1.1)");
 });

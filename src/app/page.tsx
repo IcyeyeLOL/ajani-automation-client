@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AudiencePicker } from "@/components/home/audience-picker";
 import { ClientProofRoute } from "@/components/home/client-proof-route";
@@ -39,6 +39,18 @@ export const metadata: Metadata = {
     description: homepageDescription,
     images: ["/og.png"],
   },
+};
+
+/**
+ * Let the homepage chrome own the iPhone safe area. The matching mobile header
+ * padding keeps its controls below the status icons while its opaque surface
+ * prevents the scrolling hero from showing through Safari's top bar.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#fbfaf7",
 };
 
 const stages = [
@@ -111,7 +123,7 @@ const trustSignals = [
 export default function Home() {
   return (
     <div className={styles.shell}>
-      <SiteTop active="home" tone="light" />
+      <SiteTop active="home" coverSafeArea tone="light" />
 
       <main id="main-content" tabIndex={-1}>
         <section className={styles.hero}>
@@ -255,7 +267,7 @@ export default function Home() {
 
       </main>
 
-      <SiteFoot />
+      <SiteFoot coverSafeArea />
     </div>
   );
 }

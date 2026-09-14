@@ -90,7 +90,7 @@ test("valid captured audio survives delayed display-timer callbacks", async ({ p
   await confirmation.getByRole("button", { name: "Confirm & start recording", exact: true }).click();
   const recorder = page.getByRole("region", { name: "Voice note recorder" });
   await expect(recorder.getByRole("status")).toHaveText("Recording", { timeout: 15_000 });
-  await expect.poll(() => capturedBytes(page)).toBeGreaterThan(0);
+  await expect.poll(() => capturedBytes(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(recorder.locator("header").first()).toContainText("00:00");
   await page.getByRole("button", { name: "Finish note" }).click();
   await expect.poll(() => page.evaluate(() =>

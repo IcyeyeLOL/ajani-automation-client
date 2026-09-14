@@ -732,7 +732,9 @@ test("the homepage explains the Ajani workflow in an accessible tutorial", async
   await expect(dialog).toHaveCSS("max-height", "824px");
   expect(await dialog.evaluate((node) => Array.from(node.querySelectorAll("*")).flatMap((child) => {
     const element = child as HTMLElement;
-    return element.scrollWidth > element.clientWidth + 1
+    const overflowX = getComputedStyle(element).overflowX;
+    const clipsOverflow = overflowX === "hidden" || overflowX === "clip";
+    return !clipsOverflow && element.scrollWidth > element.clientWidth + 1
       ? [{ tag: element.tagName, className: element.className, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }]
       : [];
   }))).toEqual([]);

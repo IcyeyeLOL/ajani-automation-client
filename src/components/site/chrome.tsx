@@ -15,11 +15,13 @@ type ChromeVariant = "marketing" | "funnel";
  */
 export function SiteTop({
   active = null,
+  coverSafeArea = false,
   subtitle,
   tone = "dark",
   variant = "marketing",
 }: {
   active?: Nav;
+  coverSafeArea?: boolean;
   subtitle?: string;
   tone?: ChromeTone;
   variant?: ChromeVariant;
@@ -28,8 +30,8 @@ export function SiteTop({
 
   return (
     <>
-      <a className={styles.skipLink} href="#main-content">Skip to main content</a>
-      <header className={styles.header} data-tone={tone} data-variant={variant}>
+      <a className={styles.skipLink} data-safe-area={coverSafeArea ? "cover" : undefined} href="#main-content">Skip to main content</a>
+      <header className={styles.header} data-safe-area={coverSafeArea ? "cover" : undefined} data-tone={tone} data-variant={variant}>
         <div className={styles.headerInner}>
           <div className={styles.brandLockup}>
             <Link aria-label="Ajani home" className={styles.brand} href="/">ajani<i>.</i></Link>
@@ -69,9 +71,9 @@ export function SiteTop({
   );
 }
 
-export function SiteFoot() {
+export function SiteFoot({ coverSafeArea = false }: { coverSafeArea?: boolean }) {
   return (
-    <footer className={styles.footer}>
+    <footer className={styles.footer} data-safe-area={coverSafeArea ? "cover" : undefined}>
       <div className={styles.footerInner}>
         <div className={styles.footerMain}>
           <div className={styles.footerBrand}>

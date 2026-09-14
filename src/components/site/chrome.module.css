@@ -36,6 +36,14 @@
     0 10px 30px rgba(8, 6, 6, .1);
 }
 
+.header[data-safe-area="cover"] {
+  padding:
+    calc(10px + var(--site-safe-area-top))
+    var(--site-safe-area-right)
+    10px
+    var(--site-safe-area-left);
+}
+
 .headerInner {
   position: relative;
   display: flex;
@@ -329,8 +337,49 @@
   outline-offset: 5px;
 }
 
+/* iPhone landscape can remain wider than the collapsed-navigation breakpoint.
+   Keep the homepage's edge-to-edge viewport safe and opaque in either
+   orientation, and give WebKit a fixed top paint to sample after BFCache or
+   client-side navigation restoration. */
+@media (max-width: 1024px) {
+  :global(html):has(.header[data-safe-area="cover"])::before {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 21;
+    height: max(var(--site-status-area-height, env(safe-area-inset-top, 0px)), 1px);
+    background: #fbfaf7;
+    content: "";
+    pointer-events: none;
+  }
+
+  .skipLink[data-safe-area="cover"] {
+    left: calc(8px + var(--site-safe-area-left));
+  }
+  .skipLink[data-safe-area="cover"]:focus { transform: translateY(var(--site-safe-area-top)); }
+
+  .header[data-safe-area="cover"][data-tone="light"] {
+    background: #fbfaf7;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .footer[data-safe-area="cover"] .footerInner {
+    padding-bottom: calc(25px + var(--site-safe-area-bottom));
+  }
+}
+
 @media (max-width: 760px) {
   .header { padding: 8px 0; }
+  .header[data-safe-area="cover"] {
+    padding:
+      calc(8px + var(--site-safe-area-top))
+      var(--site-safe-area-right)
+      8px
+      var(--site-safe-area-left);
+  }
 
   /* Mobile Safari can extend sticky backdrop-filter layers into its browser
      chrome. Keep the light mobile header opaque so photography never bleeds
@@ -398,6 +447,7 @@
     width: min(100% - 32px, 1240px);
     padding: 36px 0 24px;
   }
+  .footer[data-safe-area="cover"] .footerInner { padding-bottom: calc(24px + var(--site-safe-area-bottom)); }
   .footerMain { grid-template-columns: 1fr; gap: 26px; padding-bottom: 24px; }
   .footerBrand p { max-width: 360px; margin-top: 13px; font-size: 15px; }
   .footerNav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
