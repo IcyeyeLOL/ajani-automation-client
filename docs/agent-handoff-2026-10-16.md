@@ -65,7 +65,8 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
 
 1. **Production schema brought up to date on 2026-10-16, with the owner's approval.** The live site and the local `.env.local` both use Supabase project `cubmsmokqtlpbfxaucsg` (Postgres 17.6). Before: `npm run check:database-contract` found 7 of 20 required RPCs because seven migrations were missing (`20260902000000` through `20261016020000`). That broke Clerk webhooks, voice-note completion, the expired-draft cleanup cron, background demand analysis and admin analytics on the live site. Procedure: a full JSON backup of every public table plus the function, policy, constraint, index, trigger and grant definitions (29 tables, 103 rows, 22 functions), kept on the owner's PC outside the repo; a restore test of that backup into a throwaway local Postgres built from the migration chain (functions and columns matched exactly); a rehearsal of all seven migrations on that copy with smoke checks; then each migration applied live as one all-or-nothing request through the Supabase Management API and recorded in `supabase_migrations.schema_migrations` (32 rows, latest `20261016020000`). After: the contract check finds 20 of 20, and the first Dripify sync wrote the 2026-10-16 snapshot. The code on `main` stays compatible, because the October migrations only add objects or `create or replace` functions with unchanged signatures. One live behaviour change: `create_outreach_batch` now rejects more replies than their reply base.
 2. **Database access.** The Supabase MCP server timed out in that session, so the owner provided a short-lived personal access token (`SUPABASE_ACCESS_TOKEN` in `ajani-automation/.env.local`) to revoke after use. Future sessions need their own access, and should apply any new migration the same way: backup, rehearsal, then apply.
-3. **Deployment needs approval.** The schema is live; the code on this branch is not deployed. The nightly Dripify cron uses the same `CRON_SECRET` as the existing crons. Per the README, never push to `main` or deploy without explicit approval from the owner.
+3. **Growth goals applied on 2026-10-16, with the owner's approval.** `20261016030000_growth_goals.sql` came out of a review of the owner's Obsidian vault and an audit of the calculations (see `docs/analytics-metric-store.md` → "Growth goals" and "Metric review"). It was applied after a fresh backup and a rehearsal on a restored copy of the live data, whose structure matched the migration chain exactly. History: 33 rows. The contract check still finds 20 of 20. All five goals read "Not logged" until the owner logs clients, revenue, MRR, followers and posts.
+4. **Deployment needs approval.** The schema is live; the code on this branch is not deployed. The nightly Dripify cron uses the same `CRON_SECRET` as the existing crons. Per the README, never push to `main` or deploy without explicit approval from the owner.
 
 ## 5. Next work, in the owner's priority order
 
@@ -149,7 +150,9 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
 ## 8. Open questions for the owner
 
 1. The mentor repo name, once uploaded.
-2. Which platforms to track beyond Dripify, YouTube and TikTok: Instagram, X, email, website traffic, Stripe?
+2. Platforms: the vault review retired X (unused) and added Reddit. Track email, website traffic or Stripe too?
 3. Stop logging Dripify volume manually now that the connector syncs it?
 4. Open a PR for `claude/exciting-bardeen-3j7j3m`?
 5. Approval to deploy this branch (the migrations were applied on 2026-10-16).
+6. The vault disagrees on the outreach volume target: "60+ messages a day per operator" (July goal sheet) vs Dripify's 20–25 requests a day, about 100 a week (2026-09-30). Which one should become a weekly goal?
+7. Does the 4,000-follower goal mean the personal profile only, or the profile and the company page together? It currently adds every LinkedIn account that is logged.
