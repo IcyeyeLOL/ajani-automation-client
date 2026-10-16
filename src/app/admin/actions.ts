@@ -23,6 +23,7 @@ import {
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
 import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
+import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
@@ -268,6 +269,20 @@ export async function syncDripifyAction(): Promise<AdminActionState> {
   } catch (error) {
     console.error("Manual Dripify sync failed", { message: error instanceof Error ? error.message : "Unknown error" });
     return { status: "error", message: "Dripify could not be synced. Apply the latest database migration, then retry in a few minutes." };
+  }
+}
+
+export async function syncConnectorAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  await requireAdminSession();
+  const connector = formData.get("connector");
+  if (!isConnectorId(connector)) return { status: "error", message: "Choose YouTube or Instagram to sync." };
+  try {
+    const result = await syncConnector(connector, { deadlineAt: Date.now() + 45_000 });
+    revalidatePath("/admin");
+    return { ...connectorMessage(result), entityId: `${connector}:${Date.now()}` };
+  } catch {
+    console.error("Manual platform sync failed", { connector });
+    return { status: "error", message: "The sync could not run. Apply the latest database migration, then retry in a few minutes." };
   }
 }
 

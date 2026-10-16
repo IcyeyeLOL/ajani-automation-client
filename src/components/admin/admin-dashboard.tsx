@@ -11,9 +11,11 @@ import {
   voidOutreachBatchAction,
 } from "@/app/admin/actions";
 import { MetricTrends } from "@/components/admin/metric-trends";
+import { Connections } from "@/components/admin/connections-panel";
 import { initialAdminActionState } from "@/app/admin/action-state";
 import { dayCount, formatMetricValue, goalProgress, goalRateLabel, type GoalProgress, type GoalStatus } from "@/lib/admin/metric-query";
 import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
+import type { ConnectionBoard } from "@/lib/admin/connection-types";
 import type {
   AdminDashboardData,
   AdminMetric,
@@ -23,7 +25,7 @@ import type {
   VariantPerformance,
 } from "@/lib/admin/types";
 
-type Section = "overview" | "trends" | "outreach" | "experiments" | "website" | "operations";
+type Section = "overview" | "trends" | "outreach" | "experiments" | "website" | "operations" | "connections";
 type MetricKey = "connectionRequests" | "connectionsAccepted" | "initialDms" | "f1Sent" | "f2Sent" | "customSent" | "replies" | "attributedReplies" | "positiveReplies" | "callsBooked";
 type MetricRow = Record<MetricKey, number> & { variantId: string | null; variantLabel: string };
 type ExperimentMetricRow = {
@@ -44,6 +46,7 @@ const sections: Array<{ id: Section; label: string; number: string }> = [
   { id: "experiments", label: "Experiments", number: "04" },
   { id: "website", label: "Website funnel", number: "05" },
   { id: "operations", label: "Operations", number: "06" },
+  { id: "connections", label: "Connections", number: "07" },
 ];
 
 const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
@@ -59,7 +62,7 @@ const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
   { key: "callsBooked", short: "CALLS", label: "Calls booked" },
 ];
 
-export function AdminDashboard({ data, catalog, goals }: { data: AdminDashboardData; catalog: MetricCatalog; goals: GoalBoard }) {
+export function AdminDashboard({ data, catalog, goals, connections }: { data: AdminDashboardData; catalog: MetricCatalog; goals: GoalBoard; connections: ConnectionBoard }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
   const [isRefreshing, startRefresh] = useTransition();
@@ -110,6 +113,8 @@ export function AdminDashboard({ data, catalog, goals }: { data: AdminDashboardD
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
       {activeSection === "operations" ? <Operations data={data} /> : null}
       </> : activeSection === "overview" ? <div className="admin-section-stack"><GrowthGoals board={goals} onNavigate={setActiveSection} /></div> : null}
+      {/* Connection settings come from the server environment, so they show even when analytics cannot load. */}
+      {activeSection === "connections" ? <Connections board={connections} /> : null}
     </section>
   </main>;
 }
