@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: "user_customer" }), currentUser: mocks.currentUser }));
 vi.mock("@/lib/clerk/config", () => ({ hasClerkCredentials: () => true }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("not_found"); }, redirect: () => { throw new Error("redirect"); } }));
-import { requireAdminClerkUser } from "./clerk";
+import { requireAdminClerkUser, skipsSignInLocally } from "./clerk";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("verified admin identity", () => {
@@ -19,5 +19,18 @@ describe("verified admin identity", () => {
     vi.stubEnv("AJANI_ADMIN_USER_ID_ALLOWLIST", "user_customer");
     mocks.currentUser.mockResolvedValue({ emailAddresses: [] });
     await expect(requireAdminClerkUser()).resolves.toBe("user_customer");
+  });
+  it("skips sign-in only under next dev with the local flag, never in a production build", async () => {
+    expect(skipsSignInLocally({ NODE_ENV: "development", AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT: "true" })).toBe(true);
+    expect(skipsSignInLocally({ NODE_ENV: "production", AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT: "true" })).toBe(false);
+    expect(skipsSignInLocally({ NODE_ENV: "test", AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT: "true" })).toBe(false);
+    expect(skipsSignInLocally({ NODE_ENV: "development", AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT: "1" })).toBe(false);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT", "true");
+    mocks.currentUser.mockResolvedValue({ emailAddresses: [] });
+    await expect(requireAdminClerkUser()).rejects.toThrow("not_found");
+    vi.stubEnv("NODE_ENV", "development");
+    await expect(requireAdminClerkUser()).resolves.toBe("local-development-admin");
   });
 });

@@ -10,8 +10,17 @@ export type AdminClerkResolution =
   | { status: "signed_out" }
   | { status: "forbidden" };
 
+/**
+ * `next dev` only: open the control desk with the access key alone, skipping the
+ * Clerk sign-in. Ignored in any production build or deployment, whatever the flag says.
+ */
+export function skipsSignInLocally(environment: Partial<Record<"NODE_ENV" | "AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT", string>> = process.env) {
+  return environment.NODE_ENV === "development" && environment.AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT === "true";
+}
+
 /** Non-throwing identity check for JSON route handlers. */
 export async function resolveAdminClerkUser(): Promise<AdminClerkResolution> {
+  if (skipsSignInLocally()) return { status: "allowed", userId: "local-development-admin" };
   if (!hasClerkCredentials()) return { status: "signed_out" };
 
   const { userId } = await auth();
