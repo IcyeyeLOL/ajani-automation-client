@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       requires_human_review: false,
     });
     if (workflowError) {
-      await admin.from("request_drafts").delete().eq("id", data.id);
+      await discardUnpublishedDraft(admin, data.id);
       throw workflowError;
     }
     let voiceMemoUpload: { path: string; token: string } | undefined;
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
         byte_length: input.voiceMemo.byteLength,
       });
       if (memoError) {
-        await admin.from("request_drafts").delete().eq("id", data.id);
+        await discardUnpublishedDraft(admin, data.id);
         throw memoError;
       }
 
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
         .from("voice-memos")
         .createSignedUploadUrl(storagePath);
       if (signedUploadError) {
-        await admin.from("request_drafts").delete().eq("id", data.id);
+        await discardUnpublishedDraft(admin, data.id);
         throw signedUploadError;
       }
       voiceMemoUpload = { path: storagePath, token: signedUpload.token };
@@ -289,6 +289,19 @@ export async function persistRequestDemandAnalysis(job: RequestDemandAnalysisJob
     p_confidence: demandResult.extraction.confidence,
   });
   if (stateError) throw stateError;
+}
+
+type DraftCleanupClient = Pick<ReturnType<typeof createSupabaseAdminClient>, "rpc" | "from">;
+
+/**
+ * Compensates a save that failed before its capability was returned. The RPC
+ * also removes the draft's cohort contribution so failed saves never count as
+ * saved briefs; before that migration is applied, fall back to a plain delete.
+ */
+export async function discardUnpublishedDraft(admin: DraftCleanupClient, draftId: string) {
+  const { error } = await admin.rpc("discard_unpublished_request_draft", { p_draft_id: draftId });
+  if (!error) return;
+  await admin.from("request_drafts").delete().eq("id", draftId);
 }
 
 type AllowanceClient = Pick<ReturnType<typeof createSupabaseAdminClient>, "rpc">;

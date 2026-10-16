@@ -20,7 +20,14 @@ vi.mock("@/lib/admin/session", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.rpc }) }));
 
-import { createExperimentAction, createOutreachBatchAction, logExperimentMetricsAction } from "@/app/admin/actions";
+import {
+  createExperimentAction,
+  createOutreachBatchAction,
+  deleteMetricValueAction,
+  logExperimentMetricsAction,
+  recordMetricValuesAction,
+  voidOutreachBatchAction,
+} from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
 
 describe("admin server actions", () => {
@@ -199,5 +206,88 @@ describe("admin server actions", () => {
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
     expect(result).toMatchObject({ status: "success", entityId: "5210b79a-90eb-4218-82c2-32d7eea6f431" });
+  });
+
+  it("records platform numbers as idempotent upserts for one day and account", async () => {
+    mocks.rpc.mockResolvedValue({ data: 2, error: null });
+    const form = new FormData();
+    form.set("date", "2026-10-15");
+    form.set("dimension", " @AjaniFlow ");
+    form.set("values", JSON.stringify([
+      { metricKey: "youtube.subscribers", value: 1250 },
+      { metricKey: "youtube.views", value: 8400 },
+    ]));
+
+    const result = await recordMetricValuesAction(initialAdminActionState, form);
+
+    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith("upsert_analytics_metric_values", {
+      p_values: [
+        { metricKey: "youtube.subscribers", value: 1250, date: "2026-10-15", dimension: "@ajaniflow" },
+        { metricKey: "youtube.views", value: 8400, date: "2026-10-15", dimension: "@ajaniflow" },
+      ],
+      p_origin: "manual",
+      p_actor: "user_admin",
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
+    expect(result).toMatchObject({ status: "success", message: expect.stringContaining("Saved 2 numbers") });
+  });
+
+  it("rejects negative or malformed platform numbers before the database", async () => {
+    const form = new FormData();
+    form.set("date", "2026-10-15");
+    form.set("values", JSON.stringify([{ metricKey: "youtube.views", value: -4 }]));
+    const result = await recordMetricValuesAction(initialAdminActionState, form);
+    expect(result.status).toBe("error");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+
+    form.set("values", "not json");
+    expect((await recordMetricValuesAction(initialAdminActionState, form)).status).toBe("error");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("surfaces database validation messages for platform numbers", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "Metric youtube.views must be a whole number" } });
+    const form = new FormData();
+    form.set("date", "2026-10-15");
+    form.set("values", JSON.stringify([{ metricKey: "youtube.views", value: 1.5 }]));
+    const result = await recordMetricValuesAction(initialAdminActionState, form);
+    expect(result).toEqual({ status: "error", message: "Metric youtube.views must be a whole number" });
+  });
+
+  it("removes one manual metric entry", async () => {
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+    const form = new FormData();
+    form.set("metricKey", "tiktok.followers");
+    form.set("date", "2026-10-14");
+    form.set("dimension", "");
+    const result = await deleteMetricValueAction(initialAdminActionState, form);
+    expect(mocks.rpc).toHaveBeenCalledWith("delete_analytics_metric_value", {
+      p_metric_key: "tiktok.followers",
+      p_metric_date: "2026-10-14",
+      p_dimension_key: "",
+      p_actor: "user_admin",
+    });
+    expect(result.status).toBe("success");
+  });
+
+  it("voids an outreach entry with an audited reason", async () => {
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+    const form = new FormData();
+    form.set("batchId", "5210b79a-90eb-4218-82c2-32d7eea6f429");
+    form.set("reason", "Logged twice");
+    const result = await voidOutreachBatchAction(initialAdminActionState, form);
+    expect(mocks.rpc).toHaveBeenCalledWith("void_outreach_batch", {
+      p_batch_id: "5210b79a-90eb-4218-82c2-32d7eea6f429",
+      p_reason: "Logged twice",
+      p_actor: "user_admin",
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
+    expect(result.status).toBe("success");
+
+    form.set("reason", "x");
+    mocks.rpc.mockClear();
+    expect((await voidOutreachBatchAction(initialAdminActionState, form)).status).toBe("error");
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

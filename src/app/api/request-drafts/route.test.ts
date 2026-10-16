@@ -11,6 +11,7 @@ import {
   POST,
   clarificationRound,
   consumePublicRequestAllowance,
+  discardUnpublishedDraft,
   readLimitedJson,
   scheduleRequestDemandAnalysis,
 } from "@/app/api/request-drafts/route";
@@ -117,6 +118,29 @@ describe("request draft legal acceptance", () => {
 
     expect(response.status).toBe(409);
     expect(routeMocks.createAdmin).not.toHaveBeenCalled();
+  });
+});
+
+describe("failed save compensation", () => {
+  it("discards the unpublished draft and its cohort count through the RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const from = vi.fn();
+
+    await discardUnpublishedDraft({ rpc, from } as never, "draft-1");
+
+    expect(rpc).toHaveBeenCalledWith("discard_unpublished_request_draft", { p_draft_id: "draft-1" });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("falls back to deleting the draft before the accuracy migration exists", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST202" } });
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn(() => ({ delete: () => ({ eq }) }));
+
+    await discardUnpublishedDraft({ rpc, from } as never, "draft-1");
+
+    expect(from).toHaveBeenCalledWith("request_drafts");
+    expect(eq).toHaveBeenCalledWith("id", "draft-1");
   });
 });
 

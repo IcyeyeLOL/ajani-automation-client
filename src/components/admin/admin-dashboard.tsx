@@ -8,8 +8,11 @@ import {
   createOutreachBatchAction,
   logExperimentMetricsAction,
   logoutAdminAction,
+  voidOutreachBatchAction,
 } from "@/app/admin/actions";
+import { MetricTrends } from "@/components/admin/metric-trends";
 import { initialAdminActionState } from "@/app/admin/action-state";
+import type { MetricCatalog } from "@/lib/admin/metric-types";
 import type {
   AdminDashboardData,
   AdminMetric,
@@ -19,7 +22,7 @@ import type {
   VariantPerformance,
 } from "@/lib/admin/types";
 
-type Section = "overview" | "outreach" | "experiments" | "website" | "operations";
+type Section = "overview" | "trends" | "outreach" | "experiments" | "website" | "operations";
 type MetricKey = "connectionRequests" | "connectionsAccepted" | "initialDms" | "f1Sent" | "f2Sent" | "customSent" | "replies" | "attributedReplies" | "positiveReplies" | "callsBooked";
 type MetricRow = Record<MetricKey, number> & { variantId: string | null; variantLabel: string };
 type ExperimentMetricRow = {
@@ -35,10 +38,11 @@ type ExperimentMetricRow = {
 
 const sections: Array<{ id: Section; label: string; number: string }> = [
   { id: "overview", label: "Overview", number: "01" },
-  { id: "outreach", label: "Outreach", number: "02" },
-  { id: "experiments", label: "Experiments", number: "03" },
-  { id: "website", label: "Website funnel", number: "04" },
-  { id: "operations", label: "Operations", number: "05" },
+  { id: "trends", label: "Trends", number: "02" },
+  { id: "outreach", label: "Outreach", number: "03" },
+  { id: "experiments", label: "Experiments", number: "04" },
+  { id: "website", label: "Website funnel", number: "05" },
+  { id: "operations", label: "Operations", number: "06" },
 ];
 
 const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
@@ -54,7 +58,7 @@ const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
   { key: "callsBooked", short: "CALLS", label: "Calls booked" },
 ];
 
-export function AdminDashboard({ data }: { data: AdminDashboardData }) {
+export function AdminDashboard({ data, catalog }: { data: AdminDashboardData; catalog: MetricCatalog }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
   const [isRefreshing, startRefresh] = useTransition();
@@ -99,6 +103,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
       {data.dataNotice ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
       {data.dataStatus !== "unavailable" ? <>
       {activeSection === "overview" ? <Overview data={data} onNavigate={setActiveSection} /> : null}
+      {activeSection === "trends" ? <MetricTrends catalog={catalog} refreshToken={data.generatedAt} /> : null}
       {activeSection === "outreach" ? <Outreach data={data} key={data.pagination.experimentPage} /> : null}
       {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} /> : null}
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
@@ -176,11 +181,27 @@ function FunnelCard({ data }: { data: AdminDashboardData }) {
   </article>;
 }
 
-function RecentActivity({ data }: { data: AdminDashboardData }) {
+function RecentActivity({ data, allowVoid = false }: { data: AdminDashboardData; allowVoid?: boolean }) {
   return <article className="admin-panel admin-recent-panel"><header className="admin-panel-head"><div><p>RECENT OUTREACH</p><h2>Latest team batches.</h2></div><span>{String(data.recentBatches.length).padStart(2, "0")} LOGS</span></header>
-    {data.recentBatches.length ? <div className="admin-recent-list">{data.recentBatches.map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{batch.context}</span></p><strong>{batch.sent}<small> TOUCHES</small></strong><em>{batch.replies} replies / {batch.calls} calls</em></div>)}</div> : <EmptyState title="No outreach batches yet" copy="The first submitted batch will appear here with its owner, context, volume, and results." />}
+    {data.recentBatches.length ? <div className={`admin-recent-list${allowVoid ? " with-actions" : ""}`}>{data.recentBatches.map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{batch.context}</span></p><strong>{batch.sent}<small> TOUCHES</small></strong><em>{batch.replies} replies / {batch.calls} calls</em>{allowVoid ? <VoidBatchControl batchId={batch.id} /> : null}</div>)}</div> : <EmptyState title="No outreach batches yet" copy="The first submitted batch will appear here with its owner, context, volume, and results." />}
     <AdminPagination data={data} kind="batches" />
   </article>;
+}
+
+/** Wrong entries are voided, not deleted: they stay audited but stop counting. */
+function VoidBatchControl({ batchId }: { batchId: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(voidOutreachBatchAction, initialAdminActionState);
+  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
+  if (!open) return <button className="admin-void-toggle" onClick={() => setOpen(true)} type="button">VOID</button>;
+  return <form action={action} className="admin-void-form">
+    <input name="batchId" type="hidden" value={batchId} />
+    <label><span className="sr-only">Reason for voiding</span><input autoFocus maxLength={300} minLength={3} name="reason" placeholder="Why? e.g. logged twice" required /></label>
+    <button disabled={pending} type="submit">{pending ? "VOIDING" : "CONFIRM VOID"}</button>
+    <button onClick={() => setOpen(false)} type="button">CANCEL</button>
+    {state.status === "error" ? <p className="admin-form-message error" role="status">{state.message}</p> : null}
+  </form>;
 }
 
 function Outreach({ data }: { data: AdminDashboardData }) {
@@ -196,7 +217,7 @@ function Outreach({ data }: { data: AdminDashboardData }) {
     <section className="admin-outreach-strip">{cards.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{formatNumber(value)}</strong><small>{detail}</small></article>)}</section>
     <BatchLogger experiments={data.experiments} enabled={data.outreachSchemaReady} />
     <AdminPagination data={data} kind="experiments" />
-    <RecentActivity data={data} />
+    <RecentActivity allowVoid data={data} />
   </div>;
 }
 
@@ -302,7 +323,7 @@ function ExperimentMetricEntry({ experiment, enabled }: { experiment: OutreachEx
   };
 
   return <article className="admin-panel admin-experiment-metrics">
-    <header className="admin-panel-head"><div><p>ENTER PERFORMANCE</p><h2>Update every variant in one pass.</h2></div><span>{experiment ? titleCase(experiment.primaryMetric) : "SELECT A TEST"}</span></header>
+    <header className="admin-panel-head"><div><p>ENTER PERFORMANCE</p><h2>Log new results for every variant.</h2></div><span>{experiment ? titleCase(experiment.primaryMetric) : "SELECT A TEST"}</span></header>
     {experiment ? <form action={action}>
       <input name="experimentId" type="hidden" value={experiment.id} />
       <input name="messageStep" type="hidden" value={experiment.messageStep} />
@@ -323,7 +344,7 @@ function ExperimentMetricEntry({ experiment, enabled }: { experiment: OutreachEx
           <ExperimentCountInput label="Connections accepted" onChange={(value) => updateMetric(index, "connectionsAccepted", value)} value={row.connectionsAccepted} />
         </div>
       </section>)}</div>
-      <div className="admin-form-footer"><div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>All counts are stored. The primary metric only decides how variants are ranked.</p>}</div><button disabled={!enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
+      <div className="admin-form-footer"><div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>Each save adds to the totals, so log only activity since your last entry. Void a mistaken entry from Recent outreach.</p>}</div><button disabled={!enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
     </form> : <EmptyState title="Select or create an experiment" copy="Once a comparison exists, its variants and performance fields will appear here automatically." />}
   </article>;
 }

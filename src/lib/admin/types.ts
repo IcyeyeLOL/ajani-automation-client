@@ -73,6 +73,8 @@ export type OutreachTotals = {
   f2Sent: number;
   customSent: number;
   replies: number;
+  /** Exposure replies are measured against: initial DMs, or sends at a tested step. */
+  replyBase: number;
   positiveReplies: number;
   callsBooked: number;
   acceptanceRate: number | null;

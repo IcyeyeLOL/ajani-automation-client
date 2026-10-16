@@ -74,7 +74,7 @@ export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Re
       metric("Saved drafts", formatNumber(n("saved_current")), `${n("organizations_current")} new business workspaces; UTC calendar days`, growth(n("saved_current"), n("saved_previous")), "neutral"),
       metric("Submitted builds", formatNumber(n("builds_current")), n("saved_current") ? `${percentage(n("cohort_submitted_current"), n("saved_current"))?.toFixed(1)}% of 30-day draft cohorts converted` : "No drafts in this 30-day cohort", growth(n("builds_current"), n("builds_previous")), "brand"),
       metric("Outreach touches", formatNumber(n("outreach_current")), "Manual and Dripify activity", growth(n("outreach_current"), n("outreach_previous")), "brand"),
-      metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
+      metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), "reply_base_current" in totals ? n("reply_base_current") : n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
       metric("Quoted pipeline", formatMoney(n("quoted_pipeline")), "Pending and approved quotes", null, "neutral"),
       metric("Monthly retainers", formatMoney(n("mrr")), "Active monthly subscriptions", null, "success"),
     ],
@@ -127,18 +127,21 @@ function aggregateOutreach(rows: Row[]): OutreachTotals {
     f2Sent: sum.f2Sent + numberValue(row.f2_sent),
     customSent: sum.customSent + numberValue(row.custom_sent),
     replies: sum.replies + numberValue(row.replies),
+    // Replies are measured against the exposure that produced them. Payloads
+    // from before the reply_base migration keep the original initial-DM basis.
+    replyBase: sum.replyBase + ("reply_base" in row ? numberValue(row.reply_base) : numberValue(row.initial_dms)),
     positiveReplies: sum.positiveReplies + numberValue(row.positive_replies),
     callsBooked: sum.callsBooked + numberValue(row.calls_booked),
     acceptanceRate: null,
     replyRate: null,
   }), emptyOutreach());
   totals.acceptanceRate = percentage(totals.connectionsAccepted, totals.connectionRequests);
-  totals.replyRate = percentage(totals.replies, totals.initialDms);
+  totals.replyRate = percentage(totals.replies, totals.replyBase);
   return totals;
 }
 
 function emptyOutreach(): OutreachTotals {
-  return { connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, customSent: 0, replies: 0, positiveReplies: 0, callsBooked: 0, acceptanceRate: null, replyRate: null };
+  return { connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, customSent: 0, replies: 0, replyBase: 0, positiveReplies: 0, callsBooked: 0, acceptanceRate: null, replyRate: null };
 }
 
 export function aggregateExperimentPerformance(experiments: OutreachExperiment[], batches: Row[], metrics: Row[]) {

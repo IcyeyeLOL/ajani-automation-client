@@ -21,6 +21,7 @@ import {
   requireAdminSession,
   setAdminSessionCookie,
 } from "@/lib/admin/session";
+import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
@@ -173,6 +174,85 @@ export async function logExperimentMetricsAction(_state: AdminActionState, formD
     return { status: "success", message: "Experiment counts saved. Every rate and comparison has been recalculated.", entityId: String(data) };
   } catch {
     return { status: "error", message: "These experiment counts could not be saved. Apply the latest database migration and retry." };
+  }
+}
+
+export async function voidOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const actor = await requireAdminSession();
+  const parsed = outreachVoidSchema.safeParse({ batchId: formData.get("batchId"), reason: formData.get("reason") });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Add a reason for voiding this entry." };
+
+  try {
+    const { data, error } = await createSupabaseAdminClient().rpc("void_outreach_batch", {
+      p_batch_id: parsed.data.batchId,
+      p_reason: parsed.data.reason,
+      p_actor: actor,
+    });
+    if (error) throw error;
+    revalidatePath("/admin");
+    return data
+      ? { status: "success", message: "Entry voided. It no longer counts toward any total.", entityId: parsed.data.batchId }
+      : { status: "error", message: "That entry was already voided." };
+  } catch {
+    return { status: "error", message: "This entry could not be voided. Apply the latest database migration and retry." };
+  }
+}
+
+/** Upserts: re-entering a day replaces its value instead of adding to it. */
+export async function recordMetricValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const actor = await requireAdminSession();
+  let values: unknown;
+  try {
+    values = JSON.parse(String(formData.get("values") || "[]"));
+  } catch {
+    return { status: "error", message: "The numbers could not be read." };
+  }
+  const parsed = metricEntrySchema.safeParse({ date: formData.get("date"), dimension: formData.get("dimension") ?? "", values });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the numbers and retry." };
+
+  try {
+    const { data, error } = await createSupabaseAdminClient().rpc("upsert_analytics_metric_values", {
+      p_values: parsed.data.values.map((item) => ({ ...item, date: parsed.data.date, dimension: parsed.data.dimension })),
+      p_origin: "manual",
+      p_actor: actor,
+    });
+    if (error) throw error;
+    revalidatePath("/admin");
+    const written = Number(data) || 0;
+    return {
+      status: "success",
+      message: written ? `Saved ${written} ${written === 1 ? "number" : "numbers"} for ${parsed.data.date}. Trends are updated.` : "Those numbers were already recorded. Nothing changed.",
+      entityId: `${parsed.data.date}:${Date.now()}`,
+    };
+  } catch (error) {
+    const message = error && typeof error === "object" && "code" in error && error.code === "P0001" && "message" in error ? String(error.message) : null;
+    return { status: "error", message: message ?? "These numbers could not be saved. Apply the latest database migration and retry." };
+  }
+}
+
+export async function deleteMetricValueAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const actor = await requireAdminSession();
+  const parsed = metricDeletionSchema.safeParse({
+    metricKey: formData.get("metricKey"),
+    date: formData.get("date"),
+    dimension: formData.get("dimension") ?? "",
+  });
+  if (!parsed.success) return { status: "error", message: "That entry could not be identified." };
+
+  try {
+    const { data, error } = await createSupabaseAdminClient().rpc("delete_analytics_metric_value", {
+      p_metric_key: parsed.data.metricKey,
+      p_metric_date: parsed.data.date,
+      p_dimension_key: parsed.data.dimension,
+      p_actor: actor,
+    });
+    if (error) throw error;
+    revalidatePath("/admin");
+    return data
+      ? { status: "success", message: "Entry removed.", entityId: `${parsed.data.metricKey}:${parsed.data.date}:${Date.now()}` }
+      : { status: "error", message: "That entry was already removed." };
+  } catch {
+    return { status: "error", message: "This entry could not be removed. Retry in a moment." };
   }
 }
 

@@ -3,7 +3,7 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdminClerkUser } from "@/lib/admin/clerk";
+import { requireAdminClerkUser, resolveAdminClerkUser } from "@/lib/admin/clerk";
 import { ADMIN_SESSION_SECONDS, createAdminSessionToken, verifyAdminSessionToken } from "@/lib/admin/session-token";
 
 export { createAdminSessionToken, keysMatch, verifyAdminSessionToken } from "@/lib/admin/session-token";
@@ -32,6 +32,17 @@ export async function requireAdminSession() {
   const userId = await requireAdminClerkUser();
   if (!(await hasAdminSession())) redirect("/admin/login");
   return userId;
+}
+
+/**
+ * Route-handler variant of requireAdminSession: returns a status instead of
+ * redirecting, so JSON callers get 401/404 rather than an HTML login page.
+ */
+export async function resolveAdminSession(): Promise<{ status: "allowed"; userId: string } | { status: "unauthorized" | "forbidden" }> {
+  const resolution = await resolveAdminClerkUser();
+  if (resolution.status === "forbidden") return { status: "forbidden" };
+  if (resolution.status === "signed_out" || !(await hasAdminSession())) return { status: "unauthorized" };
+  return resolution;
 }
 
 export async function setAdminSessionCookie(secret: string) {

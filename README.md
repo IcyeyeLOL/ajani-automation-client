@@ -24,7 +24,7 @@ This creates a clean boundary between automated interpretation and human authori
 - **Guided request flow** — `/record` and `/request` support voice and written intake, transcription, clarification, workflow editing, review, and submission.
 - **Secure account handoff** — Clerk authentication connects an anonymous draft to the correct user and organization without discarding work completed before sign-in.
 - **Client portal** — authenticated organizations can inspect submitted builds, delivery status, system activity, and billing-oriented information.
-- **Internal operations** — the admin experience supports demand triage, request comparison, outreach tracking, experiment metrics, and operational follow-up.
+- **Internal operations** — the admin experience supports demand triage, request comparison, outreach tracking, experiment metrics, operational follow-up, and day-to-year Trends across the funnel, outreach, content platforms and revenue.
 
 ## System architecture
 
@@ -189,6 +189,7 @@ The proxy deliberately fails closed in a production runtime when valid live Cler
 ## Additional documentation
 
 - [Architecture notes](./docs/architecture.md)
+- [Analytics metric store and Trends](./docs/analytics-metric-store.md)
 - [Engineering audit](./docs/engineering-audit-2026-09-05.md)
 - [Engineering remediation and release gates](./docs/engineering-remediation-2026-09-05.md)
 

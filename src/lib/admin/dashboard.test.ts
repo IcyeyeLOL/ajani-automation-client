@@ -22,6 +22,17 @@ describe("exact admin analytics read model", () => {
     expect(result.dataNotice).toContain("already-deleted history cannot be reconstructed");
     expect(result.dataStatus).toBe("partial");
   });
+  it("measures reply rate against reply_base so follow-up experiments cannot exceed 100%", () => {
+    const result = shapeAdminAnalytics({
+      coverage_started_at: "2026-01-01T00:00:00.000Z",
+      metrics: { replies_current: 30, initial_dms_current: 0, reply_base_current: 160 },
+      funnel: {}, trend: [], experiments: [], recent_batches: [],
+      outreach: { initial_dms: 0, f1_sent: 160, replies: 30, reply_base: 160 },
+    }, "2026-09-05T12:00:00.000Z", { experimentPage: 0, batchPage: 0 });
+    expect(result.outreach.replyBase).toBe(160);
+    expect(result.outreach.replyRate).toBe(18.75);
+    expect(result.metrics.find((metric) => metric.label === "Replies")?.detail).toBe("18.8% reply rate");
+  });
   it("does not present missing infrastructure as zero or healthy statistics", async () => {
     mocks.authorize.mockResolvedValue("user_admin");
     mocks.rpc.mockResolvedValue({ error: { code: "PGRST202" }, data: null });
