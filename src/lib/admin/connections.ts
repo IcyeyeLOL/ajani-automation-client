@@ -13,7 +13,8 @@ type Row = Record<string, unknown>;
 export const LOW_LEADS = 40;
 /** Campaigns not synced within this many days of the latest sync are treated as gone. */
 const FRESH_DAYS = 7;
-const DRIPIFY_KEYS = ["dripify.leads_remaining", "dripify.leads_in_progress", "dripify.unread_messages", "dripify.active_campaigns"];
+// leads_contacted is written by every sync, old or new, so it dates the latest one.
+const DRIPIFY_KEYS = ["dripify.leads_contacted", "dripify.leads_remaining", "dripify.leads_in_progress", "dripify.unread_messages", "dripify.active_campaigns"];
 
 export async function loadConnectionBoard(): Promise<ConnectionBoard> {
   await requireAdminSession();
@@ -58,7 +59,7 @@ export async function loadConnectionBoard(): Promise<ConnectionBoard> {
 }
 
 async function loadDripifySummary(configured: boolean): Promise<DripifySummary> {
-  const empty: DripifySummary = { configured, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] };
+  const unavailable: DripifySummary = { status: "unavailable", configured, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] };
   try {
     const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const { data, error } = await withinDeadline(createSupabaseAdminClient().rpc("load_analytics_latest_values", {
@@ -67,8 +68,8 @@ async function loadDripifySummary(configured: boolean): Promise<DripifySummary> 
     if (error) throw error;
     return summarizeDripify(configured, Array.isArray(data) ? data as Row[] : []);
   } catch {
-    // Before the migration the card still shows whether Dripify is connected.
-    return empty;
+    // Before the migration the card still shows whether a key is set, and says the sync status is unavailable.
+    return unavailable;
   }
 }
 
@@ -82,7 +83,7 @@ export function summarizeDripify(configured: boolean, rows: Row[]): DripifySumma
       : [];
   });
   const lastSyncedOn = valid.reduce<string | null>((latest, row) => (!latest || row.date > latest ? row.date : latest), null);
-  if (!lastSyncedOn) return { configured, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] };
+  if (!lastSyncedOn) return { status: "available", configured, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] };
   const cutoff = new Date(Date.parse(`${lastSyncedOn}T00:00:00Z`) - FRESH_DAYS * 86_400_000).toISOString().slice(0, 10);
   const fresh = valid.filter((row) => row.date >= cutoff);
   const total = (key: string) => {
@@ -93,6 +94,6 @@ export function summarizeDripify(configured: boolean, rows: Row[]): DripifySumma
   const lowCampaigns = fresh
     .filter((row) => row.key === "dripify.leads_remaining" && row.value < LOW_LEADS && sending.has(row.dimension))
     .sort((a, b) => a.value - b.value)
-    .map((row) => ({ label: row.label || `Campaign ${row.dimension.replace(/^dripify:/, "")}`, remaining: row.value }));
-  return { configured, lastSyncedOn, unreadMessages: total("dripify.unread_messages"), activeCampaigns: total("dripify.active_campaigns"), lowCampaigns };
+    .map((row) => ({ dimension: row.dimension, label: row.label || `Campaign ${row.dimension.replace(/^dripify:/, "")}`, remaining: row.value }));
+  return { status: "available", configured, lastSyncedOn, unreadMessages: total("dripify.unread_messages"), activeCampaigns: total("dripify.active_campaigns"), lowCampaigns };
 }

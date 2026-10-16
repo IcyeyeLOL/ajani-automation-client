@@ -79,8 +79,8 @@ function DripifyCard({ summary }: { summary: DripifySummary }) {
   const low = summary.lowCampaigns;
   return <article className="admin-panel admin-connection-card">
     <header className="admin-panel-head">
-      <div><p>DRIPIFY</p><h2>{summary.configured ? "Connected through the official API." : "Not connected yet."}</h2></div>
-      <span><i className={summary.configured ? "online" : "offline"} />{summary.lastSyncedOn ? `SYNCED ${shortDay(summary.lastSyncedOn)}` : "NOT SYNCED YET"}</span>
+      <div><p>DRIPIFY</p><h2>{summary.configured ? "API key added." : "Not connected yet."}</h2></div>
+      <span><i className={summary.configured ? "online" : "offline"} />{summary.status === "unavailable" ? "SYNC STATUS UNAVAILABLE" : summary.lastSyncedOn ? `SYNCED ${shortDay(summary.lastSyncedOn)}` : "NOT SYNCED YET"}</span>
     </header>
     <div className="admin-connection-body">
       <p>Matches Dripify&apos;s own dashboard: leads contacted, connections accepted and replies, both new each day and over each campaign&apos;s life; leads still to contact; leads in progress, finished or failed; and unread inbox messages. Counts only: no lead names, profiles or messages are stored.</p>
@@ -88,15 +88,16 @@ function DripifyCard({ summary }: { summary: DripifySummary }) {
         <dt>Latest sync</dt>
         <dd><span>Unread Dripify messages</span><b className={summary.unreadMessages ? "missing" : "present"}>{summary.unreadMessages ?? "—"}</b></dd>
         <dd><span>Active campaigns</span><b>{summary.activeCampaigns ?? "—"}</b></dd>
-        {low.length ? low.map((campaign) => <dd key={campaign.label}><span>{campaign.label}</span><b className="missing">{campaign.remaining} LEADS LEFT</b></dd>)
+        {low.length ? low.map((campaign) => <dd key={campaign.dimension}><span>{campaign.label}</span><b className="missing">{campaign.remaining} LEADS LEFT</b></dd>)
           : <dd><span>Campaigns running low on new leads</span><b className="present">NONE</b></dd>}
       </dl> : <SettingList label="Settings" settings={[{ name: "DRIPIFY_API_KEY", present: summary.configured }]} />}
+      {summary.status === "unavailable" ? <p>The latest Dripify numbers could not be read here. Apply the latest database migration; the charts under Trends → Dripify are unaffected.</p> : null}
       {low.length ? <p>Add leads to {low.length === 1 ? "this campaign" : "these campaigns"} in Dripify soon, or {low.length === 1 ? "it stops" : "they stop"} reaching new people.</p> : null}
     </div>
     <form action={action}>
       <div className="admin-form-footer">
         <div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p>
-          : <p>{summary.configured ? "Syncs every night. Charts live under Trends → Dripify." : "Add DRIPIFY_API_KEY in Vercel (Dripify → Settings → API & Integrations), redeploy, then sync."}</p>}</div>
+          : <p>{summary.configured ? "Syncs every night. Charts live under Trends → Dripify. A rejected key is explained when you sync." : "Add DRIPIFY_API_KEY in Vercel (Dripify → Settings → API & Integrations), redeploy, then sync."}</p>}</div>
         <button disabled={pending || !summary.configured} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
       </div>
     </form>

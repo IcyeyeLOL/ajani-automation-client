@@ -134,6 +134,27 @@ describe("Instagram sync with fake data", () => {
     expect(fake.calls.filter((url) => url.pathname.endsWith("/insights"))).toHaveLength(11);
   });
 
+  it("stays within its request budget when insights are refused outright, so posts still sync in full", async () => {
+    const run = harness();
+    let page = 0;
+    const fake = fakeInstagram({
+      "/refresh_access_token": () => json({ access_token: "IGAArenewed-token-0000000002", expires_in: 5_184_000 }),
+      "/v25.0/me": me(),
+      [`/v25.0/${ACCOUNT}/insights`]: () => metaError(100),
+      [`/v25.0/${ACCOUNT}/media`]: () => {
+        page += 1;
+        return page === 1
+          ? media(["2026-10-16T09:00:00+0000"], `https://graph.instagram.com/v25.0/${ACCOUNT}/media?after=p2`)()
+          : media(["2026-10-01T09:00:00+0000"])();
+      },
+    });
+    const result = await syncInstagramMetrics({ ...base, credentials: memoryStore().store, fetchImpl: fake.fetchImpl, write: run.write, record: run.record });
+    expect(result.status).toBe("synced");
+    // Day 1: one combined + eight single tries. Days 2 and 3: one combined try each.
+    expect(fake.calls.filter((url) => url.pathname.endsWith("/insights"))).toHaveLength(11);
+    expect(run.written.filter((item) => item.metricKey === "instagram.posts_published")).toHaveLength(14);
+  });
+
   it("keeps an empty insight answer unknown instead of zero", async () => {
     const run = harness();
     const fake = fakeInstagram({

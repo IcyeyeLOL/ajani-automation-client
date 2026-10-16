@@ -11,7 +11,7 @@ const row = (metric_key: string, dimension_key: string, metric_date: string, val
 
 describe("Dripify summary", () => {
   it("is empty before the first sync", () => {
-    expect(summarizeDripify(true, [])).toEqual({ configured: true, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] });
+    expect(summarizeDripify(true, [])).toEqual({ status: "available", configured: true, lastSyncedOn: null, unreadMessages: null, activeCampaigns: null, lowCampaigns: [] });
   });
 
   it("adds up teams, flags only campaigns still sending, and ignores stale campaigns", () => {
@@ -39,11 +39,16 @@ describe("Dripify summary", () => {
       row("dripify.unread_messages", "dripify-team:7", "2026-10-16", "lots"),
     ]);
     expect(summary).toEqual({
+      status: "available",
       configured: true,
       lastSyncedOn: "2026-10-16",
       unreadMessages: 5,
       activeCampaigns: 2,
-      lowCampaigns: [{ label: "Campaign 11", remaining: 0 }, { label: "Insurance owners TX", remaining: 12 }],
+      lowCampaigns: [{ dimension: "dripify:11", label: "Campaign 11", remaining: 0 }, { dimension: "dripify:10", label: "Insurance owners TX", remaining: 12 }],
     });
+  });
+
+  it("dates the latest sync from the original counts, so syncs before the newer metrics still count", () => {
+    expect(summarizeDripify(true, [row("dripify.leads_contacted", "dripify:10", "2026-10-16", 694, "TX")])).toMatchObject({ lastSyncedOn: "2026-10-16", unreadMessages: null, lowCampaigns: [] });
   });
 });

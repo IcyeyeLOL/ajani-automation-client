@@ -218,6 +218,8 @@ async function readInsights(client: ProviderClient, token: string, accountId: st
   try {
   // Metrics the account cannot report, learned on the first day so later days stay one request each.
   let supported: string[] = insightMetrics.map(([name]) => name);
+  // After a day refused every metric, later days get one combined try each instead of eight single ones.
+  let refusedOutright = false;
   for (let offset = INSIGHT_DAYS; offset >= 1; offset -= 1) {
     const day = shiftDay(today, -offset);
     const window = {
@@ -234,6 +236,7 @@ async function readInsights(client: ProviderClient, token: string, accountId: st
       // One unsupported metric fails the whole request; read them one by one instead.
       if (!(error instanceof ProviderHttpError && error.status === 400 && !rejectionReason(error))) throw error;
       found = new Map();
+      if (refusedOutright) continue;
       const accepted: string[] = [];
       for (const name of supported) {
         try {
@@ -246,6 +249,7 @@ async function readInsights(client: ProviderClient, token: string, accountId: st
       // Only a day that answered for some metrics says which ones the account lacks;
       // a day refused outright (not yet available) leaves the list as it was.
       if (accepted.length) supported = accepted;
+      else refusedOutright = true;
     }
     if (found.size) days += 1;
     for (const [name, metricKey] of insightMetrics) {

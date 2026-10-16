@@ -36,6 +36,9 @@ const breakdownFields = [
   ["dripify.leads_finished", "finished"],
   ["dripify.leads_failed", "failed"],
 ] as const;
+/** "Right now" counts that stop at zero when their campaign or team disappears (lifetime totals carry forward on purpose). */
+const campaignNowKeys = ["dripify.leads_in_progress", "dripify.leads_remaining"] as const;
+const teamNowKeys = ["dripify.unread_messages", "dripify.active_campaigns"] as const;
 /** Running totals whose change since the previous sync is the new activity Dripify's dashboard shows. */
 const flowFields = [
   ["dripify.leads_contacted", "dripify.new_contacted"],
@@ -103,7 +106,7 @@ export async function syncDripifyMetrics({ deadlineAt, now = Date.now() }: { dea
   }
 
   // One request for the inbox and active-campaign counts Dripify keeps per team.
-  const teams = listing.stop ? { teams: [], stop: null } : await readTeams(context);
+  const teams = listing.stop ? { teams: [], complete: false, stop: null } : await readTeams(context);
   const slots = Math.max(0, REQUEST_BUDGET - context.requests);
   const selected = campaignsForRun(listing.campaigns, slots, Math.floor(Date.parse(date) / 86_400_000));
   const snapshots: Snapshot[] = [];
@@ -132,7 +135,14 @@ export async function syncDripifyMetrics({ deadlineAt, now = Date.now() }: { dea
   result.campaigns = listing.campaigns.length;
   result.synced = snapshots.length;
   result.deferred = Math.max(0, listing.campaigns.length - snapshots.length - result.failed - run.gone);
-  if (snapshots.length || teams.teams.length) await saveSnapshots(snapshots, teams.teams, date, deadlineAt, result);
+  // Only a complete listing can show that a campaign or team is gone.
+  const listed = {
+    campaigns: listing.complete ? new Set(listing.campaigns.map((campaign) => dripifyDimension(campaign.id))) : null,
+    teams: teams.complete ? new Set(teams.teams.map((team) => dripifyTeamDimension(team.id))) : null,
+  };
+  if (snapshots.length || teams.teams.length || listed.campaigns || listed.teams) {
+    await saveSnapshots(snapshots, teams.teams, listed, date, deadlineAt, result);
+  }
 
   if (run.rejected) return { ...result, status: "rejected", reason: run.rejected };
   // The request budget is a deliberate cap: deferred campaigns rotate in on
@@ -145,7 +155,9 @@ export async function syncDripifyMetrics({ deadlineAt, now = Date.now() }: { dea
 
 type Snapshot = { campaign: DripifyCampaign; counts: Array<readonly [string, number]> };
 
-async function saveSnapshots(snapshots: Snapshot[], teams: DripifyTeam[], date: string, deadlineAt: number, result: DripifySyncResult) {
+type Listed = { campaigns: Set<string> | null; teams: Set<string> | null };
+
+async function saveSnapshots(snapshots: Snapshot[], teams: DripifyTeam[], listed: Listed, date: string, deadlineAt: number, result: DripifySyncResult) {
   const admin = createSupabaseAdminClient();
   const previous = await previousTotals(admin, date, deadlineAt);
   // The history reader and the newer metrics ship in one migration. Without it,
@@ -160,6 +172,10 @@ async function saveSnapshots(snapshots: Snapshot[], teams: DripifyTeam[], date: 
       return [...stored, ...newActivity(counts, dimension, previous)].map(([metricKey, value]) => ({ metricKey, date, dimension, value }));
     }),
     ...(extended ? teams : []).flatMap((team) => team.counts.map(([metricKey, value]) => ({ metricKey, date, dimension: dripifyTeamDimension(team.id), value }))),
+    ...(previous ? [
+      ...retiredCounts(previous, listed.campaigns, campaignNowKeys, "dripify:"),
+      ...retiredCounts(previous, listed.teams, teamNowKeys, "dripify-team:"),
+    ] : []).map(([metricKey, dimension]) => ({ metricKey, date, dimension, value: 0 })),
   ];
   if (!values.length) return;
   for (const chunk of chunked(values, UPSERT_CHUNK)) {
@@ -228,15 +244,16 @@ export function dripifyTeamDimension(teamId: number) {
 }
 
 /**
- * Each campaign's running totals before today, keyed "metric|account". null
- * when they cannot be read (for example before the migration), in which case
- * new activity is left unknown for this run rather than guessed and only the
- * original counts are written.
+ * Each campaign's and team's latest values before today, keyed "metric|account":
+ * the running totals new activity starts from, and the "right now" counts that
+ * show which accounts were still live. null when they cannot be read (for
+ * example before the migration), in which case new activity is left unknown
+ * for this run rather than guessed and only the original counts are written.
  */
 async function previousTotals(admin: ReturnType<typeof createSupabaseAdminClient>, date: string, deadlineAt: number) {
   try {
     const { data, error } = await withinDeadline(admin.rpc("load_analytics_latest_values", {
-      p_keys: flowFields.map(([total]) => total), p_before: date,
+      p_keys: [...flowFields.map(([total]) => total), ...campaignNowKeys, ...teamNowKeys], p_before: date,
     }), deadlineAt);
     if (error) throw error;
     const totals = new Map<string, number>();
@@ -257,15 +274,36 @@ async function previousTotals(admin: ReturnType<typeof createSupabaseAdminClient
 /**
  * New activity since the previous sync: today's running total minus the last
  * one recorded before today. Re-syncing the same day recomputes it from the
- * same starting point. A first sync or a total that went down (leads removed)
- * stays unknown, never zero or negative.
+ * same starting point. All three are written together or not at all, like the
+ * lifetime counts, so the period rates never pair new acceptances with missing
+ * contacts. A first sync or any total that went down (leads removed) stays
+ * unknown, never zero or negative. Limitation: the store keeps a value once
+ * written, so if a later same-day sync finds a total went down, the earlier
+ * figure for that day stays until the next day's sync.
  */
 export function newActivity(counts: Array<readonly [string, number]>, dimension: string, previous: Map<string, number> | null) {
   if (!previous) return [];
-  return flowFields.flatMap(([totalKey, flowKey]) => {
-    const current = counts.find(([key]) => key === totalKey)?.[1];
-    const before = previous.get(`${totalKey}|${dimension}`);
-    return current !== undefined && before !== undefined && current >= before ? [[flowKey, current - before] as const] : [];
+  const pairs = flowFields.map(([totalKey, flowKey]) => ({
+    flowKey,
+    current: counts.find(([key]) => key === totalKey)?.[1],
+    before: previous.get(`${totalKey}|${dimension}`),
+  }));
+  if (pairs.some(({ current, before }) => current === undefined || before === undefined || current < before)) return [];
+  return pairs.map(({ flowKey, current, before }) => [flowKey, (current as number) - (before as number)] as const);
+}
+
+/**
+ * Zeros for "right now" counts of accounts a complete listing no longer has
+ * (deleted campaigns, teams you left), so Trends stops carrying their last
+ * value forward. Written once: only when the last value is above zero.
+ */
+export function retiredCounts(previous: Map<string, number>, listed: Set<string> | null, keys: readonly string[], prefix: string) {
+  if (!listed) return [];
+  return [...previous].flatMap(([entry, value]) => {
+    const separator = entry.indexOf("|");
+    const metricKey = entry.slice(0, separator);
+    const dimension = entry.slice(separator + 1);
+    return keys.includes(metricKey) && dimension.startsWith(prefix) && !listed.has(dimension) && value > 0 ? [[metricKey, dimension] as const] : [];
   });
 }
 
@@ -328,6 +366,7 @@ export function retryAfterMs(value: string | null, now = Date.now()) {
 
 async function listLaunchedCampaigns(context: Context) {
   const campaigns: DripifyCampaign[] = [];
+  const seenIds = new Set<number>();
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
   for (let page = 0; page < MAX_CAMPAIGN_PAGES; page += 1) {
@@ -342,7 +381,10 @@ async function listLaunchedCampaigns(context: Context) {
     if (!Array.isArray(body.items)) throw new Error("dripify_campaign_page_invalid");
     for (const item of body.items) {
       const campaign = parseCampaign(item);
-      if (campaign && campaign.status !== "DRAFT") campaigns.push(campaign);
+      if (campaign && campaign.status !== "DRAFT" && !seenIds.has(campaign.id)) {
+        seenIds.add(campaign.id);
+        campaigns.push(campaign);
+      }
     }
     const next = typeof body.nextCursor === "string" && body.nextCursor ? body.nextCursor : null;
     if (!next) return { campaigns, complete: true, stop: null };
@@ -354,13 +396,15 @@ async function listLaunchedCampaigns(context: Context) {
 }
 
 /** First page of teams (a solo account has one). Team counts are supplementary: any failure skips them. */
-async function readTeams(context: Context): Promise<{ teams: DripifyTeam[]; stop: StopReason | null }> {
+async function readTeams(context: Context): Promise<{ teams: DripifyTeam[]; complete: boolean; stop: StopReason | null }> {
   try {
     const payload = await request(context, `/teams?limit=${PAGE_LIMIT}`);
-    const items = payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).items) ? (payload as { items: unknown[] }).items : [];
-    return { teams: items.flatMap((item) => { const team = parseTeam(item); return team ? [team] : []; }), stop: null };
+    const body = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    if (!Array.isArray(body.items)) return { teams: [], complete: false, stop: null };
+    const teams = body.items.flatMap((item) => { const team = parseTeam(item); return team ? [team] : []; });
+    return { teams, complete: !(typeof body.nextCursor === "string" && body.nextCursor), stop: null };
   } catch (error) {
-    return { teams: [], stop: error instanceof SyncStop && error.reason !== "budget" ? error.reason : null };
+    return { teams: [], complete: false, stop: error instanceof SyncStop && error.reason !== "budget" ? error.reason : null };
   }
 }
 

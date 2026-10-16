@@ -132,14 +132,72 @@ describe("Dripify sync", () => {
     await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW });
 
     const [load] = writes("load_analytics_latest_values");
-    expect(load).toEqual({ p_keys: ["dripify.leads_contacted", "dripify.leads_accepted", "dripify.leads_replied"], p_before: "2026-10-16" });
+    expect(load).toEqual({
+      p_keys: ["dripify.leads_contacted", "dripify.leads_accepted", "dripify.leads_replied", "dripify.leads_in_progress", "dripify.leads_remaining", "dripify.unread_messages", "dripify.active_campaigns"],
+      p_before: "2026-10-16",
+    });
     const [values] = writes("upsert_analytics_metric_values");
-    const fresh = (values.p_values as Array<{ metricKey: string }>).filter((value) => value.metricKey.startsWith("dripify.new_"));
-    expect(fresh).toEqual([
+    // Replies went down for campaign 10, so none of its three new counts is known: never a rate from mismatched parts.
+    expect(JSON.stringify(values.p_values)).not.toContain("dripify.new_");
+  });
+
+  it("writes all three new counts together when every total has a baseline and none went down", async () => {
+    dripify({
+      "/campaigns": () => json({ items: [{ id: 10, name: "A", status: "ACTIVE" }, { id: 10, name: "A again", status: "ACTIVE" }], nextCursor: null }),
+      "/campaigns/10/statistics": () => json(stats(10)),
+      "/teams": () => json({ items: [team], nextCursor: null }),
+    });
+    mocks.rpc.mockImplementation(async (name: string, args: { p_values?: unknown[] }) => name === "load_analytics_latest_values"
+      ? { data: [
+        { metric_key: "dripify.leads_contacted", dimension_key: "dripify:10", metric_date: "2026-10-15", value: "140.0000", label: "A" },
+        { metric_key: "dripify.leads_accepted", dimension_key: "dripify:10", metric_date: "2026-10-15", value: 40, label: "A" },
+        { metric_key: "dripify.leads_replied", dimension_key: "dripify:10", metric_date: "2026-10-15", value: 12, label: "A" },
+        // Campaign 99 was live yesterday and is gone from today's complete listing; so is team 8.
+        { metric_key: "dripify.leads_in_progress", dimension_key: "dripify:99", metric_date: "2026-10-15", value: 80, label: "Old" },
+        { metric_key: "dripify.leads_remaining", dimension_key: "dripify:99", metric_date: "2026-10-15", value: 0, label: "Old" },
+        { metric_key: "dripify.unread_messages", dimension_key: "dripify-team:8", metric_date: "2026-10-15", value: 4, label: "Left" },
+        { metric_key: "dripify.unread_messages", dimension_key: "dripify-team:5", metric_date: "2026-10-15", value: 1, label: "Sales" },
+      ], error: null }
+      : { data: (args.p_values ?? []).length, error: null });
+
+    const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW });
+
+    // The repeated campaign is read once.
+    expect(result).toMatchObject({ campaigns: 1, synced: 1 });
+    expect(mocks.fetch.mock.calls.filter(([url]) => String(url).endsWith("/campaigns/10/statistics"))).toHaveLength(1);
+    const [load] = writes("load_analytics_latest_values");
+    expect(load.p_keys).toEqual(expect.arrayContaining(["dripify.leads_contacted", "dripify.leads_in_progress", "dripify.unread_messages"]));
+    const [values] = writes("upsert_analytics_metric_values");
+    expect(values.p_values).toEqual(expect.arrayContaining([
       { metricKey: "dripify.new_contacted", date: "2026-10-16", dimension: "dripify:10", value: 10 },
       { metricKey: "dripify.new_accepted", date: "2026-10-16", dimension: "dripify:10", value: 5 },
-    ]);
+      { metricKey: "dripify.new_replies", date: "2026-10-16", dimension: "dripify:10", value: 0 },
+      // Gone accounts stop counting as "right now"; zeros are written once, only over a value above zero.
+      { metricKey: "dripify.leads_in_progress", date: "2026-10-16", dimension: "dripify:99", value: 0 },
+      { metricKey: "dripify.unread_messages", date: "2026-10-16", dimension: "dripify-team:8", value: 0 },
+    ]));
+    expect(values.p_values).not.toContainEqual(expect.objectContaining({ metricKey: "dripify.leads_remaining", dimension: "dripify:99" }));
+    // Lifetime totals of the gone campaign are never zeroed.
+    expect(JSON.stringify(values.p_values)).not.toMatch(/dripify\.leads_(total|contacted|accepted|replied)","date":"2026-10-16","dimension":"dripify:99"/);
   });
+
+  it("never retires accounts after an incomplete listing", async () => {
+    dripify({
+      "/campaigns": (url) => url.searchParams.get("cursor") ? json({ status: 500 }, 500) : json({ items: [{ id: 10, name: "A", status: "ACTIVE" }], nextCursor: "page 2" }),
+      "/campaigns/10/statistics": () => json(stats(10)),
+      "/teams": () => json({ items: [team], nextCursor: "more teams" }),
+    });
+    mocks.rpc.mockImplementation(async (name: string, args: { p_values?: unknown[] }) => name === "load_analytics_latest_values"
+      ? { data: [
+        { metric_key: "dripify.leads_in_progress", dimension_key: "dripify:99", metric_date: "2026-10-15", value: 80, label: null },
+        { metric_key: "dripify.unread_messages", dimension_key: "dripify-team:8", metric_date: "2026-10-15", value: 4, label: null },
+      ], error: null }
+      : { data: (args.p_values ?? []).length, error: null });
+    await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW }).catch(() => undefined);
+    const text = JSON.stringify(writes("upsert_analytics_metric_values"));
+    expect(text).not.toContain("dripify:99");
+    expect(text).not.toContain("dripify-team:8");
+  }, 10_000);
 
   it("writes only the original counts when the newer migration is missing, so the sync keeps working", async () => {
     dripify({
@@ -231,7 +289,8 @@ describe("Dripify sync", () => {
     });
     const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW });
     expect(result).toMatchObject({ status: "partial", reason: "rate_limited", synced: 0, deferred: 1, valuesWritten: 0 });
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    // Nothing read, so nothing written (history may still be checked for retired campaigns).
+    expect(writes("upsert_analytics_metric_values")).toEqual([]);
   });
 
   it("never starts a request it cannot finish before the write reserve", async () => {
@@ -327,10 +386,17 @@ describe("Dripify sync helpers", () => {
     expect(parseTeam(null)).toBeNull();
   });
 
-  it("computes new activity only from a known, lower earlier total", () => {
+  it("computes new activity only when all three earlier totals are known and none went down", () => {
     const counts = [["dripify.leads_contacted", 150], ["dripify.leads_accepted", 45], ["dripify.leads_replied", 12]] as const;
+    const baseline = (contacted: number, accepted: number, replied: number) => new Map([
+      ["dripify.leads_contacted|dripify:7", contacted], ["dripify.leads_accepted|dripify:7", accepted], ["dripify.leads_replied|dripify:7", replied],
+    ]);
     expect(newActivity([...counts], "dripify:7", null)).toEqual([]);
-    expect(newActivity([...counts], "dripify:7", new Map([["dripify.leads_contacted|dripify:7", 150], ["dripify.leads_replied|dripify:8", 1]]))).toEqual([["dripify.new_contacted", 0]]);
+    expect(newActivity([...counts], "dripify:7", new Map([["dripify.leads_contacted|dripify:7", 150]]))).toEqual([]);
+    expect(newActivity([...counts], "dripify:7", baseline(140, 40, 12))).toEqual([["dripify.new_contacted", 10], ["dripify.new_accepted", 5], ["dripify.new_replies", 0]]);
+    // Contacted went down (leads removed) while acceptances rose: nothing, so the period rate cannot read 5 of 0.
+    expect(newActivity([...counts], "dripify:7", baseline(160, 40, 12))).toEqual([]);
+    expect(newActivity([...counts], "dripify:8", baseline(140, 40, 12))).toEqual([]);
   });
 
   it("reads Retry-After as seconds or a date", () => {

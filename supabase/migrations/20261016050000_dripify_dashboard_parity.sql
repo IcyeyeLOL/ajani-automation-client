@@ -33,6 +33,10 @@ values
   ('dripify.period_acceptance_rate', 'dripify', 'outreach', 'Dripify acceptance (this period)', 'New connections accepted ÷ new leads contacted in the chosen range. Acceptances arrive days after invites, so a short range can read high or low; compare with the lifetime rate.', 'ratio', 'ratio', 'dripify.new_accepted', 'dripify.new_contacted', 'derived', true, true, 40),
   ('dripify.period_reply_rate', 'dripify', 'outreach', 'Dripify reply rate (this period)', 'New replies ÷ new leads contacted in the chosen range. Replies arrive after the outreach, so a short range can read high or low; compare with the lifetime rate.', 'ratio', 'ratio', 'dripify.new_replies', 'dripify.new_contacted', 'derived', true, true, 40);
 
+-- The latest-value lookup reads newest first per metric and account; without
+-- this order it sorts every stored day of the requested metrics on each call.
+create index analytics_metric_daily_latest_idx on public.analytics_metric_daily (metric_key, dimension_key, metric_date desc);
+
 create function public.load_analytics_latest_values(p_keys text[], p_before date)
 returns table (metric_key text, dimension_key text, metric_date date, value numeric, label text)
 language plpgsql stable security definer set search_path = '' as $$
