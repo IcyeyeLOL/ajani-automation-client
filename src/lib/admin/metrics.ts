@@ -98,6 +98,7 @@ export function shapeMetricSeries(raw: unknown): MetricSeriesResult {
       currentDenominator: numberOrNull(row.current_denominator),
       previousNumerator: numberOrNull(row.previous_numerator),
       previousDenominator: numberOrNull(row.previous_denominator),
+      coverageFrom: nullableString(row.coverage_from),
     })),
   };
 }

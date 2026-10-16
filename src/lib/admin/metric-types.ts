@@ -58,6 +58,8 @@ export type MetricSeries = {
   currentDenominator: number | null;
   previousNumerator: number | null;
   previousDenominator: number | null;
+  /** Tracking start for metrics with limited history; earlier periods are unknown. */
+  coverageFrom: string | null;
 };
 
 export type MetricSeriesResult = {

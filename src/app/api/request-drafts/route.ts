@@ -301,6 +301,10 @@ type DraftCleanupClient = Pick<ReturnType<typeof createSupabaseAdminClient>, "rp
 export async function discardUnpublishedDraft(admin: DraftCleanupClient, draftId: string) {
   const { error } = await admin.rpc("discard_unpublished_request_draft", { p_draft_id: draftId });
   if (!error) return;
+  if (error.code !== "PGRST202" && error.code !== "42883") {
+    // The unpublished draft is still removed; only its cohort count remains.
+    console.warn("[request-drafts] discard_rpc_failed", JSON.stringify({ code: error.code ?? "unknown" }));
+  }
   await admin.from("request_drafts").delete().eq("id", draftId);
 }
 

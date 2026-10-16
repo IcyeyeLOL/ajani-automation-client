@@ -49,7 +49,6 @@ create table public.analytics_metric_daily (
   primary key (metric_key, metric_date, dimension_key)
 );
 create index analytics_metric_daily_recorded_idx on public.analytics_metric_daily (recorded_at desc) where origin = 'manual';
-create index outreach_batches_live_activity_idx on public.outreach_batches (activity_date) where voided_at is null;
 create index organizations_created_idx on public.organizations (created_at);
 
 alter table public.analytics_metric_definitions enable row level security;
@@ -126,6 +125,14 @@ values
   ('outreach.reply_to_call_rate', 'outreach', 'outreach', 'Replies → calls', 'Calls booked ÷ replies.', 'ratio', 'ratio', 'outreach.calls_booked', 'outreach.replies', 'derived', true, true, 33),
   ('sales.close_rate', 'sales', 'revenue', 'Close rate', 'Deals won ÷ sales calls held.', 'ratio', 'ratio', 'sales.deals_won', 'sales.calls_held', 'derived', true, true, 93);
 
+-- Breakdown keys for free-text outreach channel/method values (always valid
+-- dimension keys: lowercase, filter-safe, at most 80 characters together).
+create function public.analytics_dimension_slug(p_value text, p_max integer)
+returns text language sql immutable set search_path = '' as $$
+  select coalesce(nullif(left(regexp_replace(regexp_replace(lower(btrim(coalesce(p_value, ''))),
+    '[^a-z0-9_.:@-]+', '-', 'g'), '^[^a-z0-9@]+', ''), p_max), ''), 'other')
+$$;
+
 -- Internal: one row per metric, UTC day and account. Derived blocks run only
 -- when one of their keys is requested (constant one-time filters).
 create function public.analytics_daily_values(p_keys text[], p_from date, p_to date, p_dimension text)
@@ -141,6 +148,9 @@ language sql stable security definer set search_path = '' as $$
   cross join lateral (values ('ajani.drafts_saved', c.saved::numeric), ('ajani.cohort_submitted', c.submitted::numeric)) x(metric_key, value)
   where p_dimension is null and p_keys && array['ajani.drafts_saved', 'ajani.cohort_submitted']
     and c.cohort_day between p_from and p_to and x.metric_key = any(p_keys)
+    -- Earlier cohort rows were backfilled only from drafts that survived
+    -- retention, so they undercount saves; they are unknown, not data.
+    and c.cohort_day >= coalesce((select (cv.started_at at time zone 'UTC')::date from public.admin_analytics_coverage cv), date '2000-01-01')
   union all
   select 'ajani.builds_submitted', (b.created_at at time zone 'UTC')::date, '', count(*)::numeric
   from public.build_requests b
@@ -156,7 +166,8 @@ language sql stable security definer set search_path = '' as $$
   union all
   select x.metric_key, o.activity_date, o.dimension_key, x.value
   from (
-    select b.activity_date, lower(b.channel) || '/' || lower(b.method) as dimension_key,
+    select b.activity_date,
+      public.analytics_dimension_slug(b.channel, 39) || '/' || public.analytics_dimension_slug(b.method, 40) as dimension_key,
       sum(m.connection_requests)::numeric as connection_requests,
       sum(m.connections_accepted)::numeric as connections_accepted,
       sum(m.initial_dms)::numeric as initial_dms,
@@ -171,7 +182,8 @@ language sql stable security definer set search_path = '' as $$
       and p_keys && array['outreach.touches', 'outreach.connection_requests', 'outreach.connections_accepted',
         'outreach.initial_dms', 'outreach.follow_ups', 'outreach.replies', 'outreach.reply_base',
         'outreach.positive_replies', 'outreach.calls_booked']
-      and (p_dimension is null or lower(b.channel) || '/' || lower(b.method) = p_dimension)
+      and (p_dimension is null
+        or public.analytics_dimension_slug(b.channel, 39) || '/' || public.analytics_dimension_slug(b.method, 40) = p_dimension)
     group by 1, 2
   ) o
   cross join lateral (values
@@ -251,8 +263,15 @@ begin
   ) parts;
 
   return (
-    with defs as materialized (
-      select d.metric_key, d.aggregation, d.entry_mode from public.analytics_metric_definitions d
+    with coverage as materialized (
+      select coalesce((select (c.started_at at time zone 'UTC')::date from public.admin_analytics_coverage c), date '2000-01-01') as cohort_from
+    ), defs as materialized (
+      select d.metric_key, d.aggregation, d.entry_mode,
+        case when d.metric_key in ('ajani.drafts_saved', 'ajani.cohort_submitted') then (select cohort_from from coverage) end as available_from,
+        -- Only derived flows are true zeros on quiet days, and only when the
+        -- account/channel filter applies to them (outreach has channels).
+        d.entry_mode = 'derived' and d.aggregation = 'sum' and (dimension is null or d.source = 'outreach') as zero_filled
+      from public.analytics_metric_definitions d
       where d.metric_key = any(components)
     ), facts as materialized (
       select v.metric_key, v.metric_date, v.dimension_key, v.value, d.aggregation, d.entry_mode,
@@ -263,7 +282,7 @@ begin
     ), buckets as (
       select (row_number() over (order by b) - 1)::integer as idx, b::date as bucket_start,
         least((b + step)::date - 1, range_to) as bucket_end,
-        (b + step)::date - 1 > range_to as partial
+        (b + step)::date - 1 > range_to or (b + step)::date - 1 >= today as partial
       from generate_series(range_from::timestamp, range_to::timestamp, step) b
     ), stock_seed as materialized (
       -- Stocks carry forward: each account's last value before the window
@@ -277,16 +296,33 @@ begin
       select f.metric_key, f.dimension_key, f.metric_date, f.value from facts f where f.aggregation = 'last'
       union all
       select s.metric_key, s.dimension_key, s.metric_date, s.value from stock_seed s
+    ), stock_points as (
+      -- Each account's last value inside each bucket; everything before the
+      -- range collapses into one carry-in point (idx -1).
+      select distinct on (o.metric_key, o.dimension_key, coalesce(b.idx, -1))
+        o.metric_key, o.dimension_key, coalesce(b.idx, -1) as idx, o.value
+      from stock_observations o
+      left join buckets b on o.metric_date >= range_from
+        and b.bucket_start = date_trunc(p_grain, o.metric_date::timestamp)::date
+      order by o.metric_key, o.dimension_key, coalesce(b.idx, -1), o.metric_date desc
+    ), stock_grid as (
+      select accounts.metric_key, accounts.dimension_key, slots.idx, p.value,
+        count(p.value) over (partition by accounts.metric_key, accounts.dimension_key order by slots.idx) as run
+      from (select distinct o.metric_key, o.dimension_key from stock_observations o) accounts
+      cross join (select -1 as idx union all select b.idx from buckets b) slots
+      left join stock_points p on p.metric_key = accounts.metric_key and p.dimension_key = accounts.dimension_key and p.idx = slots.idx
     ), stock_buckets as (
-      -- Value at the end of each bucket: latest value per account, summed.
-      select b.bucket_start, latest.metric_key, sum(latest.value) as value
-      from buckets b
-      cross join lateral (
-        select distinct on (o.metric_key, o.dimension_key) o.metric_key, o.value
-        from stock_observations o where o.metric_date <= b.bucket_end
-        order by o.metric_key, o.dimension_key, o.metric_date desc
-      ) latest
-      group by b.bucket_start, latest.metric_key
+      -- Value at the end of each bucket: latest value per account (carried
+      -- forward in one linear pass), summed across accounts.
+      select b.bucket_start, filled.metric_key, sum(filled.value) as value
+      from (
+        select g.metric_key, g.idx,
+          first_value(g.value) over (partition by g.metric_key, g.dimension_key, g.run order by g.idx) as value
+        from stock_grid g
+      ) filled
+      join buckets b on b.idx = filled.idx
+      where filled.value is not null
+      group by b.bucket_start, filled.metric_key
     ), component_buckets as (
       select f.metric_key, f.bucket_start, sum(f.value) as value
       from facts f where f.is_current and f.aggregation = 'sum'
@@ -322,19 +358,21 @@ begin
       from stock_totals s
       group by s.metric_key
     ), filled as (
-      -- Derived flows are true zeros on quiet days; recorded metrics without a
-      -- value stay null (unknown), never zero.
+      -- Recorded metrics without a value, periods before tracking began and
+      -- filters that do not apply stay null (unknown), never zero.
       select d.metric_key, b.idx, b.bucket_start,
         case when cb.value is not null then cb.value
-          when d.entry_mode = 'derived' and d.aggregation = 'sum' then 0 end as value
+          when d.zero_filled and (d.available_from is null or b.bucket_end >= d.available_from) then 0 end as value
       from defs d cross join buckets b
       left join component_buckets cb on cb.metric_key = d.metric_key and cb.bucket_start = b.bucket_start
     ), totals as (
       select d.metric_key,
         case when ct.current_value is not null then ct.current_value
-          when d.entry_mode = 'derived' and d.aggregation = 'sum' then 0 end as current_value,
-        case when ct.previous_value is not null then ct.previous_value
-          when d.entry_mode = 'derived' and d.aggregation = 'sum' then 0 end as previous_value
+          when d.zero_filled and (d.available_from is null or range_to >= d.available_from) then 0 end as current_value,
+        -- A comparison window reaching before tracking began would be biased.
+        case when d.available_from is not null and previous_from < d.available_from then null
+          when ct.previous_value is not null then ct.previous_value
+          when d.zero_filled then 0 end as previous_value
       from defs d left join component_totals ct on ct.metric_key = d.metric_key
     ), series as (
       select r.metric_key,
@@ -357,6 +395,7 @@ begin
     ), summaries as (
       select r.metric_key,
         jsonb_build_object(
+          'coverage_from', (select max(c.available_from) from defs c where c.metric_key in (r.metric_key, r.numerator_key, r.denominator_key)),
           'current', case when r.aggregation = 'ratio' then
               case when dt.current_value > 0 and nt.current_value is not null then round(nt.current_value / dt.current_value, 6) end
             else ot.current_value end,
@@ -407,7 +446,7 @@ with stored as (
 ), outreach_dimensions as (
   select coalesce(jsonb_agg(d.dimension_key order by d.dimension_key), '[]'::jsonb) as dimensions
   from (
-    select distinct lower(b.channel) || '/' || lower(b.method) as dimension_key
+    select distinct public.analytics_dimension_slug(b.channel, 39) || '/' || public.analytics_dimension_slug(b.method, 40) as dimension_key
     from public.outreach_batches b where b.voided_at is null
     order by 1 limit 50
   ) d
@@ -481,7 +520,9 @@ begin
     raise exception 'Provide between one and five hundred metric values';
   end if;
 
-  for item in select value from jsonb_array_elements(p_values)
+  -- Sorted so concurrent writers (connector + manual) lock rows in one order.
+  for item in select v.value from jsonb_array_elements(p_values) v
+    order by v.value ->> 'metricKey', v.value ->> 'date', lower(btrim(coalesce(v.value ->> 'dimension', '')))
   loop
     if jsonb_typeof(item) is distinct from 'object' or jsonb_typeof(item -> 'value') is distinct from 'number' then
       raise exception 'Each metric value must be a number';
@@ -558,6 +599,7 @@ end;
 $$;
 
 revoke all on function public.analytics_daily_values(text[], date, date, text) from public, anon, authenticated, service_role;
+revoke all on function public.analytics_dimension_slug(text, integer) from public, anon, authenticated;
 revoke all on function public.load_analytics_series(text[], text, date, date, text) from public, anon, authenticated;
 revoke all on function public.load_analytics_catalog() from public, anon, authenticated;
 revoke all on function public.upsert_analytics_metric_values(jsonb, text, text) from public, anon, authenticated;

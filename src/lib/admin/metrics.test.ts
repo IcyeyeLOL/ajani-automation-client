@@ -51,13 +51,14 @@ describe("metric series", () => {
       ],
       series: [{
         metric_key: "sales.close_rate", values: [null, 0.25], numerators: [null, 2], denominators: [null, 8],
-        current: 0.25, previous: null, current_numerator: 2, current_denominator: 8,
+        current: 0.25, previous: null, current_numerator: 2, current_denominator: 8, coverage_from: "2026-09-05",
       }],
     });
     expect(series.series[0].values).toEqual([null, 0.25, null]);
     expect(series.series[0].denominators).toEqual([null, 8, null]);
     expect(series.buckets[2].partial).toBe(true);
     expect(series.series[0].previous).toBeNull();
+    expect(series.series[0].coverageFrom).toBe("2026-09-05");
   });
 
   it("rejects incomplete payloads", () => {

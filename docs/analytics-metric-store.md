@@ -23,6 +23,13 @@ All functions are `security definer`, revoked from `anon`/`authenticated`, and e
 - **`last` (stocks):** followers, MRR, active clients. Bucket value = each account's latest value on or before the bucket end, **carried forward** until a newer value is recorded, summed across accounts.
 - **`ratio` (rates):** always `sum/last(numerator) ÷ sum/last(denominator)` over the bucket. Never an average of daily rates. The numerator and denominator are returned with every point so the UI can show "12 of 340".
 
+**Unknown is never zero.** Three cases are returned as null and shown as "—":
+- cohort metrics (briefs saved, brief → build) before cohort tracking began, because earlier rows only include drafts that survived retention, plus any comparison window reaching back before that date;
+- recorded metrics with nothing entered;
+- built-in metrics under an account or channel filter that does not apply to them.
+
+Outreach breakdown keys are `channel/method` slugs, for example `linkedin/dripify`.
+
 Weeks start on Monday (ISO). Days are UTC calendar days, matching the existing cohort and outreach analytics. The current period is flagged `partial` and compared like-for-like: the comparison window is the same number of days immediately before the range.
 
 ### Idempotent writes

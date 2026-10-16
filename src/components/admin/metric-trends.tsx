@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { deleteMetricValueAction, recordMetricValuesAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
@@ -43,7 +43,11 @@ const entryGroups: Array<{ id: string; label: string; sources: string[] }> = [
 ];
 
 type Preferences = { grain: MetricGrain; count: number; metrics: string[] };
-type SeriesState = { results: Record<string, MetricSeriesResult>; errors: Record<string, string>; latest: MetricSeriesResult | null };
+type SeriesState = {
+  results: Record<string, MetricSeriesResult>;
+  errors: Record<string, string>;
+  latest: { search: string; data: MetricSeriesResult } | null;
+};
 
 export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog; refreshToken: string }) {
   const chartable = useMemo(() => catalog.metrics.filter((metric) => metric.chartable), [catalog.metrics]);
@@ -69,8 +73,11 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
   const cacheKey = search ? `${refreshToken}|${search}` : "";
   const result = cacheKey ? seriesState.results[cacheKey] ?? null : null;
   const error = cacheKey ? seriesState.errors[cacheKey] ?? null : null;
-  const shown = result ?? seriesState.latest;
   const loading = Boolean(cacheKey) && !result && !error;
+  // Refetches keep the previous frame, but a failed query never shows charts
+  // from a different range or filter as if they were current.
+  const shown = result ?? (loading ? seriesState.latest?.data ?? null : null);
+  const dimmed = loading && seriesState.latest?.search !== search;
 
   useEffect(() => {
     try {
@@ -91,7 +98,7 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
         setSeriesState((current) => ({
           results: pruned({ ...current.results, [cacheKey]: data }),
           errors: current.errors,
-          latest: data,
+          latest: { search, data },
         }));
       })
       .catch((reason: unknown) => {
@@ -135,7 +142,7 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
 
     {error ? <p className="admin-form-message error" role="alert">{error}</p> : null}
 
-    {!selected.length ? <article className="admin-panel"><EmptyTrends /></article> : showTable && shown ? <TrendTable definitions={definitions} result={shown} selected={selected} /> : <section aria-busy={loading} className={`admin-trend-grid${loading && shown ? " is-loading" : ""}`}>
+    {!selected.length ? <article className="admin-panel"><EmptyTrends /></article> : showTable && shown ? <TrendTable definitions={definitions} result={shown} selected={selected} /> : <section aria-busy={loading} className={`admin-trend-grid${dimmed && shown ? " is-loading" : ""}`}>
       {selected.map((key) => {
         const definition = definitions.get(key);
         if (!definition) return null;
@@ -150,17 +157,18 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
 }
 
 function TrendCard({ definition, result, series, activeDimension }: { definition: MetricDefinition; result: MetricSeriesResult | null; series: MetricSeries | null; activeDimension: string }) {
-  const change = series ? metricChange(definition, series.current, series.previous) : null;
+  const notTracked = Boolean(activeDimension) && !definition.dimensions.includes(activeDimension);
+  const change = series && !notTracked ? metricChange(definition, series.current, series.previous) : null;
   const hasData = Boolean(series?.values.some((value) => value !== null));
-  const notTracked = activeDimension && !definition.dimensions.includes(activeDimension);
+  const trackedSince = series?.coverageFrom && result && series.coverageFrom > result.from ? series.coverageFrom : null;
   return <article className="admin-panel admin-trend-card">
     <header>
       <div><p>{definition.source.toUpperCase()}</p><h3>{definition.label}</h3></div>
       {change ? <small className={`admin-trend-change ${change.tone}`}>{change.label}</small> : null}
     </header>
     <div className="admin-trend-headline">
-      <strong>{formatMetricValue(series?.current ?? null, definition.unit, "compact")}</strong>
-      <span>{summaryLabel(definition, series)}</span>
+      <strong>{formatMetricValue(notTracked ? null : series?.current ?? null, definition.unit, "compact")}</strong>
+      <span>{summaryLabel(definition, series)}{trackedSince ? ` · tracked since ${bucketLabel(trackedSince, "day")}` : ""}</span>
     </div>
     {notTracked ? <p className="admin-trend-empty">Not tracked for {activeDimension}.</p>
       : !result || !series ? <div className="admin-trend-skeleton" aria-hidden="true" />
@@ -280,13 +288,28 @@ function MetricEntryPanel({ catalog, definitions }: { catalog: MetricCatalog; de
     <div className="admin-segmented admin-trend-entry-tabs" role="group" aria-label="Platform">
       {entryGroups.map((item) => <button aria-pressed={item.id === group.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label.toUpperCase()}</button>)}
     </div>
-    <EntryForm action={action} fields={fields} key={`${group.id}:${state.entityId ?? "new"}`} message={state.message} pending={pending} status={state.status} today={catalog.today} />
+    <EntryForm action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} status={state.status} today={catalog.today} />
     <RecentEntries definitions={definitions} entries={catalog.recentEntries} />
   </article>;
 }
 
-function EntryForm({ action, fields, today, pending, status, message }: { action: (formData: FormData) => void; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string }) {
+function EntryForm({ action, entityId, fields, today, pending, status, message }: { action: (formData: FormData) => void; entityId?: string; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const [clearedFor, setClearedFor] = useState(entityId);
+  // After a successful save, clear the numbers but keep the date and account
+  // so the next platform for the same day is quick to log.
+  if (status === "success" && entityId !== clearedFor) {
+    setClearedFor(entityId);
+    setValues({});
+  }
+  // Submitting through onSubmit (not the form action prop) stops React from
+  // resetting the date and account after a rejected save; a corrected retry
+  // must never land on today's date or the main account by accident.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => action(formData));
+  };
   const payload = fields.flatMap((field) => {
     const raw = values[field.key]?.trim().replaceAll(",", "");
     if (!raw) return [];
@@ -294,7 +317,7 @@ function EntryForm({ action, fields, today, pending, status, message }: { action
     if (!Number.isFinite(number)) return [];
     return [{ metricKey: field.key, value: field.unit === "currency_cents" ? Math.round(number * 100) : number }];
   });
-  return <form action={action}>
+  return <form onSubmit={submit}>
     <input name="values" type="hidden" value={JSON.stringify(payload)} />
     <div className="admin-trend-entry-context">
       <label className="admin-field"><span>Date</span><input defaultValue={today} max={today} name="date" required type="date" /></label>

@@ -13,6 +13,8 @@ begin
   ---------------------------------------------------------------------------
   -- Reply rates use the exposure each reply is measured against.
   ---------------------------------------------------------------------------
+  -- Fixtures below span earlier weeks; cohort coverage is tested separately.
+  update public.admin_analytics_coverage set started_at = now() - interval '400 days';
   baseline := public.load_admin_analytics();
   baseline_batches := (baseline->>'batch_count')::bigint;
 
@@ -180,8 +182,11 @@ begin
     or (series #>> '{buckets,0,partial}')::boolean or (series #>> '{buckets,1,end}')::date <> today then
     raise exception 'weekly buckets must align to Monday and clip the current week: %', series->'buckets';
   end if;
-  if (series #>> '{buckets,1,partial}')::boolean <> (week_start + 6 > today) then
-    raise exception 'the current week must be marked partial until it ends';
+  if not (series #>> '{buckets,1,partial}')::boolean then
+    raise exception 'the period containing today is still in progress';
+  end if;
+  if not (public.load_analytics_series(array['youtube.views'], 'day', today, today) #>> '{buckets,0,partial}')::boolean then
+    raise exception 'today is partial on the day grain';
   end if;
   select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'youtube.views';
   if item->'values' <> '[160, 30]'::jsonb or (item->>'current')::numeric <> 190 or item->'previous' <> 'null'::jsonb then
@@ -211,6 +216,23 @@ begin
   select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'youtube.subscribers';
   if item->'values' <> '[200, 200]'::jsonb then raise exception 'account filter must isolate one account: %', item; end if;
 
+  series := public.load_analytics_series(array['ajani.drafts_saved', 'outreach.touches'], 'week', week_start - 7, today, '@second');
+  if exists (select 1 from jsonb_array_elements(series->'series') s, jsonb_array_elements(s->'values') v
+      where s->>'metric_key' = 'ajani.drafts_saved' and v <> 'null'::jsonb)
+    or series #> '{series,0,current}' <> 'null'::jsonb then
+    raise exception 'a filter that does not apply must read as unknown, never zero: %', series->'series';
+  end if;
+
+  -- Free-text legacy channels still produce valid, filterable breakdown keys.
+  perform public.create_outreach_batch(today, 'Audit team', 'LinkedIn Ads!', 'Manual', 'Synthetic owners', '', null, '',
+    '[{"variantId":null,"variantLabel":"No variant","connectionRequests":0,"connectionsAccepted":0,"initialDms":4,"f1Sent":0,"f2Sent":0,"customSent":0,"replies":1,"attributedReplies":1,"positiveReplies":0,"callsBooked":0}]'::jsonb,
+    'audit_metrics');
+  select value into item from jsonb_array_elements(public.load_analytics_catalog()->'metrics') where value->>'metric_key' = 'outreach.touches';
+  if not (item->'dimensions' ? 'linkedin-ads-/manual') then raise exception 'outreach breakdown keys must be slugged: %', item->'dimensions'; end if;
+  if (public.load_analytics_series(array['outreach.touches'], 'day', today, today, 'linkedin-ads-/manual') #>> '{series,0,current}')::numeric <> 4 then
+    raise exception 'slugged breakdown keys must filter';
+  end if;
+
   series := public.load_analytics_series(array['outreach.touches'], 'day', today, today, 'linkedin/dripify');
   if (series #>> '{series,0,values,0}')::numeric <> 0 then
     raise exception 'voided outreach must not reach derived metrics';
@@ -224,6 +246,21 @@ begin
   if ((series #>> '{series,0,current}')::numeric) <> 190 and date_trunc('month', (week_start - 7)::timestamp) = date_trunc('month', today::timestamp) then
     raise exception 'month totals must match the underlying days';
   end if;
+
+  -- Cohort rows before tracking began are unknown, and comparisons that reach
+  -- back before coverage are suppressed rather than biased.
+  update public.admin_analytics_coverage set started_at = now();
+  series := public.load_analytics_series(array['ajani.drafts_saved', 'ajani.brief_to_build_rate'], 'week', week_start - 7, today);
+  select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'ajani.drafts_saved';
+  if item #> '{values,0}' <> 'null'::jsonb or item #> '{values,1}' = 'null'::jsonb
+    or item->'previous' <> 'null'::jsonb or (item->>'coverage_from')::date <> today then
+    raise exception 'pre-coverage cohort periods must be unknown: %', item;
+  end if;
+  select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'ajani.brief_to_build_rate';
+  if item->'previous' <> 'null'::jsonb or (item->>'coverage_from')::date <> today then
+    raise exception 'cohort ratios inherit coverage: %', item;
+  end if;
+  update public.admin_analytics_coverage set started_at = now() - interval '400 days';
 
   catalog := public.load_analytics_catalog();
   select value into item from jsonb_array_elements(catalog->'metrics') where value->>'metric_key' = 'youtube.subscribers';
