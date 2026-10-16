@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MetricDefinition, MetricGrain, MetricSeriesQuery, MetricUnit } from "@/lib/admin/metric-types";
+import type { Goal, MetricDefinition, MetricGrain, MetricSeriesQuery, MetricUnit } from "@/lib/admin/metric-types";
 
 /** Must match the database checks in 20261016010000_analytics_metric_store.sql. */
 export const METRIC_KEY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
@@ -18,13 +18,16 @@ export const rangePresets: Record<MetricGrain, number[]> = {
 
 export const defaultRangeCount: Record<MetricGrain, number> = { day: 30, week: 12, month: 12, quarter: 8, year: 3 };
 
+/** The owner's scorecard order: the Growth Goal Sheet first, then the outreach that feeds it. */
 export const DEFAULT_TREND_METRICS = [
-  "ajani.drafts_saved",
-  "ajani.builds_submitted",
-  "ajani.brief_to_build_rate",
-  "outreach.touches",
-  "outreach.reply_rate",
+  "sales.deals_won",
+  "revenue.cash_collected",
+  "revenue.mrr",
+  "linkedin.followers",
   "outreach.calls_booked",
+  "dripify.reply_rate",
+  "outreach.touches",
+  "ajani.drafts_saved",
 ];
 
 const dimensionSchema = z.string().trim().toLowerCase().max(80)
@@ -147,6 +150,73 @@ export function metricChange(definition: Pick<MetricDefinition, "unit" | "higher
 function toneFor(change: number, higherIsBetter: boolean): MetricChange["tone"] {
   if (Math.abs(change) < 0.05) return "neutral";
   return (change > 0) === higherIsBetter ? "good" : "bad";
+}
+
+export type GoalStatus = "reached" | "on_pace" | "behind" | "missed" | "no_pace" | "not_logged" | "not_started";
+
+export type GoalProgress = {
+  status: GoalStatus;
+  /** Share of the target reached (0-1). null when nothing is recorded. */
+  share: number | null;
+  /** Where a straight line from the start to the target is today, as a value and a share of the target. */
+  expected: number | null;
+  expectedShare: number | null;
+  /** Still to go; null when nothing is recorded. */
+  remaining: number | null;
+  /** Whole days after today until the deadline (weekly goals: until Sunday). */
+  daysLeft: number;
+};
+
+/**
+ * Pace is a straight line from the start (zero for totals and weeks, the
+ * recorded baseline for latest values) to the target on the due date. A
+ * latest-value goal without a baseline gets no pace verdict rather than a
+ * guessed one. Counts round the expected value down: two of five clients due
+ * by today is on pace even when the line says 2.8.
+ */
+export function goalProgress(goal: Goal, today: string, weekStart: string): GoalProgress {
+  const start = goal.measure === "weekly" ? weekStart : goal.startDate;
+  const end = goal.measure === "weekly" ? addDays(weekStart, 6) : goal.dueDate ?? today;
+  const totalDays = Math.max(1, dayCount(start, end));
+  const daysLeft = Math.max(0, dayCount(today, end) - 1);
+  if (today < start) return { status: "not_started", share: null, expected: null, expectedShare: null, remaining: null, daysLeft };
+  if (goal.current === null) return { status: "not_logged", share: null, expected: null, expectedShare: null, remaining: null, daysLeft };
+
+  const share = clampShare(goal.current / goal.target);
+  const remaining = Math.max(0, goal.target - goal.current);
+  const origin = goal.measure === "latest" ? goal.baseline : 0;
+  const elapsed = Math.min(1, dayCount(start, today) / totalDays);
+  const exact = origin === null ? null : origin + (goal.target - origin) * elapsed;
+  const expected = exact === null ? null : goal.unit === "count" ? Math.floor(exact + 1e-9) : exact;
+  const expectedShare = expected === null ? null : clampShare(expected / goal.target);
+
+  const status: GoalStatus = goal.current >= goal.target ? "reached"
+    : today > end ? "missed"
+      : expected === null ? "no_pace"
+        : goal.current >= expected ? "on_pace" : "behind";
+  return { status, share, expected, expectedShare, remaining, daysLeft };
+}
+
+/** "about $290 a week", "about 1 every 2.6 weeks"; null when nothing is left or no time remains. */
+export function goalRateLabel(goal: Pick<Goal, "unit">, remaining: number | null, daysLeft: number) {
+  if (remaining === null || remaining <= 0 || daysLeft <= 0) return null;
+  const weeks = daysLeft / 7;
+  if (weeks <= 1) return null;
+  const perWeek = remaining / weeks;
+  if (goal.unit === "count" && perWeek < 1) {
+    return `about 1 every ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(weeks / remaining)} weeks`;
+  }
+  return `about ${formatMetricValue(goal.unit === "count" ? Math.ceil(perWeek) : perWeek, goal.unit, "compact")} a week`;
+}
+
+function clampShare(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function addDays(day: string, days: number) {
+  const date = parseDay(day);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDay(date);
 }
 
 export function dayCount(from: string, to: string) {

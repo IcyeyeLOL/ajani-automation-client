@@ -43,6 +43,38 @@ export type MetricCatalog = {
   connectors: { dripify: boolean };
 };
 
+/** total = running sum since the start date; latest = newest value of a stock; weekly = this ISO week's sum. */
+export type GoalMeasure = "total" | "latest" | "weekly";
+
+export type Goal = {
+  key: string;
+  metricKey: string;
+  label: string;
+  description: string;
+  measure: GoalMeasure;
+  unit: MetricUnit;
+  entryMode: MetricEntryMode;
+  target: number;
+  startDate: string;
+  /** null for weekly goals, which repeat. */
+  dueDate: string | null;
+  /** null means nothing recorded (unknown), never zero. */
+  current: number | null;
+  /** Latest-value goals: the value the day before the goal began, when one was recorded. */
+  baseline: number | null;
+  /** Weekly goals: last week's total. */
+  lastWeek: number | null;
+  /** Newest day with a recorded value (manual and connector metrics). */
+  lastRecorded: string | null;
+};
+
+export type GoalBoard = {
+  status: "available" | "unavailable";
+  today: string;
+  weekStart: string;
+  goals: Goal[];
+};
+
 export type MetricBucket = {
   start: string;
   end: string;

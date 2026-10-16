@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/admin/session", () => ({ requireAdminSession: mocks.authorize }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.rpc }) }));
 
-import { loadMetricCatalog, shapeMetricCatalog, shapeMetricSeries } from "@/lib/admin/metrics";
+import { loadGoalBoard, loadMetricCatalog, shapeGoalBoard, shapeMetricCatalog, shapeMetricSeries } from "@/lib/admin/metrics";
 
 describe("metric catalog", () => {
   it("shapes definitions, coverage and recent entries", () => {
@@ -84,5 +84,37 @@ describe("metric series", () => {
   it("rejects incomplete payloads", () => {
     expect(() => shapeMetricSeries({ grain: "week" })).toThrow("metric_series_incomplete");
     expect(() => shapeMetricCatalog({ metrics: [] })).toThrow("metric_catalog_incomplete");
+  });
+});
+
+describe("growth goals", () => {
+  it("shapes goals and keeps unrecorded progress unknown", () => {
+    const board = shapeGoalBoard({
+      today: "2026-10-16", week_start: "2026-10-12",
+      goals: [
+        { goal_key: "revenue_collected", metric_key: "revenue.cash_collected", label: "Revenue collected", description: "Goal sheet", measure: "total",
+          unit: "currency_cents", entry_mode: "manual", target: "500000", start_date: "2026-07-12", due_date: "2027-01-01",
+          current: null, baseline: null, last_week: null, last_recorded: null },
+        { goal_key: "linkedin_posts_weekly", metric_key: "linkedin.posts_published", label: "LinkedIn posts this week", description: "3-4 a week",
+          measure: "weekly", unit: "count", entry_mode: "manual", target: 3, start_date: "2026-07-12", due_date: null,
+          current: "2", baseline: null, last_week: 4, last_recorded: "2026-10-15" },
+        { goal_key: "broken", target: 0, start_date: "2026-07-12" },
+      ],
+    });
+    expect(board.status).toBe("available");
+    expect(board.weekStart).toBe("2026-10-12");
+    expect(board.goals).toHaveLength(2);
+    expect(board.goals[0]).toMatchObject({ key: "revenue_collected", unit: "currency_cents", target: 500000, current: null, dueDate: "2027-01-01" });
+    expect(board.goals[1]).toMatchObject({ measure: "weekly", current: 2, lastWeek: 4, dueDate: null, lastRecorded: "2026-10-15" });
+    expect(() => shapeGoalBoard({ goals: "nope" })).toThrow("goal_board_incomplete");
+  });
+
+  it("authorizes, then reports unavailable goals instead of empty progress", async () => {
+    mocks.authorize.mockResolvedValue("user_admin");
+    mocks.rpc.mockResolvedValue({ error: { code: "PGRST202" }, data: null });
+    const board = await loadGoalBoard();
+    expect(mocks.authorize).toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledWith("load_analytics_goals");
+    expect(board).toMatchObject({ status: "unavailable", goals: [] });
   });
 });

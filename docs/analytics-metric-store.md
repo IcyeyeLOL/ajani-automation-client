@@ -47,7 +47,7 @@ Weeks start on Monday (ISO). Days are UTC calendar days, matching the existing c
 ## Adding a metric
 
 1. Insert a definition in a new migration. Pick the aggregation by asking: does it add up over time (`sum`), is it a level (`last`), or is it a rate (`ratio` with numerator/denominator keys)?
-2. Manual metrics (`entry_mode = 'manual'`) appear automatically in the "Log platform numbers" form for their source. To group a new source in the form, add it to `entryGroups` in `src/components/admin/metric-trends.tsx`.
+2. Manual metrics (`entry_mode = 'manual'`) appear automatically in the "Log platform numbers" form for their source. To give a new source its own tab, add it to `entryGroups` in `src/components/admin/metric-trends.tsx`; a tab shows only while its source has active manual metrics. To retire a metric, set `active = false`: its data is kept, and it leaves the catalog, the form and the charts.
 3. A derived metric needs a block in `analytics_daily_values()`, guarded by `p_keys` so it only runs when requested.
 
 ## Writing a connector (Dripify, YouTube, TikTok, Stripe…)
@@ -78,14 +78,49 @@ Migration: `supabase/migrations/20261016020000_dripify_connector.sql`. Code: `sr
 - **Rates are lifetime rates.** Each snapshot is a campaign's running total, so a bucket's rate is the campaign lifetime rate at the bucket's end. Growth in a period is the change in the totals.
 - **Account key** `dripify:<campaign id>`, labelled with the campaign name. Draft campaigns are skipped. Paused and finished campaigns are still read, because replies keep arriving after a sequence ends. A deleted campaign keeps its last snapshot, so all-time totals still include the people it contacted.
 - **Rate limits.** Dripify allows 60 requests a minute and 5,000 a day. One run makes at most 50 requests, active campaigns first. When there are more campaigns than that, the rest rotate in on later days and keep their last snapshot meanwhile; the run still counts as synced. A 429 pauses every request until `Retry-After`; a longer wait ends the run as partial.
-- **Outcomes.** The cron returns 200 when synced or when no key is configured yet, and 503 when partial or rejected (bad key: 401, plan without the Open API: 403, Open API switched off: 404). A missing or malformed count is skipped, never stored as zero.
+- **Outcomes.** The cron returns 200 when synced or when no key is configured yet, and 503 when partial or rejected (bad key: 401, plan without the Open API: 403, Open API switched off: 404). A missing or malformed count is never stored as zero. If any of a campaign's four counts is missing or malformed, none of them are stored that day and the campaign counts as failed, so a rate never pairs a new count with a carried-forward one.
 - **Privacy.** Only aggregate counts and campaign names are stored. No lead, prospect or message data is read.
 - **Manual Dripify logs** in Outreach still feed `outreach.*` (channel `linkedin/dripify`). The connector feeds `dripify.*` separately, so neither double counts the other.
 
+## Growth goals
+
+Migration: `supabase/migrations/20261016030000_growth_goals.sql`. The Overview opens with a **Growth goals** panel: one card per active row of `analytics_goals`, measured live by `load_analytics_goals()`.
+
+| Goal | Metric | Measure | Target | Window |
+|---|---|---|---|---|
+| Clients signed | `sales.deals_won` | `total` | 5 | Jul 12, 2026 – Jan 1, 2027 |
+| Revenue collected | `revenue.cash_collected` | `total` | $5,000 | Jul 12, 2026 – Jan 1, 2027 |
+| Monthly recurring revenue | `revenue.mrr` | `latest` | $2,000 | by Jan 1, 2027 |
+| LinkedIn followers | `linkedin.followers` | `latest` | 4,000 | by Jan 1, 2027 |
+| LinkedIn posts this week | `linkedin.posts_published` | `weekly` | 3 | every ISO week |
+
+The first four come from the owner's Growth Goal Sheet, which tracks total revenue and monthly recurring revenue separately ("both have to hit target"). The weekly goal is the LinkedIn post system's 3–4 posts a week.
+
+- **Measured like Trends.** Every goal calls `load_analytics_series()` at day grain from its start date, so a goal and a daily chart of the same metric always agree. `total` sums a `sum` metric from the start date to today (or the due date). `latest` takes a `last` metric's newest value, every account added together, and reports the value the day before the goal began as its baseline. `weekly` sums the current ISO week and reports last week's total. A trigger rejects a goal whose measure does not fit its metric's aggregation.
+- **Pace** (`goalProgress()` in `src/lib/admin/metric-query.ts`) is a straight line from the start to the target on the due date: from zero for totals and weeks, and from the recorded baseline for latest values. A latest-value goal without a baseline shows progress but no on-pace or behind verdict. Counts round the expected value down. Nothing recorded stays "Not logged", never zero.
+- **Changing a goal** is a row update in `analytics_goals` (target, dates, `active`). Deadlines are at most two years out, and weekly goals have none.
+
+## Metric review (2026-10-16)
+
+The catalog was checked against the owner's notes, the Growth Goal Sheet and the Dripify, LinkedIn and content system notes, and the calculations were audited. `20261016030000` applies the result:
+
+- **Definitions now match the owner's terms.** `sales.deals_won` is "Clients signed" (signed and paid the first invoice). Calls booked count only once Calendly confirms the booking. MRR excludes setup fees and pilots, and active clients is distinct from total signed. `linkedin.engagements` follows LinkedIn's own definition, and `outreach.reply_base` is labelled "Reply base".
+- **Dripify rates are labelled lifetime.** They cover each campaign's whole life, so Trends says "lifetime to date" instead of "in range".
+- **Added numbers:** Instagram saves and shares, LinkedIn reactions and comments, Reddit views and posts published, and "Leads from content" (qualified DMs or conversations from posts or videos, the content metric the notes rank first).
+- **X retired.** No note shows X in use. Its definitions are inactive and their data is kept.
+- **Overview money cards removed.** "Quoted pipeline" and "Monthly retainers" read `build_request_quotes` and `billing_subscriptions`, which nothing writes, so they always showed $0. The goals panel shows the revenue the owner logs.
+- **Accounts are picked, not typed.** The entry form lists existing accounts plus "Add another account…". A handle typed two ways would otherwise become two accounts whose followers add up forever. Sales and revenue have no account field.
+- **Trends defaults follow the goals:** clients signed, revenue collected, MRR, LinkedIn followers, calls booked, Dripify reply rate, outreach touches and briefs saved. The saved-view key moved to `ajani_admin_trends_v2`.
+
+Known limits, not changed: brief → build conversion reads low for the newest periods because recent briefs have had less time to convert. Comparisons assume manual numbers are logged as regularly in both windows. Outreach periods before the first logged batch read 0. Entry dates default to the UTC day.
+
 ## Release
 
-Apply the three migrations in order (`20261016000000`, `20261016010000`, `20261016020000`) after the existing release gates in `docs/engineering-remediation-2026-09-05.md`. They are additive. The only data rewrite is the `reply_base` backfill on `outreach_batch_metrics`. The new `replies <= reply_base` check is added `NOT VALID` and validated only if historical rows already satisfy it, so it cannot fail on legacy data. Code and schema can deploy in either order:
+Apply the four migrations in order (`20261016000000`, `20261016010000`, `20261016020000`, `20261016030000`) after the existing release gates in `docs/engineering-remediation-2026-09-05.md`. They are additive. The only data rewrite is the `reply_base` backfill on `outreach_batch_metrics`. The new `replies <= reply_base` check is added `NOT VALID` and validated only if historical rows already satisfy it, so it cannot fail on legacy data. Code and schema can deploy in either order:
 
 - the dashboard falls back to the initial-DM basis when `reply_base` is absent;
 - failed-save cleanup falls back to a plain delete when the discard RPC is missing;
-- Trends shows an "apply the migrations" notice instead of zeros.
+- Trends shows an "apply the migrations" notice instead of zeros;
+- the Overview shows a "Goals unavailable" notice until `20261016030000` is applied.
+
+On the live project, the first three were applied on 2026-10-16 (see `docs/agent-handoff-2026-10-16.md` §4).

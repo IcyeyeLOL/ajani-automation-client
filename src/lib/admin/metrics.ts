@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/session";
 import { withinDeadline } from "@/lib/operations/deadline";
 import type {
-  MetricBucket, MetricCatalog, MetricDefinition, MetricEntry, MetricGrain, MetricSeries, MetricSeriesQuery, MetricSeriesResult,
+  Goal, GoalBoard, MetricBucket, MetricCatalog, MetricDefinition, MetricEntry, MetricGrain, MetricSeries, MetricSeriesQuery, MetricSeriesResult,
 } from "@/lib/admin/metric-types";
 
 type Row = Record<string, unknown>;
@@ -21,6 +21,19 @@ export async function loadMetricCatalog(): Promise<MetricCatalog> {
   } catch (error) {
     console.error("Metric catalog unavailable", { code: errorCode(error) });
     return { status: "unavailable", today: new Date().toISOString().slice(0, 10), metrics: [], recentEntries: [], dimensionLabels: {}, connectors };
+  }
+}
+
+export async function loadGoalBoard(): Promise<GoalBoard> {
+  await requireAdminSession();
+  try {
+    const { data, error } = await withinDeadline(createSupabaseAdminClient().rpc("load_analytics_goals"), Date.now() + 8_000);
+    if (error) throw error;
+    return shapeGoalBoard(data);
+  } catch (error) {
+    console.error("Growth goals unavailable", { code: errorCode(error) });
+    const today = new Date().toISOString().slice(0, 10);
+    return { status: "unavailable", today, weekStart: today, goals: [] };
   }
 }
 
@@ -71,6 +84,38 @@ export function shapeMetricCatalog(raw: unknown): MetricCatalog {
     dimensionLabels: Object.fromEntries(Object.entries(objectValue(payload.dimension_labels))
       .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)),
     connectors: { dripify: false },
+  };
+}
+
+export function shapeGoalBoard(raw: unknown): GoalBoard {
+  const payload = objectValue(raw);
+  if (!Array.isArray(payload.goals) || typeof payload.today !== "string") throw new Error("goal_board_incomplete");
+  return {
+    status: "available",
+    today: payload.today,
+    weekStart: stringValue(payload.week_start) || payload.today,
+    goals: rows(payload.goals).flatMap((row): Goal[] => {
+      const target = numberOrNull(row.target);
+      const key = stringValue(row.goal_key);
+      const startDate = stringValue(row.start_date);
+      if (!key || !startDate || target === null || target <= 0) return [];
+      return [{
+        key,
+        metricKey: stringValue(row.metric_key),
+        label: stringValue(row.label),
+        description: stringValue(row.description),
+        measure: oneOf(row.measure, ["total", "latest", "weekly"], "total"),
+        unit: oneOf(row.unit, ["count", "currency_cents", "hours", "ratio"], "count"),
+        entryMode: oneOf(row.entry_mode, ["derived", "manual", "connector"], "manual"),
+        target,
+        startDate,
+        dueDate: nullableString(row.due_date),
+        current: numberOrNull(row.current),
+        baseline: numberOrNull(row.baseline),
+        lastWeek: numberOrNull(row.last_week),
+        lastRecorded: nullableString(row.last_recorded),
+      }];
+    }),
   };
 }
 

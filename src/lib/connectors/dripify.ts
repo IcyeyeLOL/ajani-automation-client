@@ -201,7 +201,11 @@ export function campaignsForRun(campaigns: DripifyCampaign[], slots: number, day
   ].slice(0, slots);
 }
 
-/** Reads one statistics payload. A missing or malformed count is skipped, never recorded as zero. */
+/**
+ * Reads one statistics payload: all four counts or none. A partial snapshot
+ * would pair a new numerator with a stale, carried-forward denominator and skew
+ * the rates. Missing or malformed counts are never recorded as zero.
+ */
 export function statisticCounts(payload: unknown, campaignId: number) {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
@@ -210,7 +214,7 @@ export function statisticCounts(payload: unknown, campaignId: number) {
     const value = record[field];
     return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? [[metricKey, value] as const] : [];
   });
-  return counts.length ? counts : null;
+  return counts.length === statisticFields.length ? counts : null;
 }
 
 export function retryAfterMs(value: string | null, now = Date.now()) {

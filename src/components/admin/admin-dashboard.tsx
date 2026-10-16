@@ -12,7 +12,8 @@ import {
 } from "@/app/admin/actions";
 import { MetricTrends } from "@/components/admin/metric-trends";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import type { MetricCatalog } from "@/lib/admin/metric-types";
+import { dayCount, formatMetricValue, goalProgress, goalRateLabel, type GoalProgress, type GoalStatus } from "@/lib/admin/metric-query";
+import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
 import type {
   AdminDashboardData,
   AdminMetric,
@@ -58,7 +59,7 @@ const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
   { key: "callsBooked", short: "CALLS", label: "Calls booked" },
 ];
 
-export function AdminDashboard({ data, catalog }: { data: AdminDashboardData; catalog: MetricCatalog }) {
+export function AdminDashboard({ data, catalog, goals }: { data: AdminDashboardData; catalog: MetricCatalog; goals: GoalBoard }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
   const [isRefreshing, startRefresh] = useTransition();
@@ -102,7 +103,7 @@ export function AdminDashboard({ data, catalog }: { data: AdminDashboardData; ca
       {!data.outreachSchemaReady ? <SetupBanner connected={data.dataConnected} /> : null}
       {data.dataNotice ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
       {data.dataStatus !== "unavailable" ? <>
-      {activeSection === "overview" ? <Overview data={data} onNavigate={setActiveSection} /> : null}
+      {activeSection === "overview" ? <Overview data={data} goals={goals} onNavigate={setActiveSection} /> : null}
       {activeSection === "trends" ? <MetricTrends catalog={catalog} refreshToken={data.generatedAt} /> : null}
       {activeSection === "outreach" ? <Outreach data={data} key={data.pagination.experimentPage} /> : null}
       {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} /> : null}
@@ -128,8 +129,9 @@ function SetupBanner({ connected }: { connected: boolean }) {
   </aside>;
 }
 
-function Overview({ data, onNavigate }: { data: AdminDashboardData; onNavigate: (section: Section) => void }) {
+function Overview({ data, goals, onNavigate }: { data: AdminDashboardData; goals: GoalBoard; onNavigate: (section: Section) => void }) {
   return <div className="admin-section-stack">
+    <GrowthGoals board={goals} onNavigate={onNavigate} />
     <section className="admin-metric-grid">{data.metrics.map((item) => <MetricCard item={item} key={item.label} />)}</section>
     <section className="admin-two-column admin-chart-row">
       <GrowthChart trend={data.trend} />
@@ -144,6 +146,87 @@ function Overview({ data, onNavigate }: { data: AdminDashboardData; onNavigate: 
       </article>
     </section>
   </div>;
+}
+
+const goalStatusLabels: Record<GoalStatus, string> = {
+  reached: "REACHED",
+  on_pace: "ON PACE",
+  behind: "BEHIND PACE",
+  missed: "MISSED",
+  no_pace: "IN PROGRESS",
+  not_logged: "NOT LOGGED",
+  not_started: "NOT STARTED",
+};
+
+function GrowthGoals({ board, onNavigate }: { board: GoalBoard; onNavigate: (section: Section) => void }) {
+  if (board.status === "unavailable") {
+    return <aside className="admin-setup-banner">
+      <div><span>GOALS UNAVAILABLE</span><b>Apply the growth goals migration (20261016030000) to this database, then refresh.</b></div>
+      <p>NO PROGRESS IS IMPLIED</p>
+    </aside>;
+  }
+  if (!board.goals.length) return null;
+  const deadline = board.goals.flatMap((goal) => goal.dueDate ? [goal.dueDate] : []).sort()[0] ?? null;
+  const daysLeft = deadline ? Math.max(0, dayCount(board.today, deadline) - 1) : null;
+  return <article className="admin-panel admin-goals" aria-label="Growth goals">
+    <header className="admin-panel-head">
+      <div><p>GROWTH GOALS</p><h2>{deadline ? `Progress toward ${formatDate(deadline)}.` : "Progress this week."}</h2></div>
+      {daysLeft !== null ? <span>{daysLeft} DAYS LEFT</span> : null}
+    </header>
+    <div className="admin-goal-grid">{board.goals.map((goal) => <GoalCard goal={goal} key={goal.key} progress={goalProgress(goal, board.today, board.weekStart)} today={board.today} />)}</div>
+    <footer className="admin-form-footer admin-goal-foot">
+      <div><p>Targets from your Growth Goal Sheet and LinkedIn post system. Each goal updates as soon as its number is logged or synced. The dark marker shows where a steady pace puts you today.</p></div>
+      <button onClick={() => onNavigate("trends")} type="button">LOG NUMBERS<b>→</b></button>
+    </footer>
+  </article>;
+}
+
+function GoalCard({ goal, progress, today }: { goal: Goal; progress: GoalProgress; today: string }) {
+  const weekly = goal.measure === "weekly";
+  const percent = progress.share === null ? null : Math.round(progress.share * 100);
+  return <section className={`admin-goal status-${progress.status}`} title={goal.description}>
+    <header><h3>{goal.label}</h3><small>{goalStatusLabels[progress.status]}</small></header>
+    <p className="admin-goal-value"><strong>{formatMetricValue(goal.current, goal.unit, "compact")}</strong><span>of {formatMetricValue(goal.target, goal.unit, "compact")}{weekly ? " this week" : ""}</span></p>
+    <div
+      aria-label={`${goal.label} progress`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={percent ?? undefined}
+      aria-valuetext={percent === null ? "Nothing logged yet" : `${percent}% of target`}
+      className="admin-goal-track"
+      role="progressbar"
+    >
+      <i style={{ width: `${percent ?? 0}%` }} />
+      {progress.expectedShare !== null && progress.status !== "reached" ? <b style={{ left: `${progress.expectedShare * 100}%` }} /> : null}
+    </div>
+    <p className="admin-goal-note">{goalNote(goal, progress)}</p>
+    <small className="admin-goal-meta">{goalMeta(goal, today)}</small>
+  </section>;
+}
+
+function goalNote(goal: Goal, progress: GoalProgress) {
+  const weekly = goal.measure === "weekly";
+  const amount = (value: number) => formatMetricValue(value, goal.unit, "compact");
+  if (progress.status === "not_started") return `Starts ${shortDate(goal.startDate)}.`;
+  if (progress.status === "not_logged") return weekly ? "Nothing logged this week yet." : "Nothing logged yet. Log it under Trends.";
+  if (progress.status === "reached") return weekly ? "Target hit for this week." : "Target reached.";
+  if (progress.status === "missed") return `Deadline passed on ${shortDate(goal.dueDate ?? goal.startDate)}.`;
+  const remaining = progress.remaining ?? 0;
+  if (weekly) return `${amount(remaining)} more by Sunday.`;
+  const rate = goalRateLabel(goal, remaining, progress.daysLeft);
+  const pace = progress.status === "behind" && progress.expected !== null ? ` A steady pace means ${amount(progress.expected)} by today.` : "";
+  return `Need ${amount(remaining)} more by ${shortDate(goal.dueDate ?? goal.startDate)}${rate ? `, ${rate}` : ""}.${pace}`;
+}
+
+function goalMeta(goal: Goal, today: string) {
+  if (goal.measure === "weekly") {
+    return `Last week: ${goal.lastWeek === null ? "nothing logged" : formatMetricValue(goal.lastWeek, goal.unit)}`;
+  }
+  if (goal.entryMode === "derived") return "Counted automatically";
+  if (!goal.lastRecorded) return "Never logged";
+  // A follower count or MRR keeps counting until a newer one replaces it.
+  const age = dayCount(goal.lastRecorded, today) - 1;
+  return goal.measure === "latest" && age > 30 ? `Last logged ${shortDate(goal.lastRecorded)}, ${age} days ago. Log a fresh number.` : `Last logged ${shortDate(goal.lastRecorded)}`;
 }
 
 function MetricCard({ item }: { item: AdminMetric }) {

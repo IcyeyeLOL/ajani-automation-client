@@ -3,12 +3,15 @@ import {
   bucketLabel,
   dayCount,
   formatMetricValue,
+  goalProgress,
+  goalRateLabel,
   metricChange,
   metricSeriesSearch,
   parseMetricSeriesQuery,
   periodStart,
   rangeForPreset,
 } from "@/lib/admin/metric-query";
+import type { Goal } from "@/lib/admin/metric-types";
 
 describe("trend ranges", () => {
   it("ends today and starts on a complete period boundary for every grain", () => {
@@ -79,5 +82,54 @@ describe("trend formatting", () => {
     expect(bucketLabel("2026-07-01", "quarter")).toBe("Q3 2026");
     expect(bucketLabel("2026-01-01", "year")).toBe("2026");
     expect(bucketLabel("2026-10-01", "month")).toBe("Oct 2026");
+  });
+});
+
+describe("growth goal pace", () => {
+  // Friday 2026-10-16; the goal sheet runs 174 days, Jul 12 to Jan 1 inclusive, so 97 days have passed.
+  const today = "2026-10-16";
+  const weekStart = "2026-10-12";
+  const goal = (overrides: Partial<Goal> = {}): Goal => ({
+    key: "clients_signed", metricKey: "sales.deals_won", label: "Clients signed", description: "", measure: "total",
+    unit: "count", entryMode: "manual", target: 5, startDate: "2026-07-12", dueDate: "2027-01-01",
+    current: 2, baseline: null, lastWeek: null, lastRecorded: "2026-10-16", ...overrides,
+  });
+
+  it("judges a running total against a straight line, rounding counts down", () => {
+    expect(goalProgress(goal(), today, weekStart)).toEqual({ status: "on_pace", share: 0.4, expected: 2, expectedShare: 0.4, remaining: 3, daysLeft: 77 });
+    expect(goalProgress(goal({ current: 1 }), today, weekStart).status).toBe("behind");
+    const money = goalProgress(goal({ unit: "currency_cents", target: 500_000, current: 100_000 }), today, weekStart);
+    expect(money.status).toBe("behind");
+    expect(money.expected).toBeCloseTo(500_000 * 97 / 174, 6);
+  });
+
+  it("starts a latest value from its recorded baseline and gives no verdict without one", () => {
+    const followers = { measure: "latest" as const, metricKey: "linkedin.followers", target: 4000, current: 2500 };
+    const paced = goalProgress(goal({ ...followers, baseline: 1000 }), today, weekStart);
+    expect(paced.expected).toBe(Math.floor(1000 + 3000 * 97 / 174));
+    expect(paced.status).toBe("behind");
+    expect(goalProgress(goal({ ...followers, baseline: null }), today, weekStart)).toMatchObject({ status: "no_pace", expected: null, expectedShare: null, remaining: 1500 });
+  });
+
+  it("paces a weekly goal across Monday to Sunday", () => {
+    const weekly = { measure: "weekly" as const, metricKey: "linkedin.posts_published", target: 3, dueDate: null };
+    expect(goalProgress(goal({ ...weekly, current: 2 }), today, weekStart)).toMatchObject({ status: "on_pace", expected: 2, remaining: 1, daysLeft: 2 });
+    expect(goalProgress(goal({ ...weekly, current: 1 }), today, weekStart).status).toBe("behind");
+    expect(goalProgress(goal({ ...weekly, current: 1 }), "2026-10-13", weekStart).status).toBe("on_pace");
+  });
+
+  it("never turns missing data into progress, and closes out finished goals", () => {
+    expect(goalProgress(goal({ current: null }), today, weekStart)).toMatchObject({ status: "not_logged", share: null, remaining: null });
+    expect(goalProgress(goal({ startDate: "2026-10-20" }), today, weekStart).status).toBe("not_started");
+    expect(goalProgress(goal({ current: 6 }), today, weekStart)).toMatchObject({ status: "reached", share: 1, remaining: 0 });
+    expect(goalProgress(goal({ dueDate: "2026-10-01", current: 3 }), today, weekStart)).toMatchObject({ status: "missed", daysLeft: 0 });
+  });
+
+  it("phrases the pace still needed in the goal's own unit", () => {
+    expect(goalRateLabel({ unit: "count" }, 4, 77)).toBe("about 1 every 2.8 weeks");
+    expect(goalRateLabel({ unit: "count" }, 30, 77)).toBe("about 3 a week");
+    expect(goalRateLabel({ unit: "currency_cents" }, 400_000, 77)).toBe("about $364 a week");
+    expect(goalRateLabel({ unit: "count" }, 0, 77)).toBeNull();
+    expect(goalRateLabel({ unit: "count" }, 3, 5)).toBeNull();
   });
 });

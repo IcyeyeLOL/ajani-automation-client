@@ -24,7 +24,9 @@ import type {
 } from "@/lib/admin/metric-types";
 
 const MAX_SELECTED = 8;
-const STORAGE_KEY = "ajani_admin_trends_v1";
+// v2: defaults follow the Growth Goal Sheet (2026-10-16 metric review).
+const STORAGE_KEY = "ajani_admin_trends_v2";
+const NEW_ACCOUNT = "__new_account__";
 
 const categoryLabels: Record<MetricCategory, string> = {
   business: "Ajani Flow",
@@ -33,14 +35,18 @@ const categoryLabels: Record<MetricCategory, string> = {
   revenue: "Sales & revenue",
 };
 
+// Goal numbers first, then platforms in the order the owner uses them. A group
+// shows only while the catalog has active manual metrics for it.
 const entryGroups: Array<{ id: string; label: string; sources: string[] }> = [
+  { id: "revenue", label: "Sales & revenue", sources: ["sales", "revenue"] },
+  { id: "linkedin", label: "LinkedIn", sources: ["linkedin"] },
+  { id: "instagram", label: "Instagram", sources: ["instagram"] },
   { id: "youtube", label: "YouTube", sources: ["youtube"] },
   { id: "tiktok", label: "TikTok", sources: ["tiktok"] },
-  { id: "instagram", label: "Instagram", sources: ["instagram"] },
-  { id: "linkedin", label: "LinkedIn", sources: ["linkedin"] },
+  { id: "reddit", label: "Reddit", sources: ["reddit"] },
   { id: "x", label: "X", sources: ["x"] },
-  { id: "revenue", label: "Sales & revenue", sources: ["sales", "revenue"] },
 ];
+const platformPrefix = /^(YouTube|TikTok|Instagram|LinkedIn|Reddit|X) /;
 
 type Preferences = { grain: MetricGrain; count: number; metrics: string[] };
 type SeriesState = {
@@ -149,7 +155,9 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
         const definition = definitions.get(key);
         if (!definition) return null;
         const series = seriesByKey.get(key) ?? null;
-        return <TrendCard definition={definition} key={key} result={shown} series={series} activeDimension={activeDimension} activeDimensionLabel={dimensionLabel(activeDimension)} />;
+        // A rate built from running totals (Dripify's) covers each campaign's whole life, not the range.
+        const lifetime = definition.aggregation === "ratio" && definitions.get(definition.numeratorKey ?? "")?.aggregation === "last";
+        return <TrendCard definition={definition} key={key} lifetime={lifetime} result={shown} series={series} activeDimension={activeDimension} activeDimensionLabel={dimensionLabel(activeDimension)} />;
       })}
     </section>}
 
@@ -159,7 +167,7 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
   </div>;
 }
 
-function TrendCard({ definition, result, series, activeDimension, activeDimensionLabel }: { definition: MetricDefinition; result: MetricSeriesResult | null; series: MetricSeries | null; activeDimension: string; activeDimensionLabel: string }) {
+function TrendCard({ definition, lifetime, result, series, activeDimension, activeDimensionLabel }: { definition: MetricDefinition; lifetime: boolean; result: MetricSeriesResult | null; series: MetricSeries | null; activeDimension: string; activeDimensionLabel: string }) {
   const notTracked = Boolean(activeDimension) && !definition.dimensions.includes(activeDimension);
   const change = series && !notTracked ? metricChange(definition, series.current, series.previous) : null;
   const hasData = Boolean(series?.values.some((value) => value !== null));
@@ -171,7 +179,7 @@ function TrendCard({ definition, result, series, activeDimension, activeDimensio
     </header>
     <div className="admin-trend-headline">
       <strong>{formatMetricValue(notTracked ? null : series?.current ?? null, definition.unit, "compact")}</strong>
-      <span>{summaryLabel(definition, series)}{trackedSince ? ` · tracked since ${bucketLabel(trackedSince, "day")}` : ""}</span>
+      <span>{summaryLabel(definition, series, lifetime)}{trackedSince ? ` · tracked since ${bucketLabel(trackedSince, "day")}` : ""}</span>
     </div>
     {notTracked ? <p className="admin-trend-empty">Not tracked for {activeDimensionLabel}.</p>
       : !result || !series ? <div className="admin-trend-skeleton" aria-hidden="true" />
@@ -299,25 +307,31 @@ function DripifySyncPanel({ catalog }: { catalog: MetricCatalog }) {
 
 function MetricEntryPanel({ catalog, definitions }: { catalog: MetricCatalog; definitions: Map<string, MetricDefinition> }) {
   const router = useRouter();
-  const [groupId, setGroupId] = useState(entryGroups[0].id);
+  const groups = entryGroups.filter((item) => catalog.metrics.some((metric) => metric.entryMode === "manual" && item.sources.includes(metric.source)));
+  const [groupId, setGroupId] = useState(groups[0]?.id ?? "");
   const [state, action, pending] = useActionState(recordMetricValuesAction, initialAdminActionState);
-  const group = entryGroups.find((item) => item.id === groupId) ?? entryGroups[0];
-  const fields = catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source));
+  const group = groups.find((item) => item.id === groupId) ?? groups[0];
+  const fields = group ? catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source)) : [];
+  // Sales and revenue belong to the business, not to a platform account.
+  const accounts = group?.id === "revenue" ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
 
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
 
   return <article className="admin-panel admin-trend-entry" id="log-platform-numbers">
     <header className="admin-panel-head"><div><p>LOG PLATFORM NUMBERS</p><h2>Add what the platforms show you.</h2></div><span>RE-ENTERING A DAY REPLACES IT</span></header>
     <div className="admin-segmented admin-trend-entry-tabs" role="group" aria-label="Platform">
-      {entryGroups.map((item) => <button aria-pressed={item.id === group.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label.toUpperCase()}</button>)}
+      {groups.map((item) => <button aria-pressed={item.id === group?.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label.toUpperCase()}</button>)}
     </div>
-    <EntryForm action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} status={state.status} today={catalog.today} />
+    {group ? <EntryForm accounts={accounts} action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} status={state.status} today={catalog.today} /> : null}
     <RecentEntries definitions={definitions} entries={catalog.recentEntries} />
   </article>;
 }
 
-function EntryForm({ action, entityId, fields, today, pending, status, message }: { action: (formData: FormData) => void; entityId?: string; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string }) {
+function EntryForm({ accounts, action, entityId, fields, today, pending, status, message }: { accounts: string[] | null; action: (formData: FormData) => void; entityId?: string; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // A pick-list, not free text: the same account typed two ways would be two
+  // accounts, and their followers would be added together forever.
+  const [account, setAccount] = useState("");
   const [clearedFor, setClearedFor] = useState(entityId);
   // After a successful save, clear the numbers but keep the date and account
   // so the next platform for the same day is quick to log.
@@ -344,10 +358,18 @@ function EntryForm({ action, entityId, fields, today, pending, status, message }
     <input name="values" type="hidden" value={JSON.stringify(payload)} />
     <div className="admin-trend-entry-context">
       <label className="admin-field"><span>Date</span><input defaultValue={today} max={today} name="date" required type="date" /></label>
-      <label className="admin-field"><span>Account, optional</span><input maxLength={80} name="dimension" placeholder="Leave blank for your main account" /><small>Use a handle like @ajaniflow to track more than one account.</small></label>
+      {accounts ? <label className="admin-field"><span>Account</span>
+        <select name={account === NEW_ACCOUNT ? undefined : "dimension"} onChange={(event) => setAccount(event.target.value)} value={account}>
+          <option value="">Main account</option>
+          {accounts.map((key) => <option key={key} value={key}>{key}</option>)}
+          <option value={NEW_ACCOUNT}>Add another account…</option>
+        </select>
+        {account === NEW_ACCOUNT ? <input aria-label="New account handle" autoFocus maxLength={80} name="dimension" placeholder="@handle" required /> : null}
+        <small>{account === NEW_ACCOUNT ? "Only for a second profile or page. Your main account is already tracked." : "Pick the same account every time so totals are never counted twice."}</small>
+      </label> : <input name="dimension" type="hidden" value="" />}
     </div>
     <div className="admin-trend-entry-grid">{fields.map((field) => <label className="admin-field" key={field.key}>
-      <span>{field.label.replace(/^(YouTube|TikTok|Instagram|LinkedIn|X) /, "")}{field.unit === "currency_cents" ? " ($)" : ""}</span>
+      <span>{field.label.replace(platformPrefix, "")}{field.unit === "currency_cents" ? " ($)" : ""}</span>
       <input inputMode="decimal" min="0" onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} step={field.unit === "hours" || field.unit === "currency_cents" ? "0.01" : "1"} type="number" value={values[field.key] ?? ""} />
       <small>{field.aggregation === "last" ? "Total on this date" : "Amount for this date (or a period ending on it)"}</small>
     </label>)}</div>
@@ -402,9 +424,10 @@ function emptyMessage(definition: MetricDefinition) {
   return "Nothing recorded in this range yet. Log numbers below.";
 }
 
-function summaryLabel(definition: MetricDefinition, series: MetricSeries | null) {
+function summaryLabel(definition: MetricDefinition, series: MetricSeries | null, lifetime: boolean) {
   if (definition.aggregation === "ratio") {
-    return series?.currentDenominator ? `${formatMetricValue(series.currentNumerator, "count")} of ${formatMetricValue(series.currentDenominator, "count")} in range` : "Rate across the range";
+    const scope = lifetime ? ", lifetime to date" : " in range";
+    return series?.currentDenominator ? `${formatMetricValue(series.currentNumerator, "count")} of ${formatMetricValue(series.currentDenominator, "count")}${scope}` : lifetime ? "Lifetime rate" : "Rate across the range";
   }
   return definition.aggregation === "last" ? "Latest total" : "Total in range";
 }
@@ -465,7 +488,8 @@ function initialPreferences(metrics: MetricDefinition[]): Preferences {
   return {
     grain: "week",
     count: defaultRangeCount.week,
-    metrics: [...DEFAULT_TREND_METRICS.filter((key) => known.has(key)), ...recorded].slice(0, MAX_SELECTED),
+    // Defaults include manual goal metrics, so a recorded one must not be added twice.
+    metrics: [...new Set([...DEFAULT_TREND_METRICS.filter((key) => known.has(key)), ...recorded])].slice(0, MAX_SELECTED),
   };
 }
 

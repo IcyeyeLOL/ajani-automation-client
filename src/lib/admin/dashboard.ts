@@ -73,10 +73,11 @@ export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Re
     metrics: [
       metric("Saved drafts", formatNumber(n("saved_current")), `${n("organizations_current")} new business workspaces; UTC calendar days`, growth(n("saved_current"), n("saved_previous")), "neutral"),
       metric("Submitted builds", formatNumber(n("builds_current")), n("saved_current") ? `${percentage(n("cohort_submitted_current"), n("saved_current"))?.toFixed(1)}% of 30-day draft cohorts converted` : "No drafts in this 30-day cohort", growth(n("builds_current"), n("builds_previous")), "brand"),
-      metric("Outreach touches", formatNumber(n("outreach_current")), "Manual and Dripify activity", growth(n("outreach_current"), n("outreach_previous")), "brand"),
+      // Batches logged on the Outreach page only: the nightly Dripify sync feeds Trends, not this card.
+      metric("Outreach touches", formatNumber(n("outreach_current")), "From outreach batches you log", growth(n("outreach_current"), n("outreach_previous")), "brand"),
       metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), "reply_base_current" in totals ? n("reply_base_current") : n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
-      metric("Quoted pipeline", formatMoney(n("quoted_pipeline")), "Pending and approved quotes", null, "neutral"),
-      metric("Monthly retainers", formatMoney(n("mrr")), "Active monthly subscriptions", null, "success"),
+      // Revenue is not shown here: no code writes billing_subscriptions or build_request_quotes, so
+      // those cards always read $0. The growth goals above show the revenue numbers the owner logs.
     ],
     trend: rows(payload.trend).map((row) => ({
       date: stringValue(row.date), drafts: numberValue(row.drafts), submissions: numberValue(row.submissions),
@@ -276,10 +277,6 @@ function metric(label: string, value: string, detail: string, delta: number | nu
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
-}
-
-function formatMoney(cents: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
 }
 
 function stringValue(value: unknown) {

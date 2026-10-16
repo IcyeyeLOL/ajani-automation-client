@@ -65,14 +65,13 @@ describe("Dripify sync", () => {
           { id: 20, name: "Never launched", status: "DRAFT" },
         ], nextCursor: "page 2", limit: 100 }),
       "/campaigns/10/statistics": () => json(stats(10)),
-      // A count Dripify leaves out is skipped, never stored as zero.
-      "/campaigns/30/statistics": () => json(stats(30, { replyRateLeads: undefined, totalLeads: -1 })),
+      "/campaigns/30/statistics": () => json(stats(30, { totalLeads: 90 })),
     });
 
     const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW });
 
     expect(result).toEqual({
-      status: "synced", reason: null, date: "2026-10-16", campaigns: 2, synced: 2, deferred: 0, failed: 0, valuesWritten: 6, labelsWritten: 2,
+      status: "synced", reason: null, date: "2026-10-16", campaigns: 2, synced: 2, deferred: 0, failed: 0, valuesWritten: 8, labelsWritten: 2,
     } satisfies DripifySyncResult);
     const [first] = mocks.fetch.mock.calls;
     expect(first[0]).toBe("https://api.dripify.com/v1/open-api/campaigns?limit=100");
@@ -87,10 +86,10 @@ describe("Dripify sync", () => {
       { metricKey: "dripify.leads_contacted", date: "2026-10-16", dimension: "dripify:10", value: 150 },
       { metricKey: "dripify.leads_accepted", date: "2026-10-16", dimension: "dripify:10", value: 45 },
       { metricKey: "dripify.leads_replied", date: "2026-10-16", dimension: "dripify:10", value: 12 },
+      { metricKey: "dripify.leads_total", date: "2026-10-16", dimension: "dripify:30", value: 90 },
       { metricKey: "dripify.leads_contacted", date: "2026-10-16", dimension: "dripify:30", value: 150 },
-      { metricKey: "dripify.leads_accepted", date: "2026-10-16", dimension: "dripify:30", value: 45 },
     ]));
-    expect(values.p_values).toHaveLength(6);
+    expect(values.p_values).toHaveLength(8);
     // Percentages are never stored.
     expect(JSON.stringify(values.p_values)).not.toMatch(/rate/i);
     const [labels] = writes("upsert_analytics_dimension_labels");
@@ -99,6 +98,22 @@ describe("Dripify sync", () => {
       { dimension: "dripify:10", label: "Insurance owners TX" },
       { dimension: "dripify:30", label: "Paused agents" },
     ]));
+  });
+
+  it("stores nothing for a campaign whose statistics come back incomplete", async () => {
+    dripify({
+      "/campaigns": () => json({ items: [{ id: 10, name: "Complete", status: "ACTIVE" }, { id: 30, name: "Incomplete", status: "ACTIVE" }], nextCursor: null, limit: 100 }),
+      "/campaigns/10/statistics": () => json(stats(10)),
+      // A count Dripify leaves out is never stored as zero, and the others are not stored without it.
+      "/campaigns/30/statistics": () => json(stats(30, { replyRateLeads: undefined, totalLeads: -1 })),
+    });
+
+    const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 50_000, now: NOW });
+
+    expect(result).toMatchObject({ status: "partial", reason: "failures", synced: 1, failed: 1, valuesWritten: 4 });
+    const [values] = writes("upsert_analytics_metric_values");
+    expect(values.p_values).toHaveLength(4);
+    expect(JSON.stringify(values.p_values)).not.toContain("dripify:30");
   });
 
   it.each([
@@ -220,7 +235,14 @@ describe("Dripify sync helpers", () => {
   it("accepts only whole, non-negative counts for the requested campaign", () => {
     expect(statisticCounts(stats(7), 8)).toBeNull();
     expect(statisticCounts({ campaignId: 7, totalLeads: 1.5, contactedLeads: "4", acceptanceRateLeads: -2 }, 7)).toBeNull();
-    expect(statisticCounts({ campaignId: 7, contactedLeads: 0 }, 7)).toEqual([["dripify.leads_contacted", 0]]);
+    expect(statisticCounts(stats(7, { totalLeads: 0, contactedLeads: 0, acceptanceRateLeads: 0, replyRateLeads: 0 }), 7)).toEqual([
+      ["dripify.leads_total", 0], ["dripify.leads_contacted", 0], ["dripify.leads_accepted", 0], ["dripify.leads_replied", 0],
+    ]);
+  });
+
+  it("records a campaign's counts together or not at all, so a rate never mixes days", () => {
+    expect(statisticCounts({ campaignId: 7, contactedLeads: 150, acceptanceRateLeads: 45, replyRateLeads: 12 }, 7)).toBeNull();
+    expect(statisticCounts(stats(7, { contactedLeads: null }), 7)).toBeNull();
   });
 
   it("reads Retry-After as seconds or a date", () => {
