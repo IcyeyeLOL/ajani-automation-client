@@ -190,6 +190,7 @@ The proxy deliberately fails closed in a production runtime when valid live Cler
 
 - [Architecture notes](./docs/architecture.md)
 - [Analytics metric store and Trends](./docs/analytics-metric-store.md)
+- [Agent handoff: analytics backend (2026-10-16)](./docs/agent-handoff-2026-10-16.md)
 - [Engineering audit](./docs/engineering-audit-2026-09-05.md)
 - [Engineering remediation and release gates](./docs/engineering-remediation-2026-09-05.md)
 
