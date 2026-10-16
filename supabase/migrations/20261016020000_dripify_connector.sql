@@ -5,10 +5,11 @@
 --   count is a 'last' stock per campaign (dimension 'dripify:<campaign id>'),
 --   carried forward and summed across campaigns. The store builds the history
 --   from the daily snapshots.
--- * Only exact counts are stored. Dripify's own percentages divide by
---   invitations or messages sent, which the API does not return (it returns
---   rounded percentages only), so these rates divide by leads contacted and
---   are recomputed from their counts, never stored.
+-- * Only exact counts are stored, never Dripify's percentages (rounded to one
+--   decimal, so they cannot be added up across campaigns). Rates are
+--   recomputed from the counts against leads contacted, the base Dripify's
+--   own percentages use: on the live account on 2026-10-16, 120 accepted and
+--   30 replied of 694 contacted were reported as 17.3% and 4.3%.
 -- * analytics_dimension_labels gives connector accounts a display name (the
 --   campaign name) without making the name part of the key, so a renamed
 --   campaign keeps one history instead of being counted twice.
@@ -25,8 +26,8 @@ values
 insert into public.analytics_metric_definitions
   (metric_key, source, category, label, description, unit, aggregation, numerator_key, denominator_key, entry_mode, higher_is_better, chartable, sort_order)
 values
-  ('dripify.acceptance_rate', 'dripify', 'outreach', 'Dripify acceptance (of contacted)', 'Leads who accepted ÷ leads contacted, over each campaign''s lifetime. Dripify''s own screen divides by invitations sent, so it reads higher.', 'ratio', 'ratio', 'dripify.leads_accepted', 'dripify.leads_contacted', 'derived', true, true, 38),
-  ('dripify.reply_rate', 'dripify', 'outreach', 'Dripify reply rate (of contacted)', 'Leads who replied ÷ leads contacted, over each campaign''s lifetime. Dripify''s own screen divides by messages sent, so it reads higher.', 'ratio', 'ratio', 'dripify.leads_replied', 'dripify.leads_contacted', 'derived', true, true, 39);
+  ('dripify.acceptance_rate', 'dripify', 'outreach', 'Dripify acceptance (of contacted)', 'Leads who accepted ÷ leads contacted, over each campaign''s lifetime. Matches Dripify''s own acceptance rate.', 'ratio', 'ratio', 'dripify.leads_accepted', 'dripify.leads_contacted', 'derived', true, true, 38),
+  ('dripify.reply_rate', 'dripify', 'outreach', 'Dripify reply rate (of contacted)', 'Leads who replied ÷ leads contacted, over each campaign''s lifetime. Matches Dripify''s own reply rate.', 'ratio', 'ratio', 'dripify.leads_replied', 'dripify.leads_contacted', 'derived', true, true, 39);
 
 create table public.analytics_dimension_labels (
   dimension_key text primary key check (dimension_key ~ '^[a-z0-9@][a-z0-9_.:@/-]{0,79}$'),

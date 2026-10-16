@@ -22,7 +22,7 @@ const WRITE_RESERVE_MS = 8_000;
 const UPSERT_CHUNK = 500;
 const LABEL_LENGTH = 120;
 
-/** Exact counts only. Dripify's percentages are rounded and their bases are not exposed. */
+/** Exact counts only. Dripify's percentages are these counts ÷ contacted leads, rounded to one decimal. */
 const statisticFields = [
   ["dripify.leads_total", "totalLeads"],
   ["dripify.leads_contacted", "contactedLeads"],
