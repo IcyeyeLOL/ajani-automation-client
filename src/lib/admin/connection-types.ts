@@ -18,5 +18,16 @@ export type ConnectionBoard = {
   status: "available" | "unavailable";
   connectors: ConnectionCard[];
   ingest: { enabled: boolean; keyTooShort: boolean; path: string };
-  dripify: { configured: boolean };
+  dripify: DripifySummary;
+};
+
+/** Counts from the latest Dripify sync. Campaign names are the owner's own labels; no lead data. */
+export type DripifySummary = {
+  configured: boolean;
+  /** UTC day of the most recent sync, or null before the first one. */
+  lastSyncedOn: string | null;
+  unreadMessages: number | null;
+  activeCampaigns: number | null;
+  /** Campaigns still sending whose fresh leads are nearly used up. */
+  lowCampaigns: Array<{ label: string; remaining: number }>;
 };

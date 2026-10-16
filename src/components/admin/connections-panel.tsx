@@ -2,9 +2,9 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { syncConnectorAction } from "@/app/admin/actions";
+import { syncConnectorAction, syncDripifyAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import type { ConnectionBoard, ConnectionCard, ConnectionSetting } from "@/lib/admin/connection-types";
+import type { ConnectionBoard, ConnectionCard, ConnectionSetting, DripifySummary } from "@/lib/admin/connection-types";
 
 const synced: Record<ConnectionCard["id"], { always: string; analytics?: string; steps: string[] }> = {
   youtube: {
@@ -31,6 +31,7 @@ export function Connections({ board }: { board: ConnectionBoard }) {
     {board.status === "unavailable" ? <p className="admin-data-notice" role="status">Sync history is unavailable until the platform connectors migration is applied. Settings below are still accurate.</p> : null}
     <section className="admin-connection-grid">
       {board.connectors.map((connector) => <ConnectorCard connector={connector} key={connector.id} />)}
+      <DripifyCard summary={board.dripify} />
       <RedditCard />
       <IngestCard enabled={board.ingest.enabled} keyTooShort={board.ingest.keyTooShort} path={board.ingest.path} />
     </section>
@@ -71,6 +72,41 @@ function ConnectorCard({ connector }: { connector: ConnectionCard }) {
   </article>;
 }
 
+function DripifyCard({ summary }: { summary: DripifySummary }) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(syncDripifyAction, initialAdminActionState);
+  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
+  const low = summary.lowCampaigns;
+  return <article className="admin-panel admin-connection-card">
+    <header className="admin-panel-head">
+      <div><p>DRIPIFY</p><h2>{summary.configured ? "Connected through the official API." : "Not connected yet."}</h2></div>
+      <span><i className={summary.configured ? "online" : "offline"} />{summary.lastSyncedOn ? `SYNCED ${shortDay(summary.lastSyncedOn)}` : "NOT SYNCED YET"}</span>
+    </header>
+    <div className="admin-connection-body">
+      <p>Matches Dripify&apos;s own dashboard: leads contacted, connections accepted and replies, both new each day and over each campaign&apos;s life; leads still to contact; leads in progress, finished or failed; and unread inbox messages. Counts only: no lead names, profiles or messages are stored.</p>
+      {summary.lastSyncedOn ? <dl className="admin-setting-list">
+        <dt>Latest sync</dt>
+        <dd><span>Unread Dripify messages</span><b className={summary.unreadMessages ? "missing" : "present"}>{summary.unreadMessages ?? "—"}</b></dd>
+        <dd><span>Active campaigns</span><b>{summary.activeCampaigns ?? "—"}</b></dd>
+        {low.length ? low.map((campaign) => <dd key={campaign.label}><span>{campaign.label}</span><b className="missing">{campaign.remaining} LEADS LEFT</b></dd>)
+          : <dd><span>Campaigns running low on new leads</span><b className="present">NONE</b></dd>}
+      </dl> : <SettingList label="Settings" settings={[{ name: "DRIPIFY_API_KEY", present: summary.configured }]} />}
+      {low.length ? <p>Add leads to {low.length === 1 ? "this campaign" : "these campaigns"} in Dripify soon, or {low.length === 1 ? "it stops" : "they stop"} reaching new people.</p> : null}
+    </div>
+    <form action={action}>
+      <div className="admin-form-footer">
+        <div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p>
+          : <p>{summary.configured ? "Syncs every night. Charts live under Trends → Dripify." : "Add DRIPIFY_API_KEY in Vercel (Dripify → Settings → API & Integrations), redeploy, then sync."}</p>}</div>
+        <button disabled={pending || !summary.configured} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
+      </div>
+    </form>
+  </article>;
+}
+
+function shortDay(value: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)).toUpperCase();
+}
+
 function RedditCard() {
   return <article className="admin-panel admin-connection-card">
     <header className="admin-panel-head">
@@ -96,7 +132,7 @@ function IngestCard({ enabled, keyTooShort, path }: { enabled: boolean; keyTooSh
       <span><i className={enabled ? "online" : "offline"} />{enabled ? "ON" : "OFF"}</span>
     </header>
     <div className="admin-connection-body">
-      <p>{enabled ? "Accepts daily totals for YouTube, Instagram, Reddit, TikTok and LinkedIn from tools you run, such as Zapier or a script. It cannot read anything back, and it rejects names, links and any metric it does not know."
+      <p>{enabled ? "Accepts daily totals for your main YouTube, Instagram, Reddit, TikTok and LinkedIn accounts from tools you run, such as Zapier or a script, for the last 35 days. It cannot read anything back, saves them as logged entries you can delete, and rejects names, links, extra fields and any number only a connector may write."
         : keyTooShort ? "AJANI_METRICS_INGEST_KEY is set but shorter than 32 characters, so the endpoint stays off. Replace it with a longer random value."
         : "Add AJANI_METRICS_INGEST_KEY (at least 32 random characters) in Vercel to let your own automations send daily totals. Until then the endpoint answers “not found”."}</p>
       <pre>{example}</pre>

@@ -53,15 +53,16 @@ describe("private metrics endpoint", () => {
     const response = await POST(post({ values: [
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: 12 },
       { metricKey: "reddit.dm_replies", date: "2026-10-16", value: 3 },
-      { metricKey: "tiktok.views", date: "2026-10-15", dimension: "@AjaniAI", value: 900 },
+      { metricKey: "tiktok.views", date: "2026-10-15", value: 900 },
     ] }));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({ written: 3 });
     const [name, args] = mocks.rpc.mock.calls[0];
     expect(name).toBe("upsert_analytics_metric_values");
-    expect(args).toMatchObject({ p_origin: "connector", p_actor: INGEST_ACTOR });
-    expect(args.p_values[2]).toMatchObject({ dimension: "@ajaniai" });
+    // Manual origin: the store refuses connector-only metrics, and rows stay deletable.
+    expect(args).toMatchObject({ p_origin: "manual", p_actor: INGEST_ACTOR });
+    expect(args.p_values.every((value: Record<string, unknown>) => !("dimension" in value))).toBe(true);
   });
 
   it("rejects business numbers, future or ancient dates, extra fields and bad values", async () => {
@@ -75,7 +76,9 @@ describe("private metrics endpoint", () => {
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: -1 },
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: "12" },
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: 1, recipient: "u/someone" },
-      { metricKey: "reddit.dms_sent", date: "2026-10-15", dimension: "John Smith <john@example.com>", value: 1 },
+      { metricKey: "reddit.dms_sent", date: "2026-10-15", dimension: "jane.doe@gmail.com", value: 1 },
+      { metricKey: "reddit.dms_sent", date: "2026-10-15", dimension: "u/jane_doe", value: 1 },
+      { metricKey: "reddit.dms_sent", date: "2026-09-01", value: 1 },
     ];
     for (const value of bad) {
       const response = await POST(post({ values: [value] }));
@@ -100,6 +103,15 @@ describe("private metrics endpoint", () => {
     expect((await POST(post("{not json"))).status).toBe(400);
     expect((await POST(post({ values: [] }, { "content-length": "999999" }))).status).toBe(413);
     expect((await POST(post(JSON.stringify({ values: [], pad: "x".repeat(70_000) })))).status).toBe(413);
+    // Counted in bytes: 30,000 three-byte characters are 90 KB.
+    expect((await POST(post(JSON.stringify({ values: [], pad: "€".repeat(30_000) })))).status).toBe(413);
+    const chunked = new Request("https://ajaniflow.com/api/metrics/ingest", {
+      method: "POST",
+      headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+      body: new ReadableStream({ start(controller) { for (let index = 0; index < 100; index += 1) controller.enqueue(new TextEncoder().encode("x".repeat(1_000))); controller.close(); } }),
+      duplex: "half",
+    } as RequestInit);
+    expect((await POST(chunked)).status).toBe(413);
   });
 
   it("answers a store refusal with a generic message and no database detail", async () => {
@@ -113,9 +125,9 @@ describe("private metrics endpoint", () => {
 });
 
 describe("ingest schema", () => {
-  it("allows the last 120 days in UTC and nothing later than today", () => {
-    expect(parseIngestBody({ values: [{ metricKey: "youtube.views", date: "2026-06-18", value: 1 }] }, NOW).success).toBe(true);
-    expect(parseIngestBody({ values: [{ metricKey: "youtube.views", date: "2026-06-17", value: 1 }] }, NOW).success).toBe(false);
+  it("allows the last 35 days in UTC and nothing later than today", () => {
+    expect(parseIngestBody({ values: [{ metricKey: "youtube.views", date: "2026-09-11", value: 1 }] }, NOW).success).toBe(true);
+    expect(parseIngestBody({ values: [{ metricKey: "youtube.views", date: "2026-09-10", value: 1 }] }, NOW).success).toBe(false);
     expect(parseIngestBody({ values: [{ metricKey: "youtube.views", date: "2026-10-16", value: 1 }] }, NOW).success).toBe(true);
     expect(parseIngestBody({ values: [{ metricKey: "linkedin.followers", date: "2026-10-16", value: 3500 }] }, NOW).success).toBe(true);
   });

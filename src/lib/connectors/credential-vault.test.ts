@@ -38,6 +38,12 @@ describe("credential vault", () => {
     expect(openCredential([version, iv, ciphertext, ""].join("."), key, "instagram")).toBeNull();
     expect(openCredential(["v2", iv, ciphertext, tag].join("."), key, "instagram")).toBeNull();
     expect(openCredential("secret", key, "instagram")).toBeNull();
+    // A shortened tag or IV, or an extra segment, is refused rather than weakly checked.
+    const shortTag = Buffer.from(tag, "base64url").subarray(0, 4).toString("base64url");
+    expect(openCredential([version, iv, ciphertext, shortTag].join("."), key, "instagram")).toBeNull();
+    const shortIv = Buffer.from(iv, "base64url").subarray(0, 8).toString("base64url");
+    expect(openCredential([version, shortIv, ciphertext, tag].join("."), key, "instagram")).toBeNull();
+    expect(openCredential(`${sealed}.extra`, key, "instagram")).toBeNull();
   });
 
   it("stores only sealed text and reads it back through the RPCs", async () => {

@@ -34,7 +34,7 @@ function fakeGoogle(routes: Record<string, Handler>) {
 const channel = (statistics: Record<string, unknown> = { subscriberCount: "1230", viewCount: "98765", hiddenSubscriberCount: false }) =>
   () => json({ items: [{ id: CHANNEL, statistics, contentDetails: { relatedPlaylists: { uploads: "UU1234567890abcdefghijkl" } } }] });
 const uploads = (dates: string[], nextPageToken?: string) =>
-  () => json({ items: dates.map((date) => ({ contentDetails: { videoPublishedAt: `${date}T15:00:00Z` } })), nextPageToken });
+  () => json({ items: dates.map((date, index) => ({ contentDetails: { videoId: `video-${index}-${date}`, videoPublishedAt: `${date}T15:00:00Z` } })), nextPageToken });
 const token = () => json({ access_token: "ya29.fake-access", expires_in: 3599, token_type: "Bearer" });
 
 function analyticsRoute(daily: unknown[][], byType: unknown[][] | Response = []) {
@@ -134,11 +134,27 @@ describe("YouTube sync with fake data", () => {
     expect(valueOf(run.written, "youtube.total_views")).toBe(500);
   });
 
-  it("records only the upload days it saw when the listing is cut short", async () => {
+  it("treats an uploads answer without its list as a failed read, never as zero uploads", async () => {
     const run = harness();
     const fake = fakeGoogle({
       "youtube.googleapis.com/youtube/v3/channels": channel(),
-      "youtube.googleapis.com/youtube/v3/playlistItems": uploads(["2026-10-16", "2026-10-15"], "more"),
+      "youtube.googleapis.com/youtube/v3/playlistItems": () => json({}),
+    });
+    const result = await syncYouTubeMetrics({ deadlineAt: Date.now() + 50_000, now: NOW, source: PUBLIC, fetchImpl: fake.fetchImpl, write: run.write, record: run.record });
+    expect(result).toMatchObject({ status: "partial", reason: "failures" });
+    expect(run.written.some((item) => item.metricKey === "youtube.videos_published")).toBe(false);
+  });
+
+  it("records only the upload days it saw when the listing is cut short", async () => {
+    const run = harness();
+    let page = 0;
+    const fake = fakeGoogle({
+      "youtube.googleapis.com/youtube/v3/channels": channel(),
+      // Four full pages of recent uploads, each pointing to a fifth that is never read.
+      "youtube.googleapis.com/youtube/v3/playlistItems": () => {
+        page += 1;
+        return json({ items: ["2026-10-16", "2026-10-15"].map((day, index) => ({ contentDetails: { videoId: `v${page}-${index}`, videoPublishedAt: `${day}T15:00:00Z` } })), nextPageToken: `p${page}` });
+      },
     });
     const result = await syncYouTubeMetrics({ deadlineAt: Date.now() + 50_000, now: NOW, source: PUBLIC, fetchImpl: fake.fetchImpl, write: run.write, record: run.record });
     expect(result.status).toBe("synced");
@@ -166,7 +182,9 @@ describe("YouTube sync with fake data", () => {
     expect(valueOf(run.written, "youtube.subscribers_gained", "2026-10-14")).toBe(5);
     expect(valueOf(run.written, "youtube.subscribers_lost", "2026-10-14")).toBe(1);
     expect(valueOf(run.written, "youtube.shorts_views", "2026-10-14")).toBe(150);
+    // The split covers the 15th with no SHORTS row: a real zero. It does not cover the 13th: unknown.
     expect(valueOf(run.written, "youtube.shorts_views", "2026-10-15")).toBe(0);
+    expect(valueOf(run.written, "youtube.shorts_views", "2026-10-13")).toBeUndefined();
     // Today is never read from Analytics (it is incomplete), and malformed numbers stay unknown.
     expect(run.written.some((item) => item.date === TODAY && item.metricKey === "youtube.views")).toBe(false);
     expect(valueOf(run.written, "youtube.views", "2026-10-13")).toBeUndefined();

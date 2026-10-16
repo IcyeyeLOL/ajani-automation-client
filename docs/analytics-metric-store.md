@@ -82,6 +82,43 @@ Migration: `supabase/migrations/20261016020000_dripify_connector.sql`. Code: `sr
 - **Privacy.** Only aggregate counts and campaign names are stored. No lead, prospect or message data is read.
 - **Manual Dripify logs** in Outreach still feed `outreach.*` (channel `linkedin/dripify`). The connector feeds `dripify.*` separately, so neither double counts the other.
 
+### Dripify dashboard parity (`20261016050000`)
+
+Dripify's own dashboard (help center, 2026-10-16) shows activity in a period next to lifetime rates, a progress bar of leads entered per campaign, lead statuses, and unread inbox messages. The connector now records all of it from the same official Open API calls, plus one `GET /teams` request per run:
+
+| Metric | Aggregation | Source |
+|---|---|---|
+| `dripify.new_contacted`, `new_accepted`, `new_replies` | `sum` per campaign | change in the running total since the campaign's previous sync |
+| `dripify.period_acceptance_rate`, `period_reply_rate` | `ratio` | new accepted or new replies ÷ new contacted in the range |
+| `dripify.leads_remaining` | `last` per campaign | `totalLeads − contactedLeads` (Dripify's progress bar) |
+| `dripify.leads_in_progress`, `leads_finished`, `leads_failed` | `last` per campaign | `leadStatusBreakdown` |
+| `dripify.unread_messages`, `active_campaigns` | `last` per team (`dripify-team:<id>`) | `GET /teams` → `statistics` |
+
+- **New activity** is today's running total minus the latest total recorded before today (`load_analytics_latest_values(keys, before)`), written on the sync day. Re-syncing the same day recomputes from the same starting point. A campaign's first sync, a total that went down, or an unreadable history stays unknown; nothing is guessed. A campaign deferred by the request budget gets several days' activity on the day it is next read, so period totals stay exact while single days can lump.
+- **Period rates** are cohort-free: acceptances and replies arrive days after the invite, so a short range can read high or low. The lifetime rates remain the reference.
+- **Control desk.** Connections → Dripify shows unread messages, active campaigns, and campaigns still sending (in progress > 0) with fewer than 40 leads not yet contacted. Campaigns that last synced more than a week before the newest sync are ignored.
+- **Not available through the API**, so not tracked: per-step sends (invites, messages, follow-ups, InMails, endorsements, profile views) per day. Dripify's per-lead activity endpoint has them, but reading it per lead does not fit 60 requests a minute inside one Vercel Hobby run, and it returns lead details the store must not keep.
+
+## Platform connectors (`20261016040000`)
+
+Code: `src/lib/connectors/` (`provider-http.ts`, `youtube.ts`, `instagram.ts`, `credential-vault.ts`, `registry.ts`, `ingest.ts`). Schedule: `/api/cron/sync-platforms` at 22:30 UTC daily. The control desk's **Connections** section (07) shows each connector's settings by name (set, missing or wrong format, never values), its last run, and a Sync now button. Each run is logged in `analytics_connector_runs` as a status and a fixed reason token, pruned after 90 days.
+
+- **YouTube.** `YOUTUBE_API_KEY` + `YOUTUBE_CHANNEL_ID` (a `UC…` ID or `@handle`) give public numbers: `youtube.subscribers` (YouTube rounds to three significant figures), `youtube.total_views`, and `youtube.videos_published` per day for the last 14 days. Adding `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` and `YOUTUBE_REFRESH_TOKEN` (scopes `yt-analytics.readonly` and `youtube.readonly`, app set to "In production" so the refresh token does not lapse after 7 days) adds YouTube Analytics for the last 7 complete days: views, watch hours, likes, comments, shares, subscribers gained and lost, and Shorts views. A lapsed sign-in falls back to the public numbers and reports `token_expired`. Impressions and click-through rate are only in the Reporting API's bulk files and are not read.
+- **Instagram.** `INSTAGRAM_ACCESS_TOKEN` (Instagram API with Instagram Login, professional account, `instagram_business_basic` + `instagram_business_manage_insights`) gives followers, posts per day (14 days), and per-UTC-day insights for the 3 days before today: reach, views, interactions, likes, comments, shares, saves and link taps. A metric the account cannot report is learned on the first day and skipped after. Tokens last 60 days: with `CONNECTOR_ENCRYPTION_KEY` (64 hex characters) the connector renews within 20 days of expiry and keeps the new token sealed (AES-256-GCM, connector name as associated data) in `analytics_connector_credentials`. A token pasted into the setting later always wins. Profile visits left the API in 2025 and stay manual.
+- **Reddit.** Reddit stops approving API access after 2026-10-31 and retires the public API; chat (where DMs live) has no API, and post views are not exposed. Reddit is manual: views, posts, upvotes, comments and karma, plus outreach `reddit.dms_sent`, `reddit.dm_replies`, `reddit.dm_calls_booked` and the derived `reddit.dm_reply_rate`.
+- **Unknown stays unknown.** Hidden, missing or malformed counts are skipped. A listing (uploads, posts) records zero days only when read in full; when cut short, only days after the oldest item seen count. A response without its list is a failed read. Shorts views are zero only for days the content-type report covers.
+- **Writes** go through `upsert_analytics_metric_values(..., 'connector', 'connector:<name>')` for the owner's main account (dimension `''`), so a synced day replaces a typed one. A store refusal is reported as `save_failed`.
+
+### Private ingest endpoint
+
+`POST /api/metrics/ingest` with `Authorization: Bearer <AJANI_METRICS_INGEST_KEY>` (at least 32 characters; otherwise the route answers 404) lets the owner's own automations send daily totals: `{"values":[{"metricKey":"reddit.dms_sent","date":"2026-10-15","value":12}]}`. Least privilege: YouTube, Instagram, Reddit, TikTok and LinkedIn metrics only; the main account only (an account name could carry a prospect's handle); the last 35 UTC days; at most 200 values and 64 KB; strict fields. Values are written as **manual** entries (actor `connector:ingest`), so the store refuses connector-only metrics and every row shows under recent entries and can be deleted. Errors never echo submitted values or database text.
+
+### Security model
+
+- Provider calls go through one client: HTTPS to an exact host allowlist (pagination links included), `redirect: "error"`, a request budget, a deadline with write time held back, response bodies capped while streaming (2 MB, error bodies 20 KB), Retry-After capped at 15 s, and errors reduced to a status and a short code token.
+- Keys travel in headers (`x-goog-api-key`, `Authorization`) except Instagram's, which Meta's Graph API takes as `access_token` in the query string; no URL is ever logged or returned.
+- Tables are RLS-on with all grants revoked; security-definer RPCs with `search_path = ''` are granted to `service_role` only. Browser-facing code receives setting names, booleans, counts and fixed messages.
+
 ## Growth goals
 
 Migration: `supabase/migrations/20261016030000_growth_goals.sql`. The Overview opens with a **Growth goals** panel: one card per active row of `analytics_goals`, measured live by `load_analytics_goals()`.
@@ -123,4 +160,6 @@ Apply the four migrations in order (`20261016000000`, `20261016010000`, `2026101
 - Trends shows an "apply the migrations" notice instead of zeros;
 - the Overview shows a "Goals unavailable" notice until `20261016030000` is applied.
 
-On the live project, the first three were applied on 2026-10-16 (see `docs/agent-handoff-2026-10-16.md` §4).
+On the live project, the first four were applied on 2026-10-16 (see `docs/agent-handoff-2026-10-16.md` §4).
+
+`20261016040000_platform_connectors.sql` and `20261016050000_dripify_dashboard_parity.sql` are additive (new tables, RPCs and metric definitions, four description updates). Until they are applied, the Connections section shows settings with a "sync history unavailable" notice, the Dripify card shows only whether a key is set, Dripify syncs write only the original four counts (they detect the missing history reader, which ships with the new metrics), and platform syncs report `save_failed` for metrics the store does not know yet.

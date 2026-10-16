@@ -43,7 +43,8 @@ const insights = (unsupported: string[] = []) => (url: URL) => {
   const day = new Date(Number(url.searchParams.get("since")) * 1000).getUTCDate();
   return json({ data: requested.map((name, index) => ({ name, period: "day", total_value: { value: day * 10 + index } })) });
 };
-const media = (timestamps: string[], next?: string) => () => json({ data: timestamps.map((timestamp, index) => ({ id: String(index), timestamp })), paging: next ? { next } : {} });
+// Real media IDs are unique; these are unique per timestamp and position.
+const media = (timestamps: string[], next?: string) => () => json({ data: timestamps.map((timestamp, index) => ({ id: `${index}-${timestamp}`, timestamp })), paging: next ? { next } : {} });
 
 function harness() {
   const written: MetricValue[] = [];
@@ -176,6 +177,18 @@ describe("Instagram sync with fake data", () => {
     expect(result).toMatchObject({ status: "partial", reason: "failures" });
     expect(run.written.filter((item) => item.metricKey === "instagram.posts_published").map((item) => [item.date, item.value]))
       .toEqual([["2026-10-15", 0], ["2026-10-16", 1]]);
+  });
+
+  it("treats a media answer without its list as a failed read, never as zero posts", async () => {
+    const run = harness();
+    const fake = fakeInstagram({
+      "/v25.0/me": me(),
+      [`/v25.0/${ACCOUNT}/insights`]: insights(),
+      [`/v25.0/${ACCOUNT}/media`]: () => json({}),
+    });
+    const result = await syncInstagramMetrics({ ...base, credentials: null, fetchImpl: fake.fetchImpl, write: run.write, record: run.record });
+    expect(result).toMatchObject({ status: "partial", reason: "failures" });
+    expect(run.written.some((item) => item.metricKey === "instagram.posts_published")).toBe(false);
   });
 
   it("follows a same-host next page and stops once it reaches older posts", async () => {

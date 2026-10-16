@@ -23,7 +23,7 @@ export function vaultKey(source: Record<string, string | undefined> = process.en
 
 export function sealCredential(plaintext: string, key: Buffer, connector: ConnectorId) {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   cipher.setAAD(Buffer.from(connector));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return [VERSION, iv.toString("base64url"), ciphertext.toString("base64url"), cipher.getAuthTag().toString("base64url")].join(".");
@@ -31,12 +31,16 @@ export function sealCredential(plaintext: string, key: Buffer, connector: Connec
 
 /** null for anything tampered, sealed with another key, or for another connector. */
 export function openCredential(sealed: string, key: Buffer, connector: ConnectorId) {
-  const [version, iv, ciphertext, tag] = sealed.split(".");
-  if (version !== VERSION || !iv || !ciphertext || !tag) return null;
+  const [version, iv, ciphertext, tag, extra] = sealed.split(".");
+  if (version !== VERSION || !iv || !ciphertext || !tag || extra !== undefined) return null;
+  const ivBytes = Buffer.from(iv, "base64url");
+  const tagBytes = Buffer.from(tag, "base64url");
+  // A shortened tag would weaken the integrity check; only the full 128 bits are accepted.
+  if (ivBytes.length !== 12 || tagBytes.length !== 16) return null;
   try {
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
+    const decipher = createDecipheriv("aes-256-gcm", key, ivBytes, { authTagLength: 16 });
     decipher.setAAD(Buffer.from(connector));
-    decipher.setAuthTag(Buffer.from(tag, "base64url"));
+    decipher.setAuthTag(tagBytes);
     return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString("utf8");
   } catch {
     return null;

@@ -4,7 +4,7 @@ import {
   createProviderClient, ProviderHttpError, ProviderStop, type ProviderClient,
 } from "@/lib/connectors/provider-http";
 import {
-  countPerDay, env, recordConnectorRun, shiftDay, utcDay, wholeCount, writeValues,
+  countPerDay, env, isCalendarDay, recordConnectorRun, shiftDay, STORE_MAX, utcDay, utcDayOf, wholeCount, writeValues,
   type ConnectorReason, type ConnectorResult, type MetricValue, type MetricWriter, type RunRecorder,
 } from "@/lib/connectors/connector-store";
 
@@ -128,6 +128,7 @@ export async function syncYouTubeMetrics(options: YouTubeSyncOptions): Promise<C
         const analytics = await readAnalytics(client, accessToken, today);
         values.push(...analytics.values);
         result.details.analyticsDays = analytics.days;
+        if (analytics.failure) reason ??= partialReason(analytics.failure) ?? rejectionReason(analytics.failure) ?? "failures";
       } catch (error) {
         // Usually a sign-in without the yt-analytics.readonly scope; the public numbers above still count.
         reason ??= partialReason(error) ?? rejectionReason(error) ?? "failures";
@@ -200,6 +201,9 @@ async function readUploadsPerDay(client: ProviderClient, playlistId: string, set
   const firstDay = shiftDay(today, -(UPLOAD_DAYS - 1));
   const seen: string[] = [];
   let pageToken: string | null = null;
+  const tokens = new Set<string>();
+  // Each video counts once, even if a misbehaving listing repeats a page.
+  const counted = new Set<string>();
   let complete = false;
   let failure: unknown = null;
   for (let page = 0; page < UPLOAD_PAGES; page += 1) {
@@ -215,10 +219,18 @@ async function readUploadsPerDay(client: ProviderClient, playlistId: string, set
       failure = error;
       break;
     }
+    if (!Array.isArray(payload.items)) {
+      failure = new Error("youtube_listing_invalid");
+      break;
+    }
     let reachedOlder = false;
-    for (const item of Array.isArray(payload.items) ? payload.items : []) {
-      const published = record(record(item).contentDetails).videoPublishedAt;
-      const day = typeof published === "string" && /^\d{4}-\d{2}-\d{2}T/.test(published) ? published.slice(0, 10) : null;
+    for (const item of payload.items) {
+      const details = record(record(item).contentDetails);
+      const identity = typeof details.videoId === "string" ? details.videoId : JSON.stringify(item);
+      if (counted.has(identity)) continue;
+      counted.add(identity);
+      // An unreadable date is skipped; it never ends the listing early.
+      const day = utcDayOf(details.videoPublishedAt);
       if (!day) continue;
       seen.push(day);
       if (day < firstDay) reachedOlder = true;
@@ -228,6 +240,12 @@ async function readUploadsPerDay(client: ProviderClient, playlistId: string, set
       complete = true;
       break;
     }
+    // A page token seen before would count the same uploads again.
+    if (tokens.has(next)) {
+      failure = new Error("youtube_listing_loop");
+      break;
+    }
+    tokens.add(next);
     pageToken = next;
   }
   return { values: countPerDay("youtube.videos_published", firstDay, today, seen, complete), failure };
@@ -250,15 +268,18 @@ async function readAnalytics(client: ProviderClient, accessToken: string, today:
   const daily = analyticsTable(await client.request(analyticsUrl(startDate, endDate, analyticsMetrics.map(([name]) => name), "day"), { headers }));
   const values: MetricValue[] = [];
   const days = new Set<string>();
+  // A day reported twice is ambiguous: neither row is trusted.
+  const rowsPerDay = new Map<unknown, number>();
+  for (const row of daily.rows) rowsPerDay.set(row.day, (rowsPerDay.get(row.day) ?? 0) + 1);
   for (const row of daily.rows) {
     const day = row.day;
-    if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day) || day < startDate || day > endDate) continue;
+    if (!isCalendarDay(day) || day < startDate || day > endDate || rowsPerDay.get(day) !== 1) continue;
     days.add(day);
     for (const [name, metricKey] of analyticsMetrics) {
       const raw = row[name];
       if (name === "estimatedMinutesWatched") {
-        const minutes = typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : null;
-        if (minutes !== null) values.push({ metricKey, date: day, value: Math.round((minutes / 60) * 100) / 100 });
+        const hours = typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? Math.round((raw / 60) * 100) / 100 : null;
+        if (hours !== null && hours < STORE_MAX) values.push({ metricKey, date: day, value: hours });
         continue;
       }
       const count = wholeCount(raw);
@@ -267,19 +288,26 @@ async function readAnalytics(client: ProviderClient, accessToken: string, today:
   }
 
   // Shorts are a split of the same views; a channel without Shorts simply has no SHORTS rows.
+  // A failed split never costs the daily numbers above.
+  let failure: unknown = null;
   try {
     const byType = analyticsTable(await client.request(analyticsUrl(startDate, endDate, ["views"], "day,creatorContentType"), { headers }));
     const shorts = new Map<string, number>();
+    const unreadable = new Set<string>();
     for (const row of byType.rows) {
-      if (row.creatorContentType !== "SHORTS" || typeof row.day !== "string" || !days.has(row.day)) continue;
+      if (typeof row.day !== "string" || !days.has(row.day)) continue;
+      // A day the split covers is a fact: no SHORTS row means no Shorts views.
+      if (!shorts.has(row.day)) shorts.set(row.day, 0);
+      if (row.creatorContentType !== "SHORTS") continue;
       const count = wholeCount(row.views);
-      if (count !== null) shorts.set(row.day, (shorts.get(row.day) ?? 0) + count);
+      if (count === null) unreadable.add(row.day);
+      else shorts.set(row.day, (shorts.get(row.day) ?? 0) + count);
     }
-    for (const day of days) values.push({ metricKey: "youtube.shorts_views", date: day, value: shorts.get(day) ?? 0 });
+    for (const [day, count] of shorts) if (!unreadable.has(day) && count < STORE_MAX) values.push({ metricKey: "youtube.shorts_views", date: day, value: count });
   } catch (error) {
-    if (!(error instanceof ProviderHttpError && error.status === 400)) throw error;
+    if (!(error instanceof ProviderHttpError && error.status === 400)) failure = error;
   }
-  return { values, days: days.size };
+  return { values, days: days.size, failure };
 }
 
 function analyticsUrl(startDate: string, endDate: string, metrics: string[], dimensions: string) {

@@ -5,7 +5,7 @@ import {
   createProviderClient, ProviderHttpError, ProviderStop, type ProviderClient,
 } from "@/lib/connectors/provider-http";
 import {
-  countPerDay, env, recordConnectorRun, shiftDay, utcDay, wholeCount, writeValues,
+  countPerDay, env, recordConnectorRun, shiftDay, utcDay, utcDayOf, wholeCount, writeValues,
   type ConnectorReason, type ConnectorResult, type MetricValue, type MetricWriter, type RunRecorder,
 } from "@/lib/connectors/connector-store";
 import { databaseCredentialStore, vaultKey, type CredentialStore } from "@/lib/connectors/credential-vault";
@@ -38,6 +38,7 @@ export const POST_DAYS = 14;
 const MEDIA_PAGES = 3;
 /** Renew when fewer than this many days are left (renewal needs the token to be a day old). */
 const RENEW_WITHIN_DAYS = 20;
+const TOKEN_DAYS = 60;
 
 const insightMetrics = [
   ["reach", "instagram.reach"],
@@ -93,13 +94,13 @@ export async function syncInstagramMetrics(options: InstagramSyncOptions): Promi
     if (!account) return finish({ ...result, status: "rejected", reason: "account_not_found" }, options);
     if (account.followers !== null) values.push({ metricKey: "instagram.followers", date: today, value: account.followers });
 
-    try {
-      const insights = await readInsights(client, token, account.id, today);
-      values.push(...insights.values);
-      result.details.insightDays = insights.days;
-    } catch (error) {
-      if (rejectionReason(error)) throw error;
-      reason = partialReason(error) ?? "failures";
+    const insights = await readInsights(client, token, account.id, today);
+    values.push(...insights.values);
+    result.details.insightDays = insights.days;
+    if (insights.failure) {
+      // Days already read are kept either way.
+      if (rejectionReason(insights.failure)) throw insights.failure;
+      reason = partialReason(insights.failure) ?? "failures";
     }
     const posts = await readPostsPerDay(client, token, account.id, today);
     values.push(...posts.values);
@@ -161,7 +162,9 @@ async function currentToken(client: ProviderClient, settingToken: string, creden
     url.searchParams.set("access_token", token);
     const payload = record(await client.request(url));
     const renewed = typeof payload.access_token === "string" && payload.access_token.length >= 20 ? payload.access_token : null;
-    const seconds = wholeCount(payload.expires_in);
+    // Meta issues 60-day tokens; a longer claim is capped so renewal is never skipped.
+    const reported = wholeCount(payload.expires_in);
+    const seconds = reported === null ? null : Math.min(reported, TOKEN_DAYS * 86_400);
     if (!renewed) return token;
     try {
       await credentials.save("instagram", JSON.stringify({ token: renewed, lineage }), seconds ? new Date(now + seconds * 1000).toISOString() : null);
@@ -197,16 +200,22 @@ async function readAccount(client: ProviderClient, token: string) {
   const payload = record(await client.request(withToken("/me", token, { fields: "user_id,username,followers_count,media_count" })));
   // Meta documents both a flat object and {data:[...]}.
   const body = Array.isArray(payload.data) ? record(payload.data[0]) : payload;
-  const id = typeof body.user_id === "string" || typeof body.user_id === "number" ? String(body.user_id)
-    : typeof body.id === "string" ? body.id : "";
+  // IDs exceed 2^53; a JSON number may already be rounded to another account's ID.
+  const exact = (value: unknown) => typeof value === "string" ? value
+    : typeof value === "number" && Number.isSafeInteger(value) ? String(value) : "";
+  const id = exact(body.user_id) || exact(body.id);
   if (!/^\d{5,30}$/.test(id)) return null;
   return { id, followers: wholeCount(body.followers_count) };
 }
 
-/** One request per UTC day (total_value sums the requested window). */
+/**
+ * One request per UTC day (total_value sums the requested window). A failure
+ * returns the days already read with the error, so they are still saved.
+ */
 async function readInsights(client: ProviderClient, token: string, accountId: string, today: string) {
   const values: MetricValue[] = [];
   let days = 0;
+  try {
   // Metrics the account cannot report, learned on the first day so later days stay one request each.
   let supported: string[] = insightMetrics.map(([name]) => name);
   for (let offset = INSIGHT_DAYS; offset >= 1; offset -= 1) {
@@ -234,7 +243,9 @@ async function readInsights(client: ProviderClient, token: string, accountId: st
           if (!(inner instanceof ProviderHttpError && inner.status === 400 && !rejectionReason(inner))) throw inner;
         }
       }
-      supported = accepted;
+      // Only a day that answered for some metrics says which ones the account lacks;
+      // a day refused outright (not yet available) leaves the list as it was.
+      if (accepted.length) supported = accepted;
     }
     if (found.size) days += 1;
     for (const [name, metricKey] of insightMetrics) {
@@ -242,7 +253,10 @@ async function readInsights(client: ProviderClient, token: string, accountId: st
       if (value !== undefined) values.push({ metricKey, date: day, value });
     }
   }
-  return { values, days };
+  } catch (error) {
+    return { values, days, failure: error as unknown };
+  }
+  return { values, days, failure: null as unknown };
 }
 
 /** {data:[{name, total_value:{value}}]} into name → value. An empty data set is unknown, not zero. */
@@ -265,9 +279,18 @@ async function readPostsPerDay(client: ProviderClient, token: string, accountId:
   const firstDay = shiftDay(today, -(POST_DAYS - 1));
   const seen: string[] = [];
   let next: string | URL | null = withToken(`/${accountId}/media`, token, { fields: "timestamp", limit: "50" });
+  const visited = new Set<string>();
+  // Each post counts once, even if a misbehaving listing repeats a page.
+  const counted = new Set<string>();
   let complete = false;
   let failure: unknown = null;
   for (let page = 0; page < MEDIA_PAGES && next; page += 1) {
+    // A page seen before would count the same posts again.
+    if (visited.has(String(next))) {
+      failure = new Error("instagram_listing_loop");
+      break;
+    }
+    visited.add(String(next));
     let payload: Record<string, unknown>;
     try {
       // The client only follows links on Instagram's own host.
@@ -276,12 +299,18 @@ async function readPostsPerDay(client: ProviderClient, token: string, accountId:
       failure = error;
       break;
     }
+    if (!Array.isArray(payload.data)) {
+      failure = new Error("instagram_listing_invalid");
+      break;
+    }
     let reachedOlder = false;
-    for (const item of Array.isArray(payload.data) ? payload.data : []) {
-      const timestamp = record(item).timestamp;
-      const parsed = typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
-      if (!Number.isFinite(parsed)) continue;
-      const day = utcDay(parsed);
+    for (const item of payload.data) {
+      const identity = typeof record(item).id === "string" ? String(record(item).id) : JSON.stringify(item);
+      if (counted.has(identity)) continue;
+      counted.add(identity);
+      // An unreadable timestamp is skipped; it never ends the listing early.
+      const day = utcDayOf(record(item).timestamp);
+      if (!day) continue;
       seen.push(day);
       if (day < firstDay) reachedOlder = true;
     }

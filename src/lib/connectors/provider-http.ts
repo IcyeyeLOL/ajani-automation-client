@@ -92,7 +92,13 @@ export function createProviderClient(options: ProviderClientOptions) {
         if (rateLimited) throw new ProviderStop("rate_limited");
         throw new ProviderHttpError(options.provider, response.status, code);
       }
-      return readJson(response, maxBytes, options.provider);
+      try {
+        return await readJson(response, maxBytes, options.provider);
+      } catch (error) {
+        // The request's timeout also covers the body; a body that stalls is the deadline, not bad data.
+        if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new ProviderStop("deadline");
+        throw error;
+      }
     }
   }
 
@@ -112,7 +118,7 @@ export function providerUrl(target: string | URL, allowedHosts: readonly string[
   } catch {
     throw new Error("provider_url_invalid");
   }
-  if (url.protocol !== "https:" || url.username || url.password || !allowedHosts.includes(url.hostname)) {
+  if (url.protocol !== "https:" || url.username || url.password || url.port !== "" || !allowedHosts.includes(url.hostname)) {
     throw new Error("provider_url_not_allowed");
   }
   return url;
@@ -155,7 +161,7 @@ async function readJson(response: Response, maxBytes: number, provider: string) 
 }
 
 /** The body as text, or null once it passes maxBytes (declared or streamed); stops reading at the cap. */
-export async function readCapped(response: Response, maxBytes: number): Promise<string | null> {
+export async function readCapped(response: Pick<Response, "headers" | "body">, maxBytes: number): Promise<string | null> {
   const declared = Number(response.headers.get("content-length"));
   if (response.headers.has("content-length") && Number.isFinite(declared) && declared > maxBytes) {
     await response.body?.cancel();
