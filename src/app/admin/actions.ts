@@ -22,6 +22,7 @@ import {
   setAdminSessionCookie,
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
+import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
@@ -253,6 +254,20 @@ export async function deleteMetricValueAction(_state: AdminActionState, formData
       : { status: "error", message: "That entry was already removed." };
   } catch {
     return { status: "error", message: "This entry could not be removed. Retry in a moment." };
+  }
+}
+
+/** Same job as the nightly cron, run on demand so a new key can be checked immediately. */
+export async function syncDripifyAction(): Promise<AdminActionState> {
+  await requireAdminSession();
+  try {
+    // Inside the dashboard page's maxDuration, with room to render the result.
+    const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 45_000 });
+    if (result.valuesWritten > 0) revalidatePath("/admin");
+    return { ...dripifySyncMessage(result), entityId: `dripify:${Date.now()}` };
+  } catch (error) {
+    console.error("Manual Dripify sync failed", { message: error instanceof Error ? error.message : "Unknown error" });
+    return { status: "error", message: "Dripify could not be synced. Apply the latest database migration, then retry in a few minutes." };
   }
 }
 

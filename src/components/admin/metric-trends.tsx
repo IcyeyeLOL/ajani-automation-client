@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { useRouter } from "next/navigation";
-import { deleteMetricValueAction, recordMetricValuesAction } from "@/app/admin/actions";
+import { deleteMetricValueAction, recordMetricValuesAction, syncDripifyAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
 import {
   DEFAULT_TREND_METRICS,
@@ -61,9 +61,11 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
     () => preferences.metrics.filter((key) => definitions.get(key)?.chartable),
     [definitions, preferences.metrics],
   );
+  const dimensionLabel = (key: string) => accountLabel(catalog.dimensionLabels, key);
   const dimensions = useMemo(
-    () => [...new Set(selected.flatMap((key) => definitions.get(key)?.dimensions ?? []))].sort(),
-    [definitions, selected],
+    () => [...new Set(selected.flatMap((key) => definitions.get(key)?.dimensions ?? []))]
+      .sort((left, right) => accountLabel(catalog.dimensionLabels, left).localeCompare(accountLabel(catalog.dimensionLabels, right))),
+    [catalog.dimensionLabels, definitions, selected],
   );
   const activeDimension = dimensions.includes(dimension) ? dimension : "";
   const range = rangeForPreset(preferences.grain, preferences.count, catalog.today);
@@ -135,7 +137,7 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
       <div className="admin-segmented" role="group" aria-label="Range">
         {rangePresets[preferences.grain].map((count) => <button aria-pressed={preferences.count === count} key={count} onClick={() => setPreferences((current) => ({ ...current, count }))} type="button">{presetLabel(preferences.grain, count)}</button>)}
       </div>
-      {dimensions.length ? <label className="admin-trend-select"><span>Account or channel</span><select onChange={(event) => setDimension(event.target.value)} value={activeDimension}><option value="">All combined</option>{dimensions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label> : null}
+      {dimensions.length ? <label className="admin-trend-select"><span>Account or channel</span><select onChange={(event) => setDimension(event.target.value)} value={activeDimension}><option value="">All combined</option>{dimensions.map((item) => <option key={item} value={item}>{dimensionLabel(item)}</option>)}</select></label> : null}
       <p className="admin-trend-range">{formatRange(range.from, range.to)}{comparisonDays ? ` · compared with the previous ${comparisonDays} days` : ""}</p>
       <button aria-pressed={showTable} className="admin-trend-table-toggle" onClick={() => setShowTable((value) => !value)} type="button">{showTable ? "SHOW CHARTS" : "SHOW TABLE"}</button>
     </section>
@@ -147,16 +149,17 @@ export function MetricTrends({ catalog, refreshToken }: { catalog: MetricCatalog
         const definition = definitions.get(key);
         if (!definition) return null;
         const series = seriesByKey.get(key) ?? null;
-        return <TrendCard definition={definition} key={key} result={shown} series={series} activeDimension={activeDimension} />;
+        return <TrendCard definition={definition} key={key} result={shown} series={series} activeDimension={activeDimension} activeDimensionLabel={dimensionLabel(activeDimension)} />;
       })}
     </section>}
 
     <MetricPicker metrics={chartable} onToggle={toggleMetric} selected={selected} />
+    {catalog.metrics.some((metric) => metric.source === "dripify") ? <DripifySyncPanel catalog={catalog} /> : null}
     <MetricEntryPanel catalog={catalog} definitions={definitions} />
   </div>;
 }
 
-function TrendCard({ definition, result, series, activeDimension }: { definition: MetricDefinition; result: MetricSeriesResult | null; series: MetricSeries | null; activeDimension: string }) {
+function TrendCard({ definition, result, series, activeDimension, activeDimensionLabel }: { definition: MetricDefinition; result: MetricSeriesResult | null; series: MetricSeries | null; activeDimension: string; activeDimensionLabel: string }) {
   const notTracked = Boolean(activeDimension) && !definition.dimensions.includes(activeDimension);
   const change = series && !notTracked ? metricChange(definition, series.current, series.previous) : null;
   const hasData = Boolean(series?.values.some((value) => value !== null));
@@ -170,10 +173,10 @@ function TrendCard({ definition, result, series, activeDimension }: { definition
       <strong>{formatMetricValue(notTracked ? null : series?.current ?? null, definition.unit, "compact")}</strong>
       <span>{summaryLabel(definition, series)}{trackedSince ? ` · tracked since ${bucketLabel(trackedSince, "day")}` : ""}</span>
     </div>
-    {notTracked ? <p className="admin-trend-empty">Not tracked for {activeDimension}.</p>
+    {notTracked ? <p className="admin-trend-empty">Not tracked for {activeDimensionLabel}.</p>
       : !result || !series ? <div className="admin-trend-skeleton" aria-hidden="true" />
         : hasData ? <TrendChart definition={definition} result={result} series={series} />
-          : <p className="admin-trend-empty">{definition.entryMode === "derived" ? "No activity in this range." : "Nothing recorded in this range yet. Log numbers below."}</p>}
+          : <p className="admin-trend-empty">{emptyMessage(definition)}</p>}
   </article>;
 }
 
@@ -274,6 +277,26 @@ function MetricPicker({ metrics, selected, onToggle }: { metrics: MetricDefiniti
   </article>;
 }
 
+function DripifySyncPanel({ catalog }: { catalog: MetricCatalog }) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(syncDripifyAction, initialAdminActionState);
+  const configured = catalog.connectors.dripify;
+  const lastSynced = catalog.metrics.reduce<string | null>((latest, metric) => metric.source === "dripify" && metric.lastDate && (!latest || metric.lastDate > latest) ? metric.lastDate : latest, null);
+
+  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
+
+  return <article className="admin-panel admin-trend-connector">
+    <header className="admin-panel-head"><div><p>DRIPIFY SYNC</p><h2>{configured ? "Campaign numbers arrive every night." : "Connect Dripify to chart every campaign."}</h2></div><span>{lastSynced ? `LAST SYNCED ${bucketLabel(lastSynced, "day").toUpperCase()}` : "NOT SYNCED YET"}</span></header>
+    <form action={action}>
+      <div className="admin-form-footer">
+        <div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p>
+          : <p>{configured ? "Each campaign's totals are saved once a day and charted per campaign under “Account or channel”. Sync now to refresh today's numbers." : "Add DRIPIFY_API_KEY in Vercel's environment variables, then redeploy. The key stays on the server."}</p>}</div>
+        <button disabled={pending || !configured} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
+      </div>
+    </form>
+  </article>;
+}
+
 function MetricEntryPanel({ catalog, definitions }: { catalog: MetricCatalog; definitions: Map<string, MetricDefinition> }) {
   const router = useRouter();
   const [groupId, setGroupId] = useState(entryGroups[0].id);
@@ -362,6 +385,21 @@ function DeleteEntryButton({ metricKey, date, dimension }: { metricKey: string; 
 
 function EmptyTrends() {
   return <div className="admin-empty"><i>+</i><b>Pick a number to chart</b><p>Choose up to {MAX_SELECTED} numbers below. Each gets its own chart so different units never share an axis.</p></div>;
+}
+
+/**
+ * Connector accounts (Dripify campaigns) show their names; handles and
+ * channel/method keys are already readable. Own keys only: an account named
+ * "constructor" must not resolve to Object.prototype.
+ */
+function accountLabel(labels: Record<string, string>, key: string) {
+  return Object.hasOwn(labels, key) ? labels[key] : key;
+}
+
+function emptyMessage(definition: MetricDefinition) {
+  if (definition.entryMode === "derived") return "No activity in this range.";
+  if (definition.entryMode === "connector") return "Nothing synced in this range yet.";
+  return "Nothing recorded in this range yet. Log numbers below.";
 }
 
 function summaryLabel(definition: MetricDefinition, series: MetricSeries | null) {

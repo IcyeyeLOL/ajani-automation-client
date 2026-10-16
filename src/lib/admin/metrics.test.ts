@@ -21,6 +21,26 @@ describe("metric catalog", () => {
     expect(catalog.status).toBe("available");
     expect(catalog.metrics[0]).toMatchObject({ key: "youtube.subscribers", aggregation: "last", entryMode: "manual", dimensions: ["@second"] });
     expect(catalog.recentEntries[0].value).toBe(1250);
+    // Catalogs from before the connector migration carry no labels.
+    expect(catalog.dimensionLabels).toEqual({});
+  });
+
+  it("keeps only text display labels for connector accounts", () => {
+    const catalog = shapeMetricCatalog({
+      today: "2026-10-16", metrics: [], recent_entries: [],
+      dimension_labels: { "dripify:10": "Insurance owners TX", "dripify:11": 5, "dripify:12": "" },
+    });
+    expect(catalog.dimensionLabels).toEqual({ "dripify:10": "Insurance owners TX" });
+  });
+
+  it("reports whether Dripify is configured without exposing the key", async () => {
+    vi.stubEnv("DRIPIFY_API_KEY", "dripify-secret");
+    mocks.authorize.mockResolvedValue("user_admin");
+    mocks.rpc.mockResolvedValue({ data: { today: "2026-10-16", metrics: [], recent_entries: [] }, error: null });
+    const catalog = await loadMetricCatalog();
+    expect(catalog.connectors).toEqual({ dripify: true });
+    expect(JSON.stringify(catalog)).not.toContain("dripify-secret");
+    vi.unstubAllEnvs();
   });
 
   it("authorizes, then reports an unavailable catalog instead of an empty healthy one", async () => {

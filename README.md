@@ -141,6 +141,7 @@ Copy `.env.example` to `.env.local` and add only the integrations needed for the
 - **Persistence** — Supabase URL, publishable key, and trusted server key
 - **AI and transcription** — gateway/provider selection, Anthropic fallback, and Deepgram
 - **Operations** — Resend delivery, internal recipients, admin authorization, and cron protection
+- **Analytics connectors** — the Dripify API key for nightly campaign snapshots in the control desk's Trends ([details](./docs/analytics-metric-store.md#dripify-connector))
 - **Abuse prevention** — dedicated secrets for request fingerprints and signed sessions
 - **Future billing** — Stripe values reserved for the billing phase
 

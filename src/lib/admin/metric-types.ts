@@ -37,6 +37,10 @@ export type MetricCatalog = {
   today: string;
   metrics: MetricDefinition[];
   recentEntries: MetricEntry[];
+  /** Display names for connector accounts, such as Dripify campaign names, by account key. */
+  dimensionLabels: Record<string, string>;
+  /** Whether each connector has its credentials configured (never the credentials themselves). */
+  connectors: { dripify: boolean };
 };
 
 export type MetricBucket = {

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   requireAdminSession: vi.fn(),
   revalidatePath: vi.fn(),
+  syncDripifyMetrics: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -19,6 +20,10 @@ vi.mock("@/lib/admin/session", () => ({
   setAdminSessionCookie: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.rpc }) }));
+vi.mock("@/lib/connectors/dripify", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/connectors/dripify")>(),
+  syncDripifyMetrics: mocks.syncDripifyMetrics,
+}));
 
 import {
   createExperimentAction,
@@ -26,6 +31,7 @@ import {
   deleteMetricValueAction,
   logExperimentMetricsAction,
   recordMetricValuesAction,
+  syncDripifyAction,
   voidOutreachBatchAction,
 } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
@@ -289,5 +295,34 @@ describe("admin server actions", () => {
     mocks.rpc.mockClear();
     expect((await voidOutreachBatchAction(initialAdminActionState, form)).status).toBe("error");
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("syncs Dripify on demand only for an admin and reports the outcome plainly", async () => {
+    mocks.syncDripifyMetrics.mockResolvedValue({
+      status: "synced", reason: null, date: "2026-10-16", campaigns: 2, synced: 2, deferred: 0, failed: 0, valuesWritten: 8, labelsWritten: 2,
+    });
+    const result = await syncDripifyAction();
+    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: "success", message: "Synced 2 of 2 campaigns for 2026-10-16 (UTC).", entityId: expect.stringMatching(/^dripify:/) });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
+
+    mocks.syncDripifyMetrics.mockResolvedValue({
+      status: "rejected", reason: "plan_without_api", date: "2026-10-16", campaigns: 0, synced: 0, deferred: 0, failed: 0, valuesWritten: 0, labelsWritten: null,
+    });
+    expect(await syncDripifyAction()).toMatchObject({ status: "error", message: expect.stringMatching(/plan does not include API access/) });
+
+    mocks.requireAdminSession.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mocks.syncDripifyMetrics.mockClear();
+    await expect(syncDripifyAction()).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.syncDripifyMetrics).not.toHaveBeenCalled();
+  });
+
+  it("never shows provider or database errors from a failed Dripify sync", async () => {
+    mocks.syncDripifyMetrics.mockRejectedValue(new Error("relation analytics_dimension_labels does not exist"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await syncDripifyAction();
+    expect(result.status).toBe("error");
+    expect(result.message).not.toMatch(/relation|analytics_/);
+    log.mockRestore();
   });
 });

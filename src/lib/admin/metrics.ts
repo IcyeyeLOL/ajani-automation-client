@@ -13,13 +13,14 @@ export async function loadMetricCatalog(): Promise<MetricCatalog> {
   // The DAL authorizes independently of the layout, which can render in parallel.
   // Outside the try: an auth redirect must never be reported as "unavailable".
   await requireAdminSession();
+  const connectors = { dripify: Boolean(process.env.DRIPIFY_API_KEY?.trim()) };
   try {
     const { data, error } = await withinDeadline(createSupabaseAdminClient().rpc("load_analytics_catalog"), Date.now() + 8_000);
     if (error) throw error;
-    return shapeMetricCatalog(data);
+    return { ...shapeMetricCatalog(data), connectors };
   } catch (error) {
     console.error("Metric catalog unavailable", { code: errorCode(error) });
-    return { status: "unavailable", today: new Date().toISOString().slice(0, 10), metrics: [], recentEntries: [] };
+    return { status: "unavailable", today: new Date().toISOString().slice(0, 10), metrics: [], recentEntries: [], dimensionLabels: {}, connectors };
   }
 }
 
@@ -66,6 +67,10 @@ export function shapeMetricCatalog(raw: unknown): MetricCatalog {
       value: numberOrNull(row.value) ?? 0,
       recordedAt: stringValue(row.recorded_at),
     })),
+    // Absent before the Dripify connector migration: keys then show as-is.
+    dimensionLabels: Object.fromEntries(Object.entries(objectValue(payload.dimension_labels))
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)),
+    connectors: { dripify: false },
   };
 }
 

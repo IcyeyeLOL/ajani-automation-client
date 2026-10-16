@@ -12,8 +12,9 @@ Migrations: `supabase/migrations/20261016000000_outreach_measurement_accuracy.sq
 | `analytics_metric_daily` | Manual and connector values: one row per metric, UTC day and account (`dimension_key`, `''` = main account). |
 | `analytics_daily_values()` | Internal union of stored values and **live-derived** Ajani metrics (drafts, builds, workspaces, outreach). |
 | `load_analytics_series()` | Rolls daily values up to the requested grain and compares with the previous equal-length window. |
-| `load_analytics_catalog()` | Definitions, coverage dates, available accounts/channels, recent manual entries. |
+| `load_analytics_catalog()` | Definitions, coverage dates, the 50 most recently recorded accounts/channels per metric, account display labels, recent manual entries. |
 | `upsert_analytics_metric_values()` / `delete_analytics_metric_value()` | The only write paths. Validating and audited in `admin_activity_log`. |
+| `analytics_dimension_labels` / `upsert_analytics_dimension_labels()` | Display names for connector accounts (Dripify campaign names). Display only; written by connectors. |
 
 All functions are `security definer`, revoked from `anon`/`authenticated`, and executable by `service_role` only. `service_role` can read the tables but cannot write them directly, so every write goes through validation.
 
@@ -58,10 +59,32 @@ A connector is a scheduled server job that calls `upsert_analytics_metric_values
 - For platform-reported rates, store the numerator and denominator as separate `last` or `sum` metrics and define the rate as a `ratio`. Never store a percentage.
 - Re-running a sync for the same day is safe, because the write is an upsert.
 - Daily schedules fit the current Vercel Hobby cron limits.
+- Give accounts a stable key (an ID, never a name) and send the display name through `upsert_analytics_dimension_labels(labels, actor)` with items `{ "dimension": "dripify:12345", "label": "Insurance owners TX" }`. The catalog returns `dimension_labels` for accounts that have data, and the Trends filter shows the name. A renamed account keeps one history; if the name were the key, the old key's last value would carry forward next to the new one and be counted twice.
+
+## Dripify connector
+
+Migration: `supabase/migrations/20261016020000_dripify_connector.sql`. Code: `src/lib/connectors/dripify.ts`. Schedule: `/api/cron/sync-dripify` at 22:00 UTC daily (Vercel Hobby fires within the hour, so a run always lands on the same UTC day, near its end). The control desk's **Dripify sync** panel runs the same job on demand and explains a rejected key or plan in plain language.
+
+| Metric | Aggregation | From Dripify's `GET /campaigns/{id}/statistics` |
+|---|---|---|
+| `dripify.leads_total` | `last` per campaign | `totalLeads` |
+| `dripify.leads_contacted` | `last` per campaign | `contactedLeads` |
+| `dripify.leads_accepted` | `last` per campaign | `acceptanceRateLeads` (leads who accepted) |
+| `dripify.leads_replied` | `last` per campaign | `replyRateLeads` (leads who replied) |
+| `dripify.acceptance_rate` | `ratio` | accepted ÷ contacted |
+| `dripify.reply_rate` | `ratio` | replied ÷ contacted |
+
+- **Exact counts only.** Dripify's `acceptanceRate` and `replyRate` are percentages rounded to one decimal, measured against invitations and messages sent, and the API never returns those bases. A base reverse-engineered from a rounded percentage is approximate, and impossible when nobody has accepted yet, which would overstate the combined rate. The rates here therefore divide by leads contacted. They read lower than Dripify's own screen by design, and they add up exactly across campaigns.
+- **Rates are lifetime rates.** Each snapshot is a campaign's running total, so a bucket's rate is the campaign lifetime rate at the bucket's end. Growth in a period is the change in the totals.
+- **Account key** `dripify:<campaign id>`, labelled with the campaign name. Draft campaigns are skipped. Paused and finished campaigns are still read, because replies keep arriving after a sequence ends. A deleted campaign keeps its last snapshot, so all-time totals still include the people it contacted.
+- **Rate limits.** Dripify allows 60 requests a minute and 5,000 a day. One run makes at most 50 requests, active campaigns first. When there are more campaigns than that, the rest rotate in on later days and keep their last snapshot meanwhile; the run still counts as synced. A 429 pauses every request until `Retry-After`; a longer wait ends the run as partial.
+- **Outcomes.** The cron returns 200 when synced or when no key is configured yet, and 503 when partial or rejected (bad key: 401, plan without the Open API: 403, Open API switched off: 404). A missing or malformed count is skipped, never stored as zero.
+- **Privacy.** Only aggregate counts and campaign names are stored. No lead, prospect or message data is read.
+- **Manual Dripify logs** in Outreach still feed `outreach.*` (channel `linkedin/dripify`). The connector feeds `dripify.*` separately, so neither double counts the other.
 
 ## Release
 
-Apply both migrations in order after the existing release gates in `docs/engineering-remediation-2026-09-05.md`. They are additive. The only data rewrite is the `reply_base` backfill on `outreach_batch_metrics`. The new `replies <= reply_base` check is added `NOT VALID` and validated only if historical rows already satisfy it, so it cannot fail on legacy data. Code and schema can deploy in either order:
+Apply the three migrations in order (`20261016000000`, `20261016010000`, `20261016020000`) after the existing release gates in `docs/engineering-remediation-2026-09-05.md`. They are additive. The only data rewrite is the `reply_base` backfill on `outreach_batch_metrics`. The new `replies <= reply_base` check is added `NOT VALID` and validated only if historical rows already satisfy it, so it cannot fail on legacy data. Code and schema can deploy in either order:
 
 - the dashboard falls back to the initial-DM basis when `reply_base` is absent;
 - failed-save cleanup falls back to a plain delete when the discard RPC is missing;

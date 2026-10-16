@@ -63,13 +63,13 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
 
 ## 4. Not live yet. Release blockers
 
-1. **Production schema is unverified.** `docs/engineering-remediation-2026-09-05.md` release gate 3 says the Sept 2 and Sept 5 migrations were not applied to the connected Supabase project. The new migrations depend on them (`request_cohort_daily`, `admin_analytics_coverage`, `outreach_message_steps`, and so on). Confirm before applying `20261016000000` and then `20261016010000`, in order.
+1. **Production schema is unverified.** `docs/engineering-remediation-2026-09-05.md` release gate 3 says the Sept 2 and Sept 5 migrations were not applied to the connected Supabase project. The new migrations depend on them (`request_cohort_daily`, `admin_analytics_coverage`, `outreach_message_steps`, and so on). Confirm before applying `20261016000000`, `20261016010000` and then `20261016020000` (Dripify connector), in order.
 2. **No Supabase or Vercel connector is attached** to the sessions so far, and there is no live database access from the container. The owner was told to connect them at https://claude.ai/customize/connectors and start a new session. If those tools are available now, use them read-only first: list the applied migrations, then run `npm run check:database-contract` with the owner's approval.
 3. **Deployment needs approval.** Code and schema can deploy in either order: the dashboard falls back to `initial_dms`, the discard RPC falls back to delete, and Trends shows an "apply migrations" banner. Still, per the README, never push to `main` or deploy without explicit approval from the owner.
 
 ## 5. Next work, in the owner's priority order
 
-**Step 3: Dripify connector.** The owner has a key.
+**Step 3: Dripify connector.** Built (code-complete and tested, not live). See `docs/analytics-metric-store.md` → "Dripify connector". Verified 2026-10-16: the host is `https://api.dripify.com/v1/open-api`, and a keyless or wrong-key call returns the documented 401 JSON. Per the OpenAPI spec embedded in the docs page, `acceptanceRateLeads` and `replyRateLeads` are the leads who **accepted** and **replied**, not the rate bases. The bases (invitations and messages sent) are not exposed, so the design note below about using `acceptanceRateLeads` as the basis is superseded: rates divide exact counts by `contactedLeads`. Remaining: the owner adds `DRIPIFY_API_KEY` in Vercel, migration `20261016020000` is applied after the other two, and the control desk's **Sync now** confirms the key and plan. The original brief follows for reference.
 
 - **Setup.**
   - The owner should set `DRIPIFY_API_KEY` in Vercel → Project → Settings → Environment Variables. For live testing in a cloud session, add it as an environment secret or variable through the environment's Edit menu.
