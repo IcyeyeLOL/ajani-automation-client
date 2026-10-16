@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/headers", () => ({ headers: vi.fn() }));
+// No sample-data cookie: these actions run against real numbers.
+vi.mock("next/headers", () => ({ headers: vi.fn(), cookies: async () => ({ get: () => undefined, set: vi.fn() }) }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/admin/session", () => ({

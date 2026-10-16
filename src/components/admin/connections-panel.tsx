@@ -26,12 +26,12 @@ const synced: Record<ConnectionCard["id"], { always: string; analytics?: string;
   },
 };
 
-export function Connections({ board }: { board: ConnectionBoard }) {
+export function Connections({ board, sampleMode = false }: { board: ConnectionBoard; sampleMode?: boolean }) {
   return <div className="admin-section-stack">
     {board.status === "unavailable" ? <p className="admin-data-notice" role="status">Sync history is unavailable until the platform connectors migration is applied. Settings below are still accurate.</p> : null}
     <section className="admin-connection-grid">
-      {board.connectors.map((connector) => <ConnectorCard connector={connector} key={connector.id} />)}
-      <DripifyCard summary={board.dripify} />
+      {board.connectors.map((connector) => <ConnectorCard connector={connector} key={connector.id} sampleMode={sampleMode} />)}
+      <DripifyCard sampleMode={sampleMode} summary={board.dripify} />
       <RedditCard />
       <IngestCard enabled={board.ingest.enabled} keyTooShort={board.ingest.keyTooShort} path={board.ingest.path} />
     </section>
@@ -43,7 +43,7 @@ export function Connections({ board }: { board: ConnectionBoard }) {
   </div>;
 }
 
-function ConnectorCard({ connector }: { connector: ConnectionCard }) {
+function ConnectorCard({ connector, sampleMode }: { connector: ConnectionCard; sampleMode: boolean }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(syncConnectorAction, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
@@ -63,16 +63,17 @@ function ConnectorCard({ connector }: { connector: ConnectionCard }) {
     </div>
     <form action={action}>
       <input name="connector" type="hidden" value={connector.id} />
+      {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
       <div className="admin-form-footer">
         <div>{outcome ? <p className={`admin-form-message ${outcome.status}`} role="status">{outcome.message}</p>
-          : <p>{connector.configured ? "Syncs every night. Sync now to read the last few days again." : "Add the settings in Vercel, redeploy, then sync."}</p>}</div>
-        <button disabled={pending || !connector.configured} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
+          : <p>{!connector.configured ? "Add the settings in Vercel, redeploy, then sync." : sampleMode ? SAMPLE_SYNC_NOTE : "Syncs every night. Sync now to read the last few days again."}</p>}</div>
+        <button disabled={pending || !connector.configured || sampleMode} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
       </div>
     </form>
   </article>;
 }
 
-function DripifyCard({ summary }: { summary: DripifySummary }) {
+function DripifyCard({ summary, sampleMode }: { summary: DripifySummary; sampleMode: boolean }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(syncDripifyAction, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
@@ -95,14 +96,17 @@ function DripifyCard({ summary }: { summary: DripifySummary }) {
       {low.length ? <p>Add leads to {low.length === 1 ? "this campaign" : "these campaigns"} in Dripify soon, or {low.length === 1 ? "it stops" : "they stop"} reaching new people.</p> : null}
     </div>
     <form action={action}>
+      {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
       <div className="admin-form-footer">
         <div>{state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p>
-          : <p>{summary.configured ? "Syncs every night. Charts live under Trends → Dripify. A rejected key is explained when you sync." : "Add DRIPIFY_API_KEY in Vercel (Dripify → Settings → API & Integrations), redeploy, then sync."}</p>}</div>
-        <button disabled={pending || !summary.configured} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
+          : <p>{summary.configured && sampleMode ? `Charts live under Trends → Dripify. ${SAMPLE_SYNC_NOTE}` : summary.configured ? "Syncs every night. Charts live under Trends → Dripify. A rejected key is explained when you sync." : "Add DRIPIFY_API_KEY in Vercel (Dripify → Settings → API & Integrations), redeploy, then sync."}</p>}</div>
+        <button disabled={pending || !summary.configured || sampleMode} type="submit">{pending ? "SYNCING" : "SYNC NOW"}<b>→</b></button>
       </div>
     </form>
   </article>;
 }
+
+const SAMPLE_SYNC_NOTE = "Sample data is on, so syncing is paused. Switch to real data to sync now.";
 
 function shortDay(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)).toUpperCase();

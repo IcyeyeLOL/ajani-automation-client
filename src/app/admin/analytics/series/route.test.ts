@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ session: vi.fn(), rpc: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), rpc: vi.fn(), createClient: vi.fn(), cookie: vi.fn() }));
 vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: mocks.cookie }) }));
 vi.mock("@/lib/admin/session", () => ({ resolveAdminSession: mocks.session }));
-vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.rpc }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => mocks.createClient() }));
 
 import { GET } from "@/app/admin/analytics/series/route";
 
@@ -13,6 +14,9 @@ describe("admin metric series route", () => {
   beforeEach(() => {
     mocks.session.mockReset();
     mocks.rpc.mockReset();
+    mocks.cookie.mockReset();
+    mocks.createClient.mockReset();
+    mocks.createClient.mockReturnValue({ rpc: mocks.rpc });
   });
 
   it("requires an admin session before touching the database", async () => {
@@ -68,5 +72,45 @@ describe("admin metric series route", () => {
 
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "missing" } });
     expect((await GET(new Request(url))).status).toBe(503);
+  });
+});
+
+describe("admin metric series route in sample mode", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-16T12:00:00.000Z"));
+    mocks.session.mockReset();
+    mocks.rpc.mockReset();
+    mocks.createClient.mockReset();
+    mocks.cookie.mockReset();
+    mocks.cookie.mockImplementation((name: string) => name === "ajani_admin_sample" ? { name, value: "1" } : undefined);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // The browser builds sample series itself, so a request here comes from a tab
+  // still showing real numbers: made-up series would be charted as real.
+  it("refuses instead of sending made-up series to a tab showing real numbers", async () => {
+    mocks.session.mockResolvedValue({ status: "allowed", userId: "user_admin" });
+    const response = await GET(new Request(url));
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({ error: "Sample data was switched on in another tab. Refresh the page to see it." });
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("still requires an admin session and a valid query", async () => {
+    mocks.session.mockResolvedValue({ status: "unauthorized" });
+    expect((await GET(new Request(url))).status).toBe(401);
+    mocks.session.mockResolvedValue({ status: "forbidden" });
+    expect((await GET(new Request(url))).status).toBe(404);
+    expect(mocks.cookie).not.toHaveBeenCalled();
+
+    mocks.session.mockResolvedValue({ status: "allowed", userId: "user_admin" });
+    expect((await GET(new Request("https://ajani.test/admin/analytics/series?metrics=DROP%20TABLE&grain=week&from=2026-09-07&to=2026-10-16"))).status).toBe(400);
+    // Any valid query is refused without reading the database.
+    expect((await GET(new Request("https://ajani.test/admin/analytics/series?metrics=youtube.views&grain=day&from=2023-01-01&to=2026-10-16"))).status).toBe(409);
+    expect(mocks.createClient).not.toHaveBeenCalled();
   });
 });

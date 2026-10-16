@@ -24,6 +24,7 @@ import {
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
 import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
 import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
+import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/admin/sample-mode";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
@@ -57,16 +58,48 @@ export async function unlockAdminAction(_state: AdminActionState, formData: Form
   }
 
   await setAdminSessionCookie(configuration.sessionSecret);
+  // Every session starts on real numbers; an older sample switch must not outlive it.
+  await clearSampleModeCookie();
   redirect("/admin");
 }
 
 export async function logoutAdminAction() {
   await clearAdminSessionCookie();
+  // The next unlock starts on real numbers.
+  await clearSampleModeCookie();
   redirect("/admin/login");
+}
+
+/** Turns "Sample data" on ("1") or off ("0"). Only changes what the desk renders. */
+export async function setSampleModeAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  await requireAdminSession();
+  const enabled = formData.get("enabled");
+  if (enabled !== "1" && enabled !== "0") return { status: "error", message: "Choose whether sample data is on or off." };
+  if (enabled === "1") await setSampleModeCookie();
+  else await clearSampleModeCookie();
+  revalidatePath("/admin");
+  return {
+    status: "success",
+    message: enabled === "1" ? "Sample data is on. Nothing you see is real." : "Showing real numbers again.",
+    entityId: `sample:${enabled}:${Date.now()}`,
+  };
+}
+
+/**
+ * Made-up numbers must never reach the database: while sample data is shown,
+ * every write refuses before it parses input or opens a database client.
+ * Forms rendered with sample data also send sample=1, so a tab left open after
+ * the switch was turned off elsewhere cannot change real numbers.
+ */
+async function refusedInSampleMode(formData?: FormData): Promise<AdminActionState | null> {
+  if (formData?.get("sample") === "1") return { status: "error", message: "This page is showing sample data, so nothing was saved. Refresh the page to work with real numbers." };
+  return await isSampleMode() ? { status: "error", message: "Sample data was switched on in another tab, so nothing was saved. Refresh the page." } : null;
 }
 
 export async function createExperimentAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   const parsed = outreachExperimentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the experiment details." };
   const variantTitles = parsed.data.variants.split(",").map((variant) => variant.trim()).filter(Boolean);
@@ -96,6 +129,8 @@ export async function createExperimentAction(_state: AdminActionState, formData:
 
 export async function createOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   let metrics: unknown;
   try {
     metrics = JSON.parse(String(formData.get("metrics") || "[]"));
@@ -141,6 +176,8 @@ export async function createOutreachBatchAction(_state: AdminActionState, formDa
 
 export async function logExperimentMetricsAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   let metrics: unknown;
   try {
     metrics = JSON.parse(String(formData.get("metrics") || "[]"));
@@ -181,6 +218,8 @@ export async function logExperimentMetricsAction(_state: AdminActionState, formD
 
 export async function voidOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   const parsed = outreachVoidSchema.safeParse({ batchId: formData.get("batchId"), reason: formData.get("reason") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Add a reason for voiding this entry." };
 
@@ -203,6 +242,8 @@ export async function voidOutreachBatchAction(_state: AdminActionState, formData
 /** Upserts: re-entering a day replaces its value instead of adding to it. */
 export async function recordMetricValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   let values: unknown;
   try {
     values = JSON.parse(String(formData.get("values") || "[]"));
@@ -234,6 +275,8 @@ export async function recordMetricValuesAction(_state: AdminActionState, formDat
 
 export async function deleteMetricValueAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   const parsed = metricDeletionSchema.safeParse({
     metricKey: formData.get("metricKey"),
     date: formData.get("date"),
@@ -259,8 +302,10 @@ export async function deleteMetricValueAction(_state: AdminActionState, formData
 }
 
 /** Same job as the nightly cron, run on demand so a new key can be checked immediately. */
-export async function syncDripifyAction(): Promise<AdminActionState> {
+export async function syncDripifyAction(_state?: AdminActionState, formData?: FormData): Promise<AdminActionState> {
   await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   try {
     // Inside the dashboard page's maxDuration, with room to render the result.
     const result = await syncDripifyMetrics({ deadlineAt: Date.now() + 45_000 });
@@ -274,6 +319,8 @@ export async function syncDripifyAction(): Promise<AdminActionState> {
 
 export async function syncConnectorAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
   const connector = formData.get("connector");
   if (!isConnectorId(connector)) return { status: "error", message: "Choose YouTube or Instagram to sync." };
   try {

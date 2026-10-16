@@ -148,9 +148,18 @@ The catalog was checked against the owner's notes, the Growth Goal Sheet and the
 - **X retired.** No note shows X in use. Its definitions are inactive and their data is kept.
 - **Overview money cards removed.** "Quoted pipeline" and "Monthly retainers" read `build_request_quotes` and `billing_subscriptions`, which nothing writes, so they always showed $0. The goals panel shows the revenue the owner logs.
 - **Accounts are picked, not typed.** The entry form lists existing accounts plus "Add another account…". A handle typed two ways would otherwise become two accounts whose followers add up forever. Sales and revenue have no account field.
-- **Trends defaults follow the goals:** clients signed, revenue collected, MRR, LinkedIn followers, calls booked, Dripify reply rate, outreach touches and briefs saved. The saved-view key moved to `ajani_admin_trends_v2`.
+- **Trends defaults follow the goals:** clients signed, revenue collected, MRR, LinkedIn followers, calls booked, Dripify reply rate, outreach touches and briefs saved. The saved-view key moved to `ajani_admin_trends_v2`. The Trends rebuild later moved it to `ajani_admin_trends_v3`, with up to 8 picks per view; it migrates v2 picks into the "Key numbers" view and keeps saved keys even while the catalog is unavailable.
 
 Known limits, not changed: brief → build conversion reads low for the newest periods because recent briefs have had less time to convert. Comparisons assume manual numbers are logged as regularly in both windows. Outreach periods before the first logged batch read 0. Entry dates default to the UTC day.
+
+## Sample data mode
+
+The sidebar switch **SAMPLE DATA** shows every section filled with made-up numbers, so the owner can see each chart before the real data exists. Nothing is ever written.
+
+- **Switch.** `setSampleModeAction` sets the cookie `ajani_admin_sample=1` (httpOnly, SameSite strict, `path=/admin`, 8 hours). Locking or unlocking the desk clears it, so every session starts on real numbers.
+- **Rendering only.** `src/app/admin/(dashboard)/page.tsx` renders `sampleDashboardData`, `sampleGoalBoard` and `sampleMetricCatalog` from `src/lib/admin/sample-data.ts`. These are deterministic generators with no randomness and no real names. The real metric definitions are still read so Trends shows the same numbers. Connections always shows the real setup. A red banner stays on screen in every section.
+- **Trends in the browser.** In sample mode the Trends client builds its series from a lazily imported `sample-data` and never calls `/admin/analytics/series`. If that route is called while the cookie is set, it answers 409. Such a request comes from a tab still showing real numbers, which must not chart made-up series.
+- **Writes refuse twice over.** Every write action refuses when the cookie is set, and also when the form carries `sample=1`. Every form rendered in sample mode adds that field and disables its button. A tab left on sample data after the switch is turned off elsewhere therefore cannot save or delete real numbers. `actions.sample.test.ts` enumerates the exported actions, so a new unguarded write fails the suite.
 
 ## Release
 
