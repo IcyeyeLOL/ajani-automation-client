@@ -123,11 +123,14 @@ describe("growth goal pace", () => {
     expect(goalProgress(goal({ startDate: "2026-10-20" }), today, weekStart).status).toBe("not_started");
     expect(goalProgress(goal({ current: 6 }), today, weekStart)).toMatchObject({ status: "reached", share: 1, remaining: 0 });
     expect(goalProgress(goal({ dueDate: "2026-10-01", current: 3 }), today, weekStart)).toMatchObject({ status: "missed", daysLeft: 0 });
+    expect(goalProgress(goal({ dueDate: "2026-10-01", current: null }), today, weekStart)).toMatchObject({ status: "missed", share: null });
+    expect(goalProgress(goal({ measure: "weekly", dueDate: null, startDate: "2026-10-20", current: 1 }), today, weekStart).status).toBe("not_started");
   });
 
   it("phrases the pace still needed in the goal's own unit", () => {
     expect(goalRateLabel({ unit: "count" }, 4, 77)).toBe("about 1 every 2.8 weeks");
     expect(goalRateLabel({ unit: "count" }, 30, 77)).toBe("about 3 a week");
+    expect(goalRateLabel({ unit: "count" }, 10, 72)).toBe("about 1 a week");
     expect(goalRateLabel({ unit: "currency_cents" }, 400_000, 77)).toBe("about $364 a week");
     expect(goalRateLabel({ unit: "count" }, 0, 77)).toBeNull();
     expect(goalRateLabel({ unit: "count" }, 3, 5)).toBeNull();

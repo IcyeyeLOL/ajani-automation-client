@@ -34,6 +34,20 @@ begin
   exception when others then failed := true;
   end;
   if not failed then raise exception 'only weekly goals may omit a deadline'; end if;
+  begin
+    insert into public.analytics_goals (goal_key, metric_key, label, description, measure, target, start_date, due_date)
+    values ('audit_ancient', 'sales.deals_won', 'Ancient', 'Too early', 'total', 1, date '1999-12-31', date '2000-06-01');
+    failed := false;
+  exception when others then failed := true;
+  end;
+  if not failed then raise exception 'a start date the series function rejects must be refused up front'; end if;
+  -- ...and from the metric's side: a measured metric keeps its aggregation.
+  begin
+    update public.analytics_metric_definitions set aggregation = 'sum' where metric_key = 'revenue.mrr';
+    failed := false;
+  exception when others then failed := sqlerrm like '%measured by a goal%';
+  end;
+  if not failed then raise exception 'changing the aggregation of a metric a goal measures must be rejected'; end if;
 
   ---------------------------------------------------------------------------
   -- Measurement, with relative dates so the fixture never ages out.
@@ -45,7 +59,8 @@ begin
     ('audit_weekly', 'linkedin.posts_published', 'Weekly', 'Per week', 'weekly', 3, today - 30, null, 3),
     ('audit_unknown', 'revenue.cash_collected', 'Unknown', 'Nothing recorded', 'total', 500000, today - 10, today + 100, 4),
     ('audit_future', 'revenue.mrr', 'Future', 'Not started', 'latest', 200000, today + 5, today + 100, 5),
-    ('audit_retired', 'x.followers', 'Retired', 'Inactive metric', 'latest', 10, today - 10, today + 100, 6);
+    ('audit_retired', 'x.followers', 'Retired', 'Inactive metric', 'latest', 10, today - 10, today + 100, 6),
+    ('audit_weekly_future', 'linkedin.posts_published', 'Weekly later', 'Starts soon', 'weekly', 3, today + 3, null, 7);
 
   perform public.upsert_analytics_metric_values(jsonb_build_array(
     -- One deal the day before the goal began must not count.
@@ -60,14 +75,16 @@ begin
     jsonb_build_object('metricKey', 'linkedin.posts_published', 'date', today, 'value', 2),
     jsonb_build_object('metricKey', 'linkedin.posts_published', 'date', this_week - 7, 'value', 1),
     jsonb_build_object('metricKey', 'linkedin.posts_published', 'date', this_week - 1, 'value', 1),
-    jsonb_build_object('metricKey', 'linkedin.posts_published', 'date', this_week - 8, 'value', 1)
+    jsonb_build_object('metricKey', 'linkedin.posts_published', 'date', this_week - 8, 'value', 1),
+    -- Cash from before a running total began is neither progress nor its "last logged" day.
+    jsonb_build_object('metricKey', 'revenue.cash_collected', 'date', today - 11, 'value', 90000)
   ), 'manual', 'audit_goals');
 
   payload := public.load_analytics_goals();
   if (payload->>'today')::date <> today or (payload->>'week_start')::date <> this_week then
     raise exception 'goal payload must state its UTC day and week: %', payload;
   end if;
-  if jsonb_array_length(payload->'goals') <> 5 or exists (
+  if jsonb_array_length(payload->'goals') <> 6 or exists (
     select 1 from jsonb_array_elements(payload->'goals') g where g->>'goal_key' in ('audit_retired', 'clients_signed')
   ) then
     raise exception 'inactive goals and goals on retired metrics must be left out: %', payload->'goals';
@@ -98,6 +115,13 @@ begin
   if item->'current' <> 'null'::jsonb then
     raise exception 'a goal that has not started has no progress yet: %', item;
   end if;
+  select value into item from jsonb_array_elements(payload->'goals') where value->>'goal_key' = 'audit_weekly_future';
+  if item->'current' <> 'null'::jsonb or item->'last_week' <> 'null'::jsonb then
+    raise exception 'a weekly goal that has not started has no progress yet: %', item;
+  end if;
+
+  -- Retiring a goal is a plain update; only metric and measure changes are re-checked.
+  update public.analytics_goals set active = false where goal_key = 'audit_future';
 
   -- A goal agrees with a daily Trends chart of the same metric and range
   -- (week and month charts round the start back to the period start).

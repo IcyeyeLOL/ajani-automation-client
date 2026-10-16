@@ -179,8 +179,10 @@ export function goalProgress(goal: Goal, today: string, weekStart: string): Goal
   const end = goal.measure === "weekly" ? addDays(weekStart, 6) : goal.dueDate ?? today;
   const totalDays = Math.max(1, dayCount(start, end));
   const daysLeft = Math.max(0, dayCount(today, end) - 1);
-  if (today < start) return { status: "not_started", share: null, expected: null, expectedShare: null, remaining: null, daysLeft };
-  if (goal.current === null) return { status: "not_logged", share: null, expected: null, expectedShare: null, remaining: null, daysLeft };
+  const unmeasured = { share: null, expected: null, expectedShare: null, remaining: null, daysLeft };
+  // A weekly goal also waits for its own start date before its first week counts.
+  if (today < goal.startDate || today < start) return { status: "not_started", ...unmeasured };
+  if (goal.current === null) return { status: today > end ? "missed" : "not_logged", ...unmeasured };
 
   const share = clampShare(goal.current / goal.target);
   const remaining = Math.max(0, goal.target - goal.current);
@@ -203,7 +205,8 @@ export function goalRateLabel(goal: Pick<Goal, "unit">, remaining: number | null
   const weeks = daysLeft / 7;
   if (weeks <= 1) return null;
   const perWeek = remaining / weeks;
-  if (goal.unit === "count" && perWeek < 1) {
+  // Just under one a week reads as "about 1 a week", never "1 every 1 weeks".
+  if (goal.unit === "count" && perWeek < 0.95) {
     return `about 1 every ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(weeks / remaining)} weeks`;
   }
   return `about ${formatMetricValue(goal.unit === "count" ? Math.ceil(perWeek) : perWeek, goal.unit, "compact")} a week`;

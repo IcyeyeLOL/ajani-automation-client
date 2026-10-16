@@ -109,7 +109,7 @@ export function AdminDashboard({ data, catalog, goals }: { data: AdminDashboardD
       {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} /> : null}
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
       {activeSection === "operations" ? <Operations data={data} /> : null}
-      </> : null}
+      </> : activeSection === "overview" ? <div className="admin-section-stack"><GrowthGoals board={goals} onNavigate={setActiveSection} /></div> : null}
     </section>
   </main>;
 }

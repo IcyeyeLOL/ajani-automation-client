@@ -240,9 +240,13 @@ describe("Dripify sync helpers", () => {
     ]);
   });
 
-  it("records a campaign's counts together or not at all, so a rate never mixes days", () => {
-    expect(statisticCounts({ campaignId: 7, contactedLeads: 150, acceptanceRateLeads: 45, replyRateLeads: 12 }, 7)).toBeNull();
+  it("records a campaign's rate counts together or not at all, so a rate never mixes days", () => {
     expect(statisticCounts(stats(7, { contactedLeads: null }), 7)).toBeNull();
+    expect(statisticCounts(stats(7, { replyRateLeads: 1.5 }), 7)).toBeNull();
+    // Leads loaded feeds no rate, so its absence does not hold back the others.
+    expect(statisticCounts({ campaignId: 7, contactedLeads: 150, acceptanceRateLeads: 45, replyRateLeads: 12 }, 7)).toEqual([
+      ["dripify.leads_contacted", 150], ["dripify.leads_accepted", 45], ["dripify.leads_replied", 12],
+    ]);
   });
 
   it("reads Retry-After as seconds or a date", () => {

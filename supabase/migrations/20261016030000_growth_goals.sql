@@ -76,7 +76,8 @@ create table public.analytics_goals (
   description text not null check (char_length(description) between 2 and 300),
   measure text not null check (measure in ('total', 'latest', 'weekly')),
   target numeric not null check (target > 0),
-  start_date date not null,
+  -- The series function rejects dates before 2000; one bad row must not hide every goal.
+  start_date date not null check (start_date >= date '2000-01-01'),
   -- Weekly goals repeat every week; the others have a deadline at most two years out.
   due_date date check (due_date > start_date and due_date - start_date <= 730),
   sort_order smallint not null default 0,
@@ -101,9 +102,24 @@ begin
   return new;
 end;
 $$;
-create trigger analytics_goals_metric_check before insert or update on public.analytics_goals
+create trigger analytics_goals_metric_check before insert or update of metric_key, measure on public.analytics_goals
 for each row execute function public.check_analytics_goal_metric();
 revoke all on function public.check_analytics_goal_metric() from public, anon, authenticated;
+
+-- The same rule from the other side: a metric a goal measures keeps its aggregation.
+create function public.protect_goal_metric_aggregation() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if exists (select 1 from public.analytics_goals g where g.metric_key = new.metric_key) then
+    raise exception 'Metric % is measured by a goal; change or remove the goal before changing its aggregation', new.metric_key;
+  end if;
+  return new;
+end;
+$$;
+create trigger analytics_metric_definitions_goal_aggregation before update of aggregation on public.analytics_metric_definitions
+for each row when (old.aggregation is distinct from new.aggregation)
+execute function public.protect_goal_metric_aggregation();
+revoke all on function public.protect_goal_metric_aggregation() from public, anon, authenticated;
 
 insert into public.analytics_goals (goal_key, metric_key, label, description, measure, target, start_date, due_date, sort_order) values
   ('clients_signed', 'sales.deals_won', 'Clients signed',
@@ -135,8 +151,10 @@ begin
   for goal in
     select g.goal_key, g.metric_key, g.label, g.description, g.measure, g.target, g.start_date, g.due_date,
       d.unit, d.entry_mode,
+      -- Within the goal's window: a running total only counts days from its start.
       (select max(f.metric_date) from public.analytics_metric_daily f
-        where f.metric_key = g.metric_key and f.metric_date <= today) as last_recorded
+        where f.metric_key = g.metric_key and f.metric_date <= least(today, coalesce(g.due_date, today))
+          and (g.measure <> 'total' or f.metric_date >= g.start_date)) as last_recorded
     from public.analytics_goals g
     join public.analytics_metric_definitions d on d.metric_key = g.metric_key and d.active
     where g.active
@@ -144,10 +162,12 @@ begin
   loop
     measured := null;
     previous_week := null;
-    if goal.measure = 'weekly' then
+    if goal.start_date > today then
+      null; -- Not started: no progress yet.
+    elsif goal.measure = 'weekly' then
       measured := public.load_analytics_series(array[goal.metric_key], 'week', this_week, today) #> '{series,0}';
       previous_week := public.load_analytics_series(array[goal.metric_key], 'week', this_week - 7, this_week - 1) #> '{series,0}';
-    elsif goal.start_date <= today then
+    else
       -- Day grain keeps the range exactly at the start date (no rounding to a month).
       measured := public.load_analytics_series(array[goal.metric_key], 'day', goal.start_date, least(today, goal.due_date)) #> '{series,0}';
     end if;

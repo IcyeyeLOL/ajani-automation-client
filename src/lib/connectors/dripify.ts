@@ -29,6 +29,7 @@ const statisticFields = [
   ["dripify.leads_accepted", "acceptanceRateLeads"],
   ["dripify.leads_replied", "replyRateLeads"],
 ] as const;
+const rateFields = ["dripify.leads_contacted", "dripify.leads_accepted", "dripify.leads_replied"] as const;
 
 export type DripifyCampaign = { id: number; name: string; status: string };
 
@@ -202,9 +203,11 @@ export function campaignsForRun(campaigns: DripifyCampaign[], slots: number, day
 }
 
 /**
- * Reads one statistics payload: all four counts or none. A partial snapshot
- * would pair a new numerator with a stale, carried-forward denominator and skew
- * the rates. Missing or malformed counts are never recorded as zero.
+ * Reads one statistics payload. The three counts the rates are built from
+ * (contacted, accepted, replied) are stored together or not at all: a partial
+ * snapshot would pair a new numerator with a stale, carried-forward
+ * denominator. Leads loaded is stored when valid. Missing or malformed counts
+ * are never recorded as zero.
  */
 export function statisticCounts(payload: unknown, campaignId: number) {
   if (!payload || typeof payload !== "object") return null;
@@ -214,7 +217,7 @@ export function statisticCounts(payload: unknown, campaignId: number) {
     const value = record[field];
     return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? [[metricKey, value] as const] : [];
   });
-  return counts.length === statisticFields.length ? counts : null;
+  return rateFields.every((metricKey) => counts.some(([key]) => key === metricKey)) ? counts : null;
 }
 
 export function retryAfterMs(value: string | null, now = Date.now()) {

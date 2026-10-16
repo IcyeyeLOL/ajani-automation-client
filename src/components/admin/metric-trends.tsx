@@ -364,7 +364,8 @@ function EntryForm({ accounts, action, entityId, fields, today, pending, status,
           {accounts.map((key) => <option key={key} value={key}>{key}</option>)}
           <option value={NEW_ACCOUNT}>Add another account…</option>
         </select>
-        {account === NEW_ACCOUNT ? <input aria-label="New account handle" autoFocus maxLength={80} name="dimension" placeholder="@handle" required /> : null}
+        {/* A blank handle would quietly save to the main account. */}
+        {account === NEW_ACCOUNT ? <input aria-label="New account handle" autoFocus maxLength={80} name="dimension" pattern=".*\S.*" placeholder="@handle" required title="Enter a handle, like @ajaniflow" /> : null}
         <small>{account === NEW_ACCOUNT ? "Only for a second profile or page. Your main account is already tracked." : "Pick the same account every time so totals are never counted twice."}</small>
       </label> : <input name="dimension" type="hidden" value="" />}
     </div>
