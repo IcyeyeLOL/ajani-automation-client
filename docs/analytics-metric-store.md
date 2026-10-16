@@ -156,6 +156,7 @@ Known limits, not changed: brief → build conversion reads low for the newest p
 
 The sidebar switch **SAMPLE DATA** shows every section filled with made-up numbers, so the owner can see each chart before the real data exists. Nothing is ever written.
 
+- **Offered while tracking is new.** Until any logged or synced number goes back 14 days, or outreach has been logged on 14 days (`isEarlyTracking`), every section except Connections shows "Just getting started" with a SHOW SAMPLE DATA button. The sidebar switch alone was easy to miss.
 - **Switch.** `setSampleModeAction` sets the cookie `ajani_admin_sample=1` (httpOnly, SameSite strict, `path=/admin`, 8 hours). Locking or unlocking the desk clears it, so every session starts on real numbers.
 - **Rendering only.** `src/app/admin/(dashboard)/page.tsx` renders `sampleDashboardData`, `sampleGoalBoard` and `sampleMetricCatalog` from `src/lib/admin/sample-data.ts`. These are deterministic generators with no randomness and no real names. The real metric definitions are still read so Trends shows the same numbers. Connections always shows the real setup. A red banner stays on screen in every section.
 - **Trends in the browser.** In sample mode the Trends client builds its series from a lazily imported `sample-data` and never calls `/admin/analytics/series`. If that route is called while the cookie is set, it answers 409. Such a request comes from a tab still showing real numbers, which must not chart made-up series.

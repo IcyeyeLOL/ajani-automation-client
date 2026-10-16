@@ -15,7 +15,7 @@ import { MetricTrends } from "@/components/admin/metric-trends";
 import { Connections } from "@/components/admin/connections-panel";
 import { DemandBars, OutreachFunnel, SystemHealth, VariantChart } from "@/components/admin/section-charts";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, type GoalProgress, type GoalStatus } from "@/lib/admin/metric-query";
+import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, isEarlyTracking, type GoalProgress, type GoalStatus } from "@/lib/admin/metric-query";
 import { optionLabel, plural } from "@/lib/admin/display-labels";
 import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
 import type { ConnectionBoard } from "@/lib/admin/connection-types";
@@ -72,6 +72,7 @@ export function AdminDashboard({ data, catalog, goals, connections, sampleMode =
   const [openLog, setOpenLog] = useState(false);
   if (openLog && activeSection !== "trends") setOpenLog(false);
   const logNumbers = () => { setOpenLog(true); setActiveSection("trends"); };
+  const earlyTracking = !sampleMode && isEarlyTracking(catalog.metrics, data.trend.filter((point) => point.outreach > 0).length, catalog.today);
   const [isRefreshing, startRefresh] = useTransition();
   const lastAutomaticRefreshAt = useRef(0);
 
@@ -114,6 +115,7 @@ export function AdminDashboard({ data, catalog, goals, connections, sampleMode =
       <AdminHeader section={activeSection} generatedAt={data.generatedAt} isRefreshing={isRefreshing} onRefresh={refreshDashboard} />
       {!data.outreachSchemaReady ? <SetupBanner connected={data.dataConnected} /> : null}
       {data.dataNotice && activeSection !== "trends" && activeSection !== "connections" ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
+      {earlyTracking && activeSection !== "connections" ? <EarlyTrackingPrompt /> : null}
       {data.dataStatus !== "unavailable" ? <>
       {activeSection === "overview" ? <Overview data={data} goals={goals} onLogNumbers={logNumbers} onNavigate={setActiveSection} /> : null}
       {activeSection === "outreach" ? <Outreach data={data} key={data.pagination.experimentPage} sampleMode={sampleMode} /> : null}
@@ -126,6 +128,24 @@ export function AdminDashboard({ data, catalog, goals, connections, sampleMode =
       {activeSection === "connections" ? <Connections board={connections} sampleMode={sampleMode} /> : null}
     </section>
   </main>;
+}
+
+/** Offered while tracking is new and most charts are empty, so the sample switch is not missed. */
+function EarlyTrackingPrompt() {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(setSampleModeAction, initialAdminActionState);
+  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
+  return <aside aria-label="Tracking just started" className="admin-early-prompt">
+    <div>
+      <span>JUST GETTING STARTED</span>
+      <strong>Tracking began recently, so most charts are still empty. Want to see how they will look once numbers come in?</strong>
+      <small role={state.status === "error" ? "status" : undefined}>{state.status === "error" ? state.message : "Sample data fills every chart with made-up numbers. Nothing is saved, and you can switch back any time."}</small>
+    </div>
+    <form action={action}>
+      <input name="enabled" type="hidden" value="1" />
+      <button disabled={pending} type="submit">{pending ? "SWITCHING" : "SHOW SAMPLE DATA"}<b>→</b></button>
+    </form>
+  </aside>;
 }
 
 /** Shown above every section while sample data is on, so made-up numbers are never mistaken for real ones. */

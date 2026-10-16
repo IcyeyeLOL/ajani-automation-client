@@ -12,6 +12,7 @@ import {
   goalProgress,
   goalRateLabel,
   grainForPeriod,
+  isEarlyTracking,
   isLifetimeRate,
   metricChange,
   metricSeriesSearch,
@@ -33,6 +34,31 @@ import {
   viewPicks,
 } from "@/lib/admin/metric-query";
 import type { Goal } from "@/lib/admin/metric-types";
+
+describe("early tracking", () => {
+  const today = "2026-10-16";
+  const stored = (firstDate: string | null, entryMode: "manual" | "connector" | "derived" = "connector") => ({ entryMode, firstDate });
+
+  it("is early with nothing stored, or with only recent numbers and little outreach", () => {
+    expect(isEarlyTracking([], 0, today)).toBe(true);
+    // The live desk on 2026-10-16: one Dripify sync, no outreach logged.
+    expect(isEarlyTracking([stored("2026-10-16"), stored(null, "manual")], 0, today)).toBe(true);
+    expect(isEarlyTracking([stored("2026-10-03")], 13, today)).toBe(true);
+  });
+
+  it("stops once any logged or synced number goes back two weeks", () => {
+    expect(isEarlyTracking([stored("2026-10-02")], 0, today)).toBe(false);
+    expect(isEarlyTracking([stored("2026-01-05", "manual")], 0, today)).toBe(false);
+  });
+
+  it("stops once outreach was logged on 14 days", () => {
+    expect(isEarlyTracking([], 14, today)).toBe(false);
+  });
+
+  it("ignores live-derived metrics, which carry no first date", () => {
+    expect(isEarlyTracking([stored("2025-01-01", "derived")], 0, today)).toBe(true);
+  });
+});
 
 describe("trend ranges", () => {
   it("ends today and starts on a complete period boundary for every grain", () => {

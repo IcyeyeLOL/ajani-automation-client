@@ -503,6 +503,20 @@ export function dayCount(from: string, to: string) {
   return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / 86_400_000) + 1;
 }
 
+/** History the desk needs before its charts stop looking mostly empty. */
+export const EARLY_TRACKING_DAYS = 14;
+
+/**
+ * True while no logged or synced number goes back two weeks and outreach was
+ * logged on fewer than 14 days: most charts are still empty, so the desk offers
+ * sample data to show how they will look.
+ */
+export function isEarlyTracking(metrics: Array<Pick<MetricDefinition, "entryMode" | "firstDate">>, outreachDays: number, today: string) {
+  const cutoff = addDays(today, -EARLY_TRACKING_DAYS);
+  return outreachDays < EARLY_TRACKING_DAYS
+    && !metrics.some((metric) => metric.entryMode !== "derived" && metric.firstDate !== null && metric.firstDate <= cutoff);
+}
+
 export function parseDay(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
