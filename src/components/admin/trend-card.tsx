@@ -3,6 +3,7 @@
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
 import {
   axisDateLabel,
+  axisFromZero,
   axisLabels,
   axisTicks,
   bucketLabel,
@@ -56,7 +57,7 @@ export function TrendCard({ definition, basis, eyebrow, lifetime, result, series
     </div>}
     {notSplit ? <EmptyChart message={`Not split by ${notSplit.noun}. Pick “${notSplit.all}” to see it.`} />
       : !result || !series ? <div aria-hidden="true" className="admin-trend-skeleton" />
-        : hasData ? <TrendChart basis={basis} definition={definition} label={title} period={period} result={result} series={series} />
+        : hasData ? <TrendChart basis={basis} definition={definition} label={title} lifetime={lifetime} period={period} result={result} series={series} />
           : zeroBase ? <EmptyChart message="No activity in this period." /> : <EmptyChart action={action} message={emptyMessage(basis)} />}
   </article>;
 }
@@ -65,13 +66,13 @@ function EmptyChart({ message, action = null }: { message: string; action?: Card
   return <div className="admin-trend-empty"><p>{message}</p>{action ? <button onClick={action.run} type="button">{action.label}</button> : null}</div>;
 }
 
-function TrendChart({ definition, basis, label, period, result, series }: { definition: MetricDefinition; basis: MetricDefinition; label: string; period: string; result: MetricSeriesResult; series: MetricSeries }) {
+function TrendChart({ definition, basis, label, lifetime, period, result, series }: { definition: MetricDefinition; basis: MetricDefinition; label: string; lifetime: boolean; period: string; result: MetricSeriesResult; series: MetricSeries }) {
   const [active, setActive] = useState<number | null>(null);
   const count = result.buckets.length;
   const values = series.values;
   const asBars = definition.aggregation === "sum";
   const present = values.filter((value): value is number => value !== null);
-  const ticks = axisTicks(present, { fromZero: asBars || definition.unit === "ratio", whole: definition.unit === "count" });
+  const ticks = axisTicks(present, { fromZero: axisFromZero(definition, lifetime), whole: definition.unit === "count" });
   const scale = (value: number) => ((value - ticks[0]) / (ticks[2] - ticks[0])) * 100;
   const lastIndex = values.findLastIndex((value) => value !== null);
   const lastBucket = result.buckets[count - 1];

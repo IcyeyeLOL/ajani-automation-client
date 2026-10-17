@@ -4,6 +4,7 @@ import {
   TREND_GRAINS,
   axisDateLabel,
   axisLabels,
+  axisFromZero,
   axisTicks,
   bucketLabel,
   channelLabel,
@@ -235,6 +236,18 @@ describe("trend cards", () => {
     expect(isLifetimeRate({ aggregation: "ratio", numeratorKey: "dripify.leads_replied" }, lookup)).toBe(true);
     expect(isLifetimeRate({ aggregation: "ratio", numeratorKey: "dripify.new_replies" }, lookup)).toBe(false);
     expect(isLifetimeRate({ aggregation: "last", numeratorKey: null }, lookup)).toBe(false);
+  });
+
+  it("zooms the axis for stocks and lifetime rates, and reads totals and period rates from zero", () => {
+    expect(axisFromZero({ aggregation: "sum", unit: "count" }, false)).toBe(true);
+    expect(axisFromZero({ aggregation: "ratio", unit: "ratio" }, false)).toBe(true);
+    expect(axisFromZero({ aggregation: "ratio", unit: "ratio" }, true)).toBe(false);
+    expect(axisFromZero({ aggregation: "last", unit: "count" }, false)).toBe(false);
+    // A lifetime acceptance rate drifting between 31.1% and 32%: small, honest movement stays visible.
+    const lifetime = axisTicks([0.3108, 0.3155, 0.32, 0.3171], { fromZero: axisFromZero({ aggregation: "ratio", unit: "ratio" }, true), whole: false });
+    expect(axisLabels(lifetime, "ratio")).toEqual(["31%", "31.5%", "32%"]);
+    // The same numbers as a period rate start at zero.
+    expect(axisLabels(axisTicks([0.3108, 0.32], { fromZero: axisFromZero({ aggregation: "ratio", unit: "ratio" }, false), whole: false }), "ratio")).toEqual(["0%", "20%", "40%"]);
   });
 
   it("states the change with an arrow and a sign, rates in points", () => {

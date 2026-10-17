@@ -249,11 +249,50 @@ function addRow(rows: RowMap, key: string, date: string, dimension: string, valu
   else rows.set(key, [row]);
 }
 
-/** Posts or videos per day, from per-weekday odds (index 0 is Sunday). */
-function publishing(key: string, account: string, line: Timeline, odds: readonly number[], doubleOdds: number) {
-  return line.dates.map((date, index) => rand(key, account, date) < odds[line.dow[index]]
-    ? rand(key, account, date, "double") < doubleOdds ? 2 : 1
-    : 0);
+type PostingBreak = { month: [number, number]; days: [number, number] };
+
+/**
+ * A three-week break from posting (a holiday) inside the calendar month `back`
+ * months before today's: days 4 to 25, then a comeback post the day after.
+ * With nothing new to see, followers slip for a while, so a growing line still
+ * has a down week and a down month.
+ */
+function postingBreak(line: Timeline, back: number): PostingBreak | null {
+  const today = parseDay(line.dates[TODAY_INDEX]);
+  const first = (offset: number) => line.dates.indexOf(formatDay(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - offset, 1))));
+  const start = first(back);
+  return back < 1 || start < 0 ? null : { month: [start, first(back - 1) - 1], days: [start + 3, start + 24] };
+}
+
+function inRange(range: readonly [number, number], index: number) {
+  return index >= range[0] && index <= range[1];
+}
+
+/** Posts or videos per day, from per-weekday odds (index 0 is Sunday), with none during a break. */
+function publishing(key: string, account: string, line: Timeline, odds: readonly number[], doubleOdds: number, pause: PostingBreak | null = null) {
+  return line.dates.map((date, index) => {
+    if (pause && inRange(pause.days, index)) return 0;
+    if (pause && index === pause.days[1] + 1 && odds.some((value) => value > 0.1)) return 1;
+    return rand(key, account, date) < odds[line.dow[index]] ? rand(key, account, date, "double") < doubleOdds ? 2 : 1 : 0;
+  });
+}
+
+/**
+ * A follower count from daily gains and losses. During a posting break a few
+ * more people drift off than arrive, so the month of the break ends a little
+ * lower than it began. Those extra unfollows are added to `lost`.
+ */
+function followerCounts(start: number, gained: number[], lost: number[], pause: PostingBreak | null) {
+  if (pause) {
+    let level = start;
+    for (let index = 0; index < pause.month[0]; index += 1) level += gained[index] - lost[index];
+    let net = 0;
+    for (let index = pause.month[0]; index <= pause.month[1]; index += 1) net += gained[index] - lost[index];
+    const length = pause.days[1] - pause.days[0] + 1;
+    for (let extra = net + Math.max(4, Math.round(level * 0.006)), day = 0; extra > 0; extra -= 1, day = (day + 1) % length) lost[pause.days[0] + day] += 1;
+  }
+  let count = start;
+  return gained.map((value, index) => (count = Math.max(0, count + value - lost[index])));
 }
 
 /** Reach from today's and recent posts: a post keeps being seen for a few days. */
@@ -269,18 +308,26 @@ function postReach(posts: number[], index: number, decay: readonly number[], rea
 // Generators, one per group of related metrics so they agree with each other.
 // ---------------------------------------------------------------------------
 
+// Followers come with attention (impressions, views, profile visits), and a few
+// people unfollow every day whatever happens. A day without much attention can
+// lose more than it gains, so growing lines still dip now and then, and slip
+// for a few weeks during a posting break.
+
 const LINKEDIN_ACCOUNTS = [
-  { account: "@ajani", followers: 2_925, odds: [0.08, 0.7, 0.4, 0.65, 0.5, 0.3, 0.04], doubleOdds: 0.1, base: [140, 320], reach: [850, 2_200], views: [12, 34], followDivisor: 520 },
-  { account: "ajani-automation", followers: 276, odds: [0, 0.04, 0.32, 0.04, 0.32, 0.04, 0], doubleOdds: 0, base: [16, 48], reach: [140, 420], views: [2, 8], followDivisor: 120 },
+  { account: "@ajani", followers: 2_925, odds: [0.08, 0.7, 0.4, 0.65, 0.5, 0.3, 0.04], doubleOdds: 0.1, base: [140, 320], reach: [850, 2_200], views: [12, 34], followDivisor: 285, unfollows: 1.6 },
+  { account: "ajani-automation", followers: 276, odds: [0, 0.04, 0.32, 0.04, 0.32, 0.04, 0], doubleOdds: 0, base: [16, 48], reach: [140, 420], views: [2, 8], followDivisor: 95, unfollows: 0.3 },
 ] as const;
 
 function buildLinkedIn(line: Timeline): RowMap {
   const rows: RowMap = new Map();
+  // Summer holiday two months back: neither account posts for three weeks.
+  const holiday = postingBreak(line, 2);
   for (const profile of LINKEDIN_ACCOUNTS) {
     const { account } = profile;
-    const posts = publishing("linkedin.posts_published", account, line, profile.odds, profile.doubleOdds);
+    const posts = publishing("linkedin.posts_published", account, line, profile.odds, profile.doubleOdds, holiday);
     const reach = (day: number) => between(profile.reach[0], profile.reach[1], rand("linkedin.reach", account, line.dates[day])) * audience(day);
-    let followers = profile.followers;
+    const gained = new Array<number>(line.dates.length).fill(0);
+    const lost = new Array<number>(line.dates.length).fill(0);
     // Typed in each evening, so manual numbers end yesterday.
     for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
       const date = line.dates[index];
@@ -290,8 +337,8 @@ function buildLinkedIn(line: Timeline): RowMap {
       const comments = Math.round(impressions * between(0.002, 0.0055, unit("comments")));
       const engagements = reactions + comments + Math.round(impressions * between(0.002, 0.006, unit("reposts")));
       const profileViews = Math.round(between(profile.views[0], profile.views[1], unit("views")) * audience(index) + impressions * 0.006);
-      followers += Math.max(-1, Math.round(impressions / profile.followDivisor + between(-0.9, 1.1, unit("follow"))));
-      addRow(rows, "linkedin.followers", date, account, followers);
+      gained[index] = countEvents(impressions / profile.followDivisor, "linkedin.followed", account, date);
+      lost[index] = countEvents(profile.unfollows, "linkedin.unfollowed", account, date);
       addRow(rows, "linkedin.impressions", date, account, impressions);
       addRow(rows, "linkedin.engagements", date, account, engagements);
       addRow(rows, "linkedin.reactions", date, account, reactions);
@@ -299,35 +346,42 @@ function buildLinkedIn(line: Timeline): RowMap {
       addRow(rows, "linkedin.profile_views", date, account, profileViews);
       addRow(rows, "linkedin.posts_published", date, account, posts[index]);
     }
+    const followers = followerCounts(profile.followers, gained, lost, holiday);
+    for (let index = 0; index <= YESTERDAY_INDEX; index += 1) addRow(rows, "linkedin.followers", line.dates[index], account, followers[index]);
   }
   return rows;
 }
 
 function buildYouTube(line: Timeline): RowMap {
   const rows: RowMap = new Map();
-  const videos = publishing("youtube.videos_published", "", line, [0.05, 0.12, 0.45, 0.12, 0.35, 0.08, 0.1], 0.1);
-  const reach = (day: number) => between(180, 650, rand("youtube.reach", line.dates[day])) * audience(day);
-  let subscribers = 412;
+  // No uploads for three weeks last month.
+  const pause = postingBreak(line, 1);
+  const videos = publishing("youtube.videos_published", "", line, [0.05, 0.12, 0.45, 0.12, 0.35, 0.08, 0.1], 0.1, pause);
+  const reach = (day: number) => between(300, 900, rand("youtube.reach", line.dates[day])) * audience(day);
+  const views = line.dates.map((date, index) => Math.round(
+    // Weekends are a little busier on YouTube.
+    between(60, 140, rand("youtube", date, "base")) * audience(index) * (isWeekday(line.dow[index]) ? 1 : 1.25) + postReach(videos, index, [1, 0.55, 0.3, 0.15, 0.08], reach),
+  ));
+  const gained = line.dates.map((date, index) => index > YESTERDAY_INDEX ? 0 : countEvents(views[index] * between(0.01, 0.015, rand("youtube", date, "gained")), "youtube.gained", date));
+  const lost = line.dates.map((date, index) => index > YESTERDAY_INDEX ? 0 : countEvents(between(1, 1.7, rand("youtube", date, "lost")), "youtube.lost", date));
+  const subscribers = followerCounts(452, gained, lost, pause);
   let totalViews = 17_850;
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
     const date = line.dates[index];
     const unit = (salt: string) => rand("youtube", date, salt);
-    const views = Math.round(between(45, 110, unit("base")) * audience(index) + postReach(videos, index, [1, 0.55, 0.3, 0.15, 0.08], reach));
-    const gained = Math.round(views * between(0.005, 0.01, unit("gained")));
-    const lost = Math.round(gained * between(0.12, 0.35, unit("lost")));
-    subscribers += gained - lost;
-    totalViews += views;
-    addRow(rows, "youtube.views", date, "", views);
-    addRow(rows, "youtube.shorts_views", date, "", Math.round(views * between(0.32, 0.55, unit("shorts"))));
-    addRow(rows, "youtube.watch_hours", date, "", Math.round((views * between(1.4, 2.8, unit("minutes")) / 60) * 100) / 100);
-    addRow(rows, "youtube.likes", date, "", Math.round(views * between(0.03, 0.055, unit("likes"))));
-    addRow(rows, "youtube.comments", date, "", Math.round(views * between(0.003, 0.009, unit("comments"))));
-    addRow(rows, "youtube.shares", date, "", Math.round(views * between(0.004, 0.011, unit("shares"))));
+    const viewed = views[index];
+    totalViews += viewed;
+    addRow(rows, "youtube.views", date, "", viewed);
+    addRow(rows, "youtube.shorts_views", date, "", Math.round(viewed * between(0.32, 0.55, unit("shorts"))));
+    addRow(rows, "youtube.watch_hours", date, "", Math.round((viewed * between(1.4, 2.8, unit("minutes")) / 60) * 100) / 100);
+    addRow(rows, "youtube.likes", date, "", countEvents(viewed * between(0.03, 0.055, unit("likes")), "youtube.likes", date));
+    addRow(rows, "youtube.comments", date, "", countEvents(viewed * between(0.008, 0.014, unit("comments")), "youtube.comments", date));
+    addRow(rows, "youtube.shares", date, "", countEvents(viewed * between(0.008, 0.015, unit("shares")), "youtube.shares", date));
     addRow(rows, "youtube.videos_published", date, "", videos[index]);
-    addRow(rows, "youtube.subscribers", date, "", subscribers);
+    addRow(rows, "youtube.subscribers", date, "", subscribers[index]);
     // YouTube Analytics finalizes a day late, so synced numbers also end yesterday.
-    addRow(rows, "youtube.subscribers_gained", date, "", gained);
-    addRow(rows, "youtube.subscribers_lost", date, "", lost);
+    addRow(rows, "youtube.subscribers_gained", date, "", gained[index]);
+    addRow(rows, "youtube.subscribers_lost", date, "", lost[index]);
     addRow(rows, "youtube.total_views", date, "", totalViews);
   }
   return rows;
@@ -335,20 +389,22 @@ function buildYouTube(line: Timeline): RowMap {
 
 function buildInstagram(line: Timeline): RowMap {
   const rows: RowMap = new Map();
-  const posts = publishing("instagram.posts_published", "", line, [0.35, 0.45, 0.2, 0.5, 0.25, 0.45, 0.3], 0.05);
+  const pause = postingBreak(line, 1);
+  const posts = publishing("instagram.posts_published", "", line, [0.35, 0.45, 0.2, 0.5, 0.25, 0.45, 0.3], 0.05, pause);
   const reach = (day: number) => between(280, 1_100, rand("instagram.reach", line.dates[day])) * audience(day);
-  let followers = 788;
+  const gained = new Array<number>(line.dates.length).fill(0);
+  const lost = new Array<number>(line.dates.length).fill(0);
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
     const date = line.dates[index];
     const unit = (salt: string) => rand("instagram", date, salt);
     const reached = Math.round(between(90, 220, unit("base")) * audience(index) + postReach(posts, index, [1, 0.45, 0.18], reach));
     const likes = Math.round(reached * between(0.04, 0.07, unit("likes")));
     const comments = Math.round(reached * between(0.004, 0.01, unit("comments")));
-    const saves = Math.round(reached * between(0.003, 0.008, unit("saves")));
+    const saves = countEvents(reached * between(0.008, 0.014, unit("saves")), "instagram.saves", date);
     const shares = Math.round(reached * between(0.003, 0.009, unit("shares")));
     const visits = Math.round(between(6, 16, unit("visits")) * audience(index) + reached * between(0.018, 0.035, unit("visit-rate")));
-    followers += Math.max(-1, Math.round(visits * between(0.05, 0.11, unit("follow")) - (unit("unfollow") < 0.3 ? 1 : 0)));
-    addRow(rows, "instagram.followers", date, "", followers);
+    gained[index] = countEvents(visits * between(0.13, 0.2, unit("follow")), "instagram.followed", date);
+    lost[index] = countEvents(1.3, "instagram.unfollowed", date);
     addRow(rows, "instagram.reach", date, "", reached);
     addRow(rows, "instagram.views", date, "", Math.round(reached * between(1.5, 2.4, unit("views"))));
     addRow(rows, "instagram.likes", date, "", likes);
@@ -357,28 +413,32 @@ function buildInstagram(line: Timeline): RowMap {
     addRow(rows, "instagram.shares", date, "", shares);
     addRow(rows, "instagram.interactions", date, "", likes + comments + saves + shares + intBetween(0, 3, unit("replies")));
     addRow(rows, "instagram.profile_visits", date, "", visits);
-    addRow(rows, "instagram.profile_link_taps", date, "", Math.round(visits * between(0.04, 0.12, unit("taps"))));
+    addRow(rows, "instagram.profile_link_taps", date, "", countEvents(visits * between(0.04, 0.12, unit("taps")), "instagram.taps", date));
     addRow(rows, "instagram.posts_published", date, "", posts[index]);
   }
+  const followers = followerCounts(788, gained, lost, pause);
+  for (let index = 0; index <= YESTERDAY_INDEX; index += 1) addRow(rows, "instagram.followers", line.dates[index], "", followers[index]);
   return rows;
 }
 
 function buildTikTok(line: Timeline): RowMap {
   const rows: RowMap = new Map();
-  const videos = publishing("tiktok.videos_published", "", line, [0.4, 0.35, 0.3, 0.4, 0.3, 0.45, 0.45], 0.05);
+  const pause = postingBreak(line, 2);
+  const videos = publishing("tiktok.videos_published", "", line, [0.4, 0.35, 0.3, 0.4, 0.3, 0.45, 0.45], 0.05, pause);
   // Most videos reach a few hundred to a couple of thousand people; about one in thirty takes off.
   const reach = (day: number) => {
     const date = line.dates[day];
     return rand("tiktok.viral", date) < 0.035 ? between(6_000, 12_000, rand("tiktok.reach", date)) : between(250, 2_200, rand("tiktok.reach", date));
   };
-  let followers = 231;
+  const gained = new Array<number>(line.dates.length).fill(0);
+  const lost = new Array<number>(line.dates.length).fill(0);
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
     const date = line.dates[index];
     const unit = (salt: string) => rand("tiktok", date, salt);
     const views = Math.round(between(60, 160, unit("base")) * audience(index) + postReach(videos, index, [1, 0.5, 0.2, 0.08], reach));
     const profileViews = Math.round(views * between(0.012, 0.025, unit("profile")));
-    followers += Math.max(-1, Math.round(profileViews * between(0.06, 0.12, unit("follow")) - (unit("unfollow") < 0.25 ? 1 : 0)));
-    addRow(rows, "tiktok.followers", date, "", followers);
+    gained[index] = countEvents(profileViews * between(0.06, 0.12, unit("follow")), "tiktok.followed", date);
+    lost[index] = countEvents(0.7, "tiktok.unfollowed", date);
     addRow(rows, "tiktok.views", date, "", views);
     addRow(rows, "tiktok.likes", date, "", Math.round(views * between(0.05, 0.09, unit("likes"))));
     addRow(rows, "tiktok.comments", date, "", Math.round(views * between(0.003, 0.008, unit("comments"))));
@@ -386,34 +446,53 @@ function buildTikTok(line: Timeline): RowMap {
     addRow(rows, "tiktok.profile_views", date, "", profileViews);
     addRow(rows, "tiktok.videos_published", date, "", videos[index]);
   }
+  const followers = followerCounts(231, gained, lost, pause);
+  for (let index = 0; index <= YESTERDAY_INDEX; index += 1) addRow(rows, "tiktok.followers", line.dates[index], "", followers[index]);
   return rows;
 }
 
 function buildReddit(line: Timeline): RowMap {
   const rows: RowMap = new Map();
-  const posts = publishing("reddit.posts_published", "", line, [0.1, 0.18, 0.12, 0.18, 0.12, 0.1, 0.1], 0);
+  const pause = postingBreak(line, 1);
+  const posts = publishing("reddit.posts_published", "", line, [0.1, 0.18, 0.12, 0.18, 0.12, 0.1, 0.1], 0, pause);
   const reach = (day: number) => between(500, 3_400, rand("reddit.reach", line.dates[day]));
-  const dms = line.dates.map((date, index) => isWeekday(line.dow[index]) && rand("reddit.dms_sent", date, "active") < 0.75 ? intBetween(2, 7, rand("reddit.dms_sent", date)) : 0);
+  const dms = line.dates.map((date, index) => isWeekday(line.dow[index]) && rand("reddit.dms_sent", date, "active") < 0.8 ? intBetween(4, 12, rand("reddit.dms_sent", date)) : 0);
+  // Karma moves with upvotes and comments, minus the odd downvoted comment.
+  const karmaChange = new Array<number>(line.dates.length).fill(0);
+  const daily = line.dates.map((date, index) => {
+    const unit = (salt: string) => rand("reddit", date, salt);
+    const views = Math.round(between(40, 160, unit("base")) * audience(index) + postReach(posts, index, [1, 0.3, 0.1], reach));
+    const upvotes = countEvents(views * between(0.02, 0.035, unit("upvotes")), "reddit.upvotes", date);
+    const comments = countEvents(views * between(0.012, 0.02, unit("comments")), "reddit.comments", date);
+    const commenting = pause && inRange(pause.days, index) ? 0 : intBetween(0, 4, unit("commenting"));
+    karmaChange[index] = upvotes + Math.round(comments / 2) + commenting - (unit("downvoted") < 0.18 ? intBetween(2, 9, unit("downvotes")) : 0);
+    return { views, upvotes, comments };
+  });
+  // Last month a promotional post was downvoted hard and removed, so that month lost karma overall.
+  if (pause) {
+    const earned = karmaChange.slice(pause.month[0], pause.month[1] + 1).reduce((sum, value) => sum + value, 0);
+    karmaChange[pause.days[0] + 2] -= Math.max(40, Math.round(earned * 1.2) + 25);
+  }
   let karma = 1_140;
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
     const date = line.dates[index];
     const unit = (salt: string) => rand("reddit", date, salt);
-    const views = Math.round(between(15, 110, unit("base")) * audience(index) + postReach(posts, index, [1, 0.3, 0.1], reach));
-    const upvotes = Math.round(views * between(0.01, 0.02, unit("upvotes")));
-    const comments = Math.round(views * between(0.004, 0.01, unit("comments")));
-    karma += Math.max(-2, upvotes + Math.round(comments / 2) + intBetween(0, 4, unit("commenting")) - (unit("downvoted") < 0.1 ? 3 : 0));
+    const { views, upvotes, comments } = daily[index];
+    karma = Math.max(0, karma + karmaChange[index]);
     addRow(rows, "reddit.karma", date, "", karma);
     addRow(rows, "reddit.views", date, "", views);
     addRow(rows, "reddit.upvotes", date, "", upvotes);
     addRow(rows, "reddit.comments", date, "", comments);
     addRow(rows, "reddit.posts_published", date, "", posts[index]);
-    // Outreach DMs are logged on workdays only.
+    // Outreach DMs are logged on workdays only. Replies trickle in over the two days after a DM.
     if (isWeekday(line.dow[index])) {
-      const recent = dms[index] + (index > 0 ? dms[index - 1] : 0);
-      const replies = Math.min(recent, Math.round(recent * between(0.06, 0.16, unit("replies"))));
+      const recent = dms[index] + (index > 0 ? dms[index - 1] : 0) + (index > 1 ? dms[index - 2] : 0);
+      const replies = Math.min(recent, countEvents(recent * between(0.06, 0.1, unit("replies")), "reddit.dm_replies", date));
+      let calls = 0;
+      for (let reply = 0; reply < replies; reply += 1) if (rand("reddit.dm_call", date, reply) < 0.09) calls += 1;
       addRow(rows, "reddit.dms_sent", date, "", dms[index]);
       addRow(rows, "reddit.dm_replies", date, "", replies);
-      addRow(rows, "reddit.dm_calls_booked", date, "", replies > 0 && unit("call") < 0.18 ? 1 : 0);
+      addRow(rows, "reddit.dm_calls_booked", date, "", calls);
     }
   }
   return rows;
@@ -499,49 +578,62 @@ function buildAjani(line: Timeline): RowMap {
 }
 
 type DripifyCampaignPlan = {
-  id: number; firstSync: number; loads: Array<[number, number]> | "low"; pace: [number, number]; accept: number; reply: number; fail: number;
-  /** The owner tops a campaign up on a workday once its unsent leads fall below `below`, until day `until`. */
+  id: number; firstSync: number; pace: [number, number]; accept: number; reply: number; fail: number;
+  /** Lead lists added on these days, as [day, size]. "low" sizes the only list so a couple of days of leads are left today. */
+  loads: Array<[number, number]> | "low";
+  /** The owner adds another list on a workday once unsent leads fall below `below`, until day `until`. */
   refill?: { below: number; size: [number, number]; until: number };
+  /** Days the campaign was paused: nothing is sent and it does not count as active. */
+  paused?: [number, number];
 };
 
 const DRIPIFY_CAMPAIGNS: DripifyCampaignPlan[] = [
-  // Topped up for its first months, then left to run out; late acceptances and replies keep arriving.
-  { id: 101, firstSync: 0, loads: [[0, 820]], refill: { below: 70, size: [380, 560], until: 120 }, pace: [14, 22], accept: 0.29, reply: 0.052, fail: 0.03 },
-  { id: 202, firstSync: 52, loads: [[52, 600]], refill: { below: 80, size: [420, 680], until: TODAY_INDEX }, pace: [15, 23], accept: 0.36, reply: 0.074, fail: 0.025 },
+  // Running since before the history began; topped up until three months ago, then left to run dry. A fresh list relaunched it two and a half weeks ago.
+  { id: 101, firstSync: -45, loads: [[-45, 420], [TODAY_INDEX - 17, 320]], refill: { below: 70, size: [180, 300], until: 100 }, pace: [14, 22], accept: 0.38, reply: 0.064, fail: 0.03 },
+  // Topped up every two or three weeks; paused for three days last week while its messages were rewritten.
+  { id: 202, firstSync: 52, loads: [[52, 360]], refill: { below: 70, size: [180, 300], until: TODAY_INDEX }, paused: [TODAY_INDEX - 12, TODAY_INDEX - 10], pace: [15, 23], accept: 0.38, reply: 0.08, fail: 0.025 },
   // Newest campaign, nearly out of fresh leads today.
-  { id: 303, firstSync: 138, loads: "low", pace: [16, 24], accept: 0.33, reply: 0.061, fail: 0.035 },
+  { id: 303, firstSync: 138, loads: "low", pace: [16, 24], accept: 0.35, reply: 0.07, fail: 0.035 },
 ];
 const DRIPIFY_TEAM = "dripify-team:7";
 const SEQUENCE_DAYS = 21;
+/** How far before the history the earliest campaign started; its first synced day already has totals. */
+const DRIPIFY_HEAD_START = 45;
 
 /** Share of a day's contacts who have responded `days` days later (geometric lag), built by multiplication only. */
 function lagCurve(keep: number) {
   const curve: number[] = [];
   let remaining = 1;
-  for (let day = 0; day <= SAMPLE_HISTORY_DAYS; day += 1) {
+  for (let day = 0; day <= SAMPLE_HISTORY_DAYS + DRIPIFY_HEAD_START; day += 1) {
     remaining *= keep;
     curve.push(1 - remaining);
   }
   return curve;
 }
-const ACCEPT_CURVE = lagCurve(0.72);
-const REPLY_CURVE = lagCurve(0.86);
+const ACCEPT_CURVE = lagCurve(0.86);
+const REPLY_CURVE = lagCurve(0.91);
 
 /**
  * Per-campaign running totals from Dripify's nightly sync: they only ever
  * increase (accepted and replied never pass contacted), and the new_* flows are
  * each total's change since the previous sync. A campaign's first sync has no
  * earlier total, so its first day has no new_* values, like the connector.
+ *
+ * Each lead list answers a little better or worse than the last, and answers
+ * arrive days after the outreach, so the lifetime rates drift: they dip while a
+ * fresh batch is still unanswered and recover as replies come in.
  */
 function buildDripify(line: Timeline): RowMap {
   const rows: RowMap = new Map();
   const sending = new Array<number>(line.dates.length).fill(0);
   const newReplies = new Array<number>(line.dates.length).fill(0);
+  // Days before the history (negative indexes) are simulated but not synced.
+  const dateAt = (index: number) => index >= 0 ? line.dates[index] : addDays(line.dates[0], index);
+  const dowAt = (index: number) => index >= 0 ? line.dow[index] : (((line.dow[0] + index) % 7) + 7) % 7;
   for (const campaign of DRIPIFY_CAMPAIGNS) {
     const dimension = `dripify:${campaign.id}`;
-    const contactedPerDay = new Array<number>(line.dates.length).fill(0);
-    const quality = line.dates.map((date) => between(0.85, 1.15, rand("dripify.quality", dimension, date)));
-    const pace = (index: number) => isWeekday(line.dow[index]) ? intBetween(campaign.pace[0], campaign.pace[1], rand("dripify.pace", dimension, line.dates[index])) : 0;
+    const paused = (index: number) => Boolean(campaign.paused && inRange(campaign.paused, index));
+    const pace = (index: number) => isWeekday(dowAt(index)) && !paused(index) ? intBetween(campaign.pace[0], campaign.pace[1], rand("dripify.pace", dimension, dateAt(index))) : 0;
     let loads = campaign.loads === "low" ? [] : campaign.loads;
     if (campaign.loads === "low") {
       // Size the only load so a couple of days of leads are left today.
@@ -549,36 +641,57 @@ function buildDripify(line: Timeline): RowMap {
       for (let index = campaign.firstSync; index <= TODAY_INDEX; index += 1) planned += pace(index);
       loads = [[campaign.firstSync, planned + 26]];
     }
+    const contactedPerDay = new Array<number>(line.dates.length + DRIPIFY_HEAD_START).fill(0);
+    const quality = new Array<number>(line.dates.length + DRIPIFY_HEAD_START).fill(1);
+    const lists: Array<{ left: number; quality: number }> = [];
+    const addList = (size: number, date: string) => lists.push({ left: size, quality: between(0.65, 1.35, rand("dripify.list", dimension, date)) });
     let total = 0;
     let contacted = 0;
+    let accepted = 0;
+    let replied = 0;
+    let expected = { accepted: 0, replied: 0 };
     let previous: { contacted: number; accepted: number; replied: number } | null = null;
     for (let index = campaign.firstSync; index <= TODAY_INDEX; index += 1) {
-      const date = line.dates[index];
-      for (const [day, size] of loads) if (day === index) total += size;
+      const date = dateAt(index);
+      for (const [day, size] of loads) if (day === index) { total += size; addList(size, date); }
       const refill = campaign.refill;
-      if (refill && index > campaign.firstSync && index <= refill.until && isWeekday(line.dow[index]) && total - contacted < refill.below) {
-        total += intBetween(refill.size[0], refill.size[1], rand("dripify.refill", dimension, date));
+      if (refill && index > campaign.firstSync && index <= refill.until && isWeekday(dowAt(index)) && total - contacted < refill.below) {
+        const size = intBetween(refill.size[0], refill.size[1], rand("dripify.refill", dimension, date));
+        total += size;
+        addList(size, date);
       }
+      // Leads go out oldest list first.
       const sent = Math.min(total - contacted, pace(index));
-      contactedPerDay[index] = sent;
+      let weighted = 0;
+      for (let left = sent, list = 0; left > 0 && list < lists.length; list += 1) {
+        const taken = Math.min(left, lists[list].left);
+        lists[list].left -= taken;
+        left -= taken;
+        weighted += taken * lists[list].quality;
+      }
+      contactedPerDay[index + DRIPIFY_HEAD_START] = sent;
+      quality[index + DRIPIFY_HEAD_START] = sent ? (weighted / sent) * between(0.9, 1.1, rand("dripify.quality", dimension, date)) : 1;
       contacted += sent;
       let expectedAccepted = 0;
       let expectedReplied = 0;
       let expectedFailed = 0;
       let expectedFinished = 0;
       for (let day = campaign.firstSync; day <= index; day += 1) {
-        const leads = contactedPerDay[day];
+        const leads = contactedPerDay[day + DRIPIFY_HEAD_START];
         if (!leads) continue;
         const age = index - day;
-        expectedAccepted += leads * Math.min(0.95, campaign.accept * quality[day]) * ACCEPT_CURVE[age];
-        expectedReplied += leads * Math.min(0.5, campaign.reply * quality[day]) * REPLY_CURVE[age];
+        expectedAccepted += leads * Math.min(0.95, campaign.accept * quality[day + DRIPIFY_HEAD_START]) * ACCEPT_CURVE[age];
+        expectedReplied += leads * Math.min(0.5, campaign.reply * quality[day + DRIPIFY_HEAD_START]) * REPLY_CURVE[age];
         expectedFailed += leads * campaign.fail * Math.min(1, (age + 1) / 3);
         if (age >= SEQUENCE_DAYS) expectedFinished += leads * (1 - campaign.fail);
       }
-      const accepted = Math.floor(expectedAccepted);
-      const replied = Math.min(accepted, Math.floor(expectedReplied));
+      // Each sync's new acceptances and replies are a draw around what is due that day.
+      accepted = Math.min(contacted, accepted + countEvents(Math.max(0, expectedAccepted - expected.accepted), "dripify.accepted", dimension, date));
+      replied = Math.min(accepted, replied + countEvents(Math.max(0, expectedReplied - expected.replied), "dripify.replied", dimension, date));
+      expected = { accepted: expectedAccepted, replied: expectedReplied };
       const failed = Math.floor(expectedFailed);
       const finished = Math.floor(expectedFinished);
+      if (index < 0) continue;
       const counts: Array<[string, number]> = [
         ["dripify.leads_total", total], ["dripify.leads_contacted", contacted], ["dripify.leads_accepted", accepted],
         ["dripify.leads_replied", replied], ["dripify.leads_remaining", total - contacted],
@@ -589,7 +702,7 @@ function buildDripify(line: Timeline): RowMap {
         newReplies[index] += replied - previous.replied;
       }
       counts.forEach(([key, value]) => addRow(rows, key, date, dimension, value));
-      if (total - contacted > 0) sending[index] += 1;
+      if (total - contacted > 0 && !paused(index)) sending[index] += 1;
       previous = { contacted, accepted, replied };
     }
   }
@@ -602,18 +715,26 @@ function buildDripify(line: Timeline): RowMap {
 }
 
 /**
- * Clients: setup fees on signing, monthly retainers 30 days apart, one churn.
- * Days are counted back from today (an earlier client predates the history).
+ * Clients: a setup fee on signing, then a retainer billed every 30 days from the
+ * signing day. A retainer can start later (a pilot that converts), change (an
+ * upgrade) or end (a client who leaves), so MRR and active clients move both
+ * ways. Days are counted back from today; the first two clients predate the
+ * history. MRR peaks just under the $2,000 goal, then two clients leave.
  */
-const SAMPLE_DEALS = [
-  { daysAgo: 200, setup: 180_000, retainer: 30_000, churnDaysAgo: null },
-  { daysAgo: 168, setup: 200_000, retainer: 50_000, churnDaysAgo: null },
-  { daysAgo: 139, setup: 150_000, retainer: 0, churnDaysAgo: null },
-  { daysAgo: 110, setup: 250_000, retainer: 40_000, churnDaysAgo: 58 },
-  { daysAgo: 75, setup: 180_000, retainer: 45_000, churnDaysAgo: null },
-  { daysAgo: 41, setup: 300_000, retainer: 0, churnDaysAgo: null },
-  { daysAgo: 12, setup: 150_000, retainer: 30_000, churnDaysAgo: null },
-] as const;
+type SampleDeal = { daysAgo: number; setup: number; retainers: Array<[number, number]>; churnDaysAgo: number | null };
+const SAMPLE_DEALS: SampleDeal[] = [
+  { daysAgo: 250, setup: 150_000, retainers: [[250, 25_000]], churnDaysAgo: 130 },
+  // Upgraded to a bigger retainer two months ago.
+  { daysAgo: 200, setup: 180_000, retainers: [[200, 30_000], [64, 40_000]], churnDaysAgo: null },
+  { daysAgo: 168, setup: 200_000, retainers: [[168, 35_000]], churnDaysAgo: 23 },
+  // A pilot that became a retainer six weeks later.
+  { daysAgo: 139, setup: 150_000, retainers: [[96, 35_000]], churnDaysAgo: null },
+  { daysAgo: 110, setup: 250_000, retainers: [[110, 40_000]], churnDaysAgo: 58 },
+  { daysAgo: 75, setup: 180_000, retainers: [[75, 40_000]], churnDaysAgo: null },
+  // A one-off build with no retainer.
+  { daysAgo: 41, setup: 300_000, retainers: [], churnDaysAgo: null },
+  { daysAgo: 12, setup: 150_000, retainers: [[12, 40_000]], churnDaysAgo: null },
+];
 
 function weekdayOnOrBefore(line: Timeline, index: number) {
   let day = index;
@@ -638,7 +759,11 @@ function buildBusiness(line: Timeline, outreach: RowMap, reddit: RowMap): RowMap
   const signed = SAMPLE_DEALS.map((deal) => {
     const raw = TODAY_INDEX - deal.daysAgo;
     const day = raw >= 0 ? weekdayOnOrBefore(line, raw) : raw;
-    return { ...deal, day, churnDay: deal.churnDaysAgo === null ? null : TODAY_INDEX - deal.churnDaysAgo };
+    const churnDay = deal.churnDaysAgo === null ? null : TODAY_INDEX - deal.churnDaysAgo;
+    // The monthly retainer in effect on a day (0 before it starts and after the client leaves).
+    const retainer = (index: number) => churnDay !== null && index >= churnDay ? 0
+      : deal.retainers.reduce((amount, [daysAgo, value]) => TODAY_INDEX - daysAgo <= index ? value : amount, 0);
+    return { ...deal, day, churnDay, retainer };
   });
   for (const deal of signed) {
     if (deal.day >= 0) {
@@ -647,14 +772,10 @@ function buildBusiness(line: Timeline, outreach: RowMap, reddit: RowMap): RowMap
       // Signing day has its own calls held (the walkthrough, the team intro, the closing call), so close rate stays believable.
       held[deal.day] += 3;
     }
-    if (!deal.retainer) continue;
-    for (let month = 1; ; month += 1) {
-      const due = deal.day + 30 * month;
-      if (deal.churnDay !== null && due >= deal.churnDay) break;
-      if (due > YESTERDAY_INDEX) break;
-      if (due < 0) continue;
+    for (let due = deal.day + 30; due <= YESTERDAY_INDEX; due += 30) {
+      if (due < 0 || !deal.retainer(due)) continue;
       const paid = weekdayOnOrAfter(line, due);
-      if (paid <= YESTERDAY_INDEX) cash[paid] += deal.retainer;
+      if (paid <= YESTERDAY_INDEX) cash[paid] += deal.retainer(due);
     }
   }
   // About seven in ten booked calls take place, one to six days after booking.
@@ -667,7 +788,7 @@ function buildBusiness(line: Timeline, outreach: RowMap, reddit: RowMap): RowMap
       const day = weekdayOnOrAfter(line, (indexOf.get(row.date) ?? 0) + intBetween(1, 6, unit("lag")));
       if (day > YESTERDAY_INDEX) continue;
       held[day] += 1;
-      if (unit("proposal") < 0.38) {
+      if (unit("proposal") < 0.55) {
         const sent = weekdayOnOrAfter(line, day + intBetween(0, 2, unit("proposal-lag")));
         if (sent <= YESTERDAY_INDEX) proposals[sent] += 1;
       }
@@ -676,14 +797,14 @@ function buildBusiness(line: Timeline, outreach: RowMap, reddit: RowMap): RowMap
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
     if (!isWeekday(line.dow[index])) continue;
     const date = line.dates[index];
-    const active = signed.filter((deal) => deal.retainer && deal.day <= index && (deal.churnDay === null || index < deal.churnDay));
+    const retainers = signed.map((deal) => deal.retainer(index)).filter((amount) => amount > 0);
     addRow(rows, "sales.deals_won", date, "", deals[index]);
     addRow(rows, "sales.calls_held", date, "", held[index]);
     addRow(rows, "sales.proposals_sent", date, "", proposals[index]);
     addRow(rows, "sales.content_leads", date, "", countEvents(0.25 + (0.35 * index) / SAMPLE_HISTORY_DAYS, "sales.content_leads", date));
     addRow(rows, "revenue.cash_collected", date, "", cash[index]);
-    addRow(rows, "revenue.mrr", date, "", active.reduce((sum, deal) => sum + deal.retainer, 0));
-    addRow(rows, "revenue.active_clients", date, "", active.length);
+    addRow(rows, "revenue.mrr", date, "", retainers.reduce((sum, amount) => sum + amount, 0));
+    addRow(rows, "revenue.active_clients", date, "", retainers.length);
   }
   return rows;
 }

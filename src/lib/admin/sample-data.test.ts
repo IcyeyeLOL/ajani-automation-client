@@ -292,6 +292,87 @@ describe("sample daily values", () => {
     expect(sampleMetricRows("dripify.leads_remaining", TODAY).find((row) => row.dimension === "dripify:303" && row.date === TODAY)?.value).toBeLessThan(40);
   });
 
+  it("let followers dip while they grow: some days lose followers, and a posting break gives a down week and a down month", () => {
+    for (const key of ["linkedin.followers", "instagram.followers", "tiktok.followers", "youtube.subscribers", "reddit.karma"]) {
+      const daily = [...totalsByDate(sampleMetricRows(key, TODAY)).entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, value]) => value);
+      const changes = daily.slice(1).map((value, index) => value - daily[index]);
+      const lossShare = changes.filter((change) => change < 0).length / changes.length;
+      expect(lossShare, key).toBeGreaterThanOrEqual(key === "reddit.karma" ? 0.05 : 0.15);
+      expect(lossShare, key).toBeLessThanOrEqual(0.32);
+      expect(daily.at(-1), key).toBeGreaterThan(daily[0]);
+      for (const [grain, from] of [["week", addDays(TODAY, -90)], ["month", "2026-05-01"]] as const) {
+        const values = seriesOf(run([key], { grain, from, to: grain === "month" ? "2026-09-30" : TODAY }), key).values.filter((value): value is number => value !== null);
+        expect(values.slice(1).some((value, index) => value < values[index]), `${key} ${grain}`).toBe(true);
+        expect(values.slice(1).some((value, index) => value > values[index]), `${key} ${grain}`).toBe(true);
+      }
+    }
+  });
+
+  it("move money and clients both ways: an upgrade, new clients and clients leaving", () => {
+    for (const key of ["revenue.mrr", "revenue.active_clients"]) {
+      const values = sampleMetricRows(key, TODAY).map((row) => row.value);
+      // Every three-month window of the history, and the last 30 days, has a rise and a fall.
+      for (let start = 0; start + 64 <= values.length; start += 5) {
+        const window = values.slice(start, start + 64);
+        expect(window.slice(1).some((value, index) => value > window[index]), `${key} rise from row ${start}`).toBe(true);
+        if (key === "revenue.mrr") expect(window.slice(1).some((value, index) => value < window[index]), `${key} fall from row ${start}`).toBe(true);
+      }
+      const recent = sampleMetricRows(key, TODAY).filter((row) => row.date >= addDays(TODAY, -30)).map((row) => row.value);
+      expect(recent.slice(1).some((value, index) => value > recent[index]), key).toBe(true);
+      expect(recent.slice(1).some((value, index) => value < recent[index]), key).toBe(true);
+    }
+    // Still about $1,550 a month against the $2,000 goal, from a handful of clients, never above the goal.
+    const mrr = sampleMetricRows("revenue.mrr", TODAY);
+    expect(mrr.at(-1)?.value).toBe(155_000);
+    expect(Math.max(...mrr.map((row) => row.value))).toBeLessThan(200_000);
+    expect(sampleMetricRows("revenue.active_clients", TODAY).at(-1)?.value).toBe(4);
+  });
+
+  it("start, pause and end Dripify campaigns, and add lead lists every few weeks", () => {
+    const recent = (key: string) => seriesOf(run([key], { grain: "day", from: addDays(TODAY, -29) }), key).values as number[];
+    const active = recent("dripify.active_campaigns");
+    expect(active.slice(1).some((value, index) => value > active[index])).toBe(true);
+    expect(active.slice(1).some((value, index) => value < active[index])).toBe(true);
+    const monthly = seriesOf(run(["dripify.active_campaigns"], { grain: "month", from: "2026-05-01", to: "2026-09-30" }), "dripify.active_campaigns").values as number[];
+    expect(new Set(monthly).size).toBeGreaterThanOrEqual(2);
+    expect(monthly.slice(1).some((value, index) => value < monthly[index])).toBe(true);
+    // At least one new list in any 30 days, and every campaign that is topped up gets a list within three and a half weeks of the last.
+    const total = recent("dripify.leads_total");
+    expect(total.slice(1).some((value, index) => value > total[index])).toBe(true);
+    const loads = sampleMetricRows("dripify.leads_total", TODAY).filter((row) => row.dimension === "dripify:202");
+    const loadDays = loads.filter((row, index) => index && row.value > loads[index - 1].value).map((row) => row.date);
+    loadDays.slice(1).forEach((day, index) => expect(dayCount(loadDays[index], day), day).toBeLessThanOrEqual(26));
+  });
+
+  it("keep Dripify's lifetime rates in plausible bands, drifting as lists answer better or worse", () => {
+    const result = run(["dripify.reply_rate", "dripify.acceptance_rate"], { grain: "day", from: sampleHistoryStart(TODAY) });
+    for (const [key, low, high] of [["dripify.reply_rate", 0.04, 0.08], ["dripify.acceptance_rate", 0.25, 0.4]] as const) {
+      const values = seriesOf(result, key).values.filter((value): value is number => value !== null);
+      values.forEach((value) => {
+        expect(value, key).toBeGreaterThanOrEqual(low);
+        expect(value, key).toBeLessThanOrEqual(high);
+      });
+      const lastMonth = values.slice(-30);
+      expect((Math.max(...lastMonth) - Math.min(...lastMonth)) / Math.max(...lastMonth), key).toBeGreaterThanOrEqual(0.03);
+      const weekly = seriesOf(run([key], { grain: "week", from: addDays(TODAY, -90) }), key).values as number[];
+      expect(weekly.slice(1).some((value, index) => value < weekly[index]), key).toBe(true);
+      expect(weekly.slice(1).some((value, index) => value > weekly[index]), key).toBe(true);
+    }
+  });
+
+  it("vary daily counts: no bar chart of the last 30 days is mostly the same height", () => {
+    const keys = ["dripify.new_replies", "youtube.subscribers_gained", "youtube.shares", "youtube.comments", "instagram.saves", "reddit.upvotes", "reddit.comments", "reddit.dm_replies"];
+    for (const key of keys) {
+      const counts = new Map<number, number>();
+      const values = [...totalsByDate(sampleMetricRows(key, TODAY)).entries()].filter(([date]) => date >= addDays(TODAY, -30) && date < TODAY).map(([, value]) => value).filter((value) => value > 0);
+      values.forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+      expect(values.length, key).toBeGreaterThanOrEqual(8);
+      expect(Math.max(...counts.values()) / values.length, key).toBeLessThanOrEqual(0.55);
+    }
+    // A call booked from Reddit now and then.
+    expect(expectedSum(sampleMetricRows("reddit.dm_calls_booked", TODAY), addDays(TODAY, -30), TODAY)).toBeGreaterThanOrEqual(1);
+  });
+
   it("keep close rate plausible: signing days have calls held, and no week closes more than two in five", () => {
     const close = seriesOf(run(["sales.close_rate"], { grain: "week", from: addDays(TODAY, -175) }), "sales.close_rate");
     const rates = close.values.filter((value): value is number => value !== null);

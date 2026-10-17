@@ -240,6 +240,15 @@ export function isLifetimeRate(definition: Pick<MetricDefinition, "aggregation" 
   return definition.aggregation === "ratio" && lookup(definition.numeratorKey ?? "")?.aggregation === "last";
 }
 
+/**
+ * Totals and period rates are read from zero. Stocks and lifetime rates zoom to
+ * their own range: a lifetime rate moves slowly, like a running total, so on a
+ * 0% axis it would always look flat ("31% · 31.5% · 32%" shows the real drift).
+ */
+export function axisFromZero(definition: Pick<MetricDefinition, "aggregation" | "unit">, lifetime: boolean) {
+  return definition.aggregation === "sum" || (definition.unit === "ratio" && !lifetime);
+}
+
 /** "Jul 20 – Oct 16"; years appear only when the range crosses one. */
 export function rangeLabel(from: string, to: string) {
   const style = from.slice(0, 4) === to.slice(0, 4) ? "axis" : "full";
