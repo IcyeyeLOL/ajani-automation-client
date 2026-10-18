@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   syncConnector: vi.fn(),
   requireAdminClerkUser: vi.fn(),
   consumeAdminLoginAllowance: vi.fn(),
+  loadMetricCatalog: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -32,6 +33,7 @@ vi.mock("@/lib/admin/session", () => ({
 vi.mock("@/lib/admin/clerk", () => ({ requireAdminClerkUser: mocks.requireAdminClerkUser }));
 vi.mock("@/lib/admin/login-throttle", () => ({ consumeAdminLoginAllowance: mocks.consumeAdminLoginAllowance }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createClient }));
+vi.mock("@/lib/admin/metrics", () => ({ loadMetricCatalog: mocks.loadMetricCatalog }));
 vi.mock("@/lib/connectors/dripify", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/connectors/dripify")>(),
   syncDripifyMetrics: mocks.syncDripifyMetrics,
@@ -76,6 +78,9 @@ const writes: Record<string, () => Promise<AdminActionState>> = {
     date: "2026-10-15", dimension: "@ajani", values: JSON.stringify([{ metricKey: "linkedin.followers", value: 3_400 }]),
   })),
   deleteMetricValueAction: () => actions.deleteMetricValueAction(initialAdminActionState, form({ metricKey: "linkedin.followers", date: "2026-10-15", dimension: "@ajani" })),
+  saveReportValuesAction: () => actions.saveReportValuesAction(initialAdminActionState, form({
+    platform: "instagram", rows: JSON.stringify([{ metricKey: "instagram.followers", date: "2026-10-17", value: 73 }]),
+  })),
   syncDripifyAction: () => actions.syncDripifyAction(initialAdminActionState, form({})),
   syncConnectorAction: () => actions.syncConnectorAction(initialAdminActionState, form({ connector: "youtube" })),
 };
@@ -96,6 +101,10 @@ describe("admin actions while sample data is on", () => {
     mocks.rpc.mockResolvedValue({ data: "5210b79a-90eb-4218-82c2-32d7eea6f429", error: null });
     mocks.syncDripifyMetrics.mockResolvedValue({ status: "synced", reason: null, date: "2026-10-16", campaigns: 1, synced: 1, deferred: 0, failed: 0, valuesWritten: 4, labelsWritten: 1 });
     mocks.syncConnector.mockResolvedValue({ connector: "youtube", status: "synced", reason: null, date: "2026-10-16", valuesWritten: 3, details: {} });
+    mocks.loadMetricCatalog.mockResolvedValue({
+      status: "available", today: "2026-10-17", recentEntries: [], dimensionLabels: {}, connectors: { dripify: false },
+      metrics: [{ key: "instagram.followers", source: "instagram", category: "content", label: "Instagram followers", description: "", unit: "count", aggregation: "last", numeratorKey: null, denominatorKey: null, entryMode: "manual", higherIsBetter: true, chartable: true, firstDate: null, lastDate: null, dimensions: [] }],
+    });
   });
 
   it("guards every exported action that writes", () => {
@@ -109,6 +118,7 @@ describe("admin actions while sample data is on", () => {
     expect(result).toEqual(REFUSAL);
     // Still authorized first, then refused: no database client, RPC, sync or revalidation.
     expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.loadMetricCatalog).not.toHaveBeenCalled();
     expect(mocks.createClient).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(mocks.syncDripifyMetrics).not.toHaveBeenCalled();

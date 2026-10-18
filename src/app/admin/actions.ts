@@ -22,6 +22,8 @@ import {
   setAdminSessionCookie,
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
+import { loadMetricCatalog } from "@/lib/admin/metrics";
+import { importableMetrics, REPORT_IMPORT_PLATFORMS, reportSaveSchema, type ReportImportPlatform } from "@/lib/admin/report-import";
 import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
 import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
 import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/admin/sample-mode";
@@ -270,6 +272,53 @@ export async function recordMetricValuesAction(_state: AdminActionState, formDat
   } catch (error) {
     const message = error && typeof error === "object" && "code" in error && error.code === "P0001" && "message" in error ? String(error.message) : null;
     return { status: "error", message: message ?? "These numbers could not be saved. Apply the latest database migration and retry." };
+  }
+}
+
+/**
+ * Saves the rows the owner kept after an imported report was read. The rows are
+ * checked again here (never trusted from the browser) and go through the same
+ * store rules as typed numbers; saving a day again replaces it.
+ */
+export async function saveReportValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const actor = await requireAdminSession();
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
+  const platform = String(formData.get("platform") ?? "");
+  if (!(REPORT_IMPORT_PLATFORMS as readonly string[]).includes(platform)) return { status: "error", message: "The platform for these numbers is missing. Read the report again." };
+  let rows: unknown;
+  try {
+    rows = JSON.parse(String(formData.get("rows") || "[]"));
+  } catch {
+    return { status: "error", message: "The numbers could not be read. Read the report again." };
+  }
+  const catalog = await loadMetricCatalog();
+  if (catalog.status !== "available") return { status: "error", message: "Trends are unavailable right now, so nothing was saved. Retry in a moment." };
+  const allowed = importableMetrics(platform as ReportImportPlatform, catalog.metrics).map((metric) => metric.key);
+  const parsed = reportSaveSchema(catalog.today, allowed).safeParse(rows);
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the numbers and retry." };
+
+  try {
+    const { data, error } = await createSupabaseAdminClient().rpc("upsert_analytics_metric_values", {
+      // The report is about the owner's main account, which has no account name.
+      p_values: parsed.data.map((row) => ({ ...row, dimension: "" })),
+      p_origin: "manual",
+      p_actor: actor,
+    });
+    if (error) throw error;
+    revalidatePath("/admin");
+    const written = Number(data) || 0;
+    const days = new Set(parsed.data.map((row) => row.date)).size;
+    return {
+      status: "success",
+      message: written
+        ? `Saved ${written} ${written === 1 ? "number" : "numbers"} across ${days} ${days === 1 ? "day" : "days"}. Trends are updated.`
+        : "Those numbers were already recorded. Nothing changed.",
+      entityId: `report:${Date.now()}`,
+    };
+  } catch (error) {
+    const message = error && typeof error === "object" && "code" in error && error.code === "P0001" && "message" in error ? String(error.message) : null;
+    return { status: "error", message: message ?? "These numbers could not be saved. Retry in a moment." };
   }
 }
 
