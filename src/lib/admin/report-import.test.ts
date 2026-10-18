@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("ai", async (importOriginal) => ({ ...await importOriginal<typeof import("ai")>(), generateText: mocks.generateText }));
 
 import {
-  checkExtractedRows, extractReportValues, importableMetrics, REPORT_MAX_VALUES, reportFileKind, reportInstructions, reportSaveSchema,
+  checkExtractedRows, extractReportValues, importableMetrics, REPORT_MAX_SAVE_VALUES, reportFileKind, reportInstructions, reportSaveSchema,
 } from "@/lib/admin/report-import";
 
 function metric(key: string, overrides: Partial<MetricDefinition> = {}): MetricDefinition {
@@ -116,7 +116,7 @@ describe("rows a save may carry", () => {
       [{ metricKey: "instagram.reach", date: "2026-10-08", value: 1, dimension: "@someone" }],
       [{ metricKey: "instagram.reach", date: "2026-10-08", value: 1 }, { metricKey: "instagram.reach", date: "2026-10-08", value: 2 }],
       [],
-      Array.from({ length: REPORT_MAX_VALUES + 1 }, (_, index) => ({ metricKey: "instagram.reach", date: today, value: index })),
+      Array.from({ length: REPORT_MAX_SAVE_VALUES + 1 }, (_, index) => ({ metricKey: "instagram.reach", date: today, value: index })),
     ]) expect(schema.safeParse(rows).success, JSON.stringify(rows).slice(0, 80)).toBe(false);
   });
 });

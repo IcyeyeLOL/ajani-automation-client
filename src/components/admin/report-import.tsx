@@ -5,12 +5,29 @@ import { useRouter } from "next/navigation";
 import { saveReportValuesAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
 import { bucketLabel, formatMetricValue } from "@/lib/admin/metric-query";
+import { mergeReports, REPORT_FILE_MAX_BYTES, REPORT_MAX_FILES, type MergedReportRow, type MergedReports, type ReportReadResult } from "@/lib/admin/report-merge";
 
-type Row = { metricKey: string; label: string; date: string; value: number; evidence: string };
-type Note = { item: string; reason: string };
-type ReadResult = { platform: string; reportDate: string | null; rows: Row[]; notUsed: Note[]; dropped: Note[] };
+type Row = MergedReportRow;
+type FileProblem = { file: string; message: string };
+type ReadOutcome = { result: ReportReadResult; error?: undefined } | { result?: undefined; error: string };
 
 const SAMPLE_NOTE = "Sample data is on, so reports can't be imported. Switch to real data first.";
+/** Files read in parallel; each read is one request and one model call. */
+const READS_AT_ONCE = 3;
+
+async function readReport(platform: string, file: File): Promise<ReadOutcome> {
+  try {
+    const body = new FormData();
+    body.set("platform", platform);
+    body.set("file", file);
+    const response = await fetch("/admin/reports/read", { method: "POST", body });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload) return { error: payload?.error ?? "This file could not be read. Try again." };
+    return { result: payload as ReportReadResult };
+  } catch {
+    return { error: "This file could not be sent. Check your connection and try again." };
+  }
+}
 
 /** What to ask Muse so the report has day-by-day numbers the charts can use. */
 export const MUSE_PROMPT = `Pull my Instagram numbers for @ajani_automation as a day-by-day table I can download as a CSV spreadsheet. Cover the last 30 days, ending yesterday.
@@ -28,46 +45,71 @@ date (YYYY-MM-DD), followers (total at the end of that day), reach (accounts rea
 
 export function ReportImport({ platform, platformLabel, sampleMode }: { platform: string; platformLabel: string; sampleMode: boolean }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
-  const [reading, setReading] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [inputKey, setInputKey] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [readError, setReadError] = useState("");
-  const [result, setResult] = useState<ReadResult | null>(null);
+  const [problems, setProblems] = useState<FileProblem[]>([]);
+  const [result, setResult] = useState<MergedReports | null>(null);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [state, action, saving] = useActionState(saveReportValuesAction, initialAdminActionState);
   const [savedToken, setSavedToken] = useState(state.entityId);
+  const reading = progress !== null;
 
   if (state.status === "success" && state.entityId !== savedToken) {
     setSavedToken(state.entityId);
     setResult(null);
-    setFile(null);
+    setFiles([]);
+    setProblems([]);
+    setInputKey((key) => key + 1);
   }
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
 
   const keyOf = (row: Row) => `${row.metricKey}|${row.date}`;
   const chosen = result?.rows.filter((row) => !skipped.has(keyOf(row))) ?? [];
   const days = new Set(chosen.map((row) => row.date)).size;
+  const multi = (result?.files.length ?? 0) > 1;
 
-  async function read(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!file || sampleMode) return;
-    setReading(true);
+  function pick(list: FileList | null) {
+    const picked = Array.from(list ?? []);
     setReadError("");
+    setProblems([]);
+    if (picked.length > REPORT_MAX_FILES) {
+      setFiles([]);
+      setReadError(`Pick up to ${REPORT_MAX_FILES} files at a time.`);
+      return;
+    }
+    setFiles(picked);
+  }
+
+  async function readFiles(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!files.length || sampleMode || reading) return;
+    setReadError("");
+    setProblems([]);
     setResult(null);
     setSkipped(new Set());
-    try {
-      const body = new FormData();
-      body.set("platform", platform);
-      body.set("file", file);
-      const response = await fetch("/admin/reports/read", { method: "POST", body });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload) setReadError(payload?.error ?? "The report could not be read. Try again.");
-      else setResult(payload as ReadResult);
-    } catch {
-      setReadError("The report could not be sent. Check your connection and try again.");
-    } finally {
-      setReading(false);
-    }
+    const tooBig = files.filter((file) => file.size > REPORT_FILE_MAX_BYTES);
+    const queue = files.map((file, index) => ({ file, index })).filter(({ file }) => file.size <= REPORT_FILE_MAX_BYTES);
+    const outcomes: Array<ReadOutcome & { index: number; file: string }> = [];
+    setProgress({ done: 0, total: queue.length });
+    await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, queue.length) }, async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        outcomes.push({ index: next.index, file: next.file.name, ...await readReport(platform, next.file) });
+        setProgress((current) => current && { ...current, done: current.done + 1 });
+      }
+    }));
+    outcomes.sort((a, b) => a.index - b.index);
+    const reads = outcomes.flatMap((outcome) => outcome.result ? [{ file: outcome.file, result: outcome.result }] : []);
+    const failed: FileProblem[] = [
+      ...tooBig.map((file) => ({ file: file.name, message: "Larger than 4 MB, so it was not read." })),
+      ...outcomes.flatMap((outcome) => outcome.error ? [{ file: outcome.file, message: outcome.error }] : []),
+    ];
+    setProgress(null);
+    if (files.length === 1 && failed.length) setReadError(failed[0].message);
+    else setProblems(failed);
+    if (reads.length) setResult(mergeReports(reads));
   }
 
   function toggle(row: Row) {
@@ -92,24 +134,27 @@ export function ReportImport({ platform, platformLabel, sampleMode }: { platform
   return <section aria-labelledby="report-import-title" className="admin-report-import">
     <header>
       <h3 id="report-import-title">Import a report</h3>
-      <p>Upload a report from Muse, an export from {platformLabel} or a screenshot. An agent reads the day-by-day numbers, you check them, then save.</p>
+      <p>Upload reports from Muse, exports from {platformLabel} or screenshots. An agent reads the day-by-day numbers, you check them, then save.</p>
     </header>
 
-    <form className="admin-report-pick" onSubmit={read}>
+    <form className="admin-report-pick" onSubmit={readFiles}>
       <label className="admin-field">
-        <span>Report file</span>
-        <input accept=".pdf,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,application/pdf,text/csv,text/plain,image/png,image/jpeg,image/webp" disabled={sampleMode || reading} name="file" onChange={(event) => { setFile(event.currentTarget.files?.[0] ?? null); setReadError(""); }} type="file" />
-        <small>PDF, CSV, text or a screenshot, up to 4 MB. The file itself is not kept.</small>
+        <span>Report files</span>
+        <input accept=".pdf,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,application/pdf,text/csv,text/plain,image/png,image/jpeg,image/webp" disabled={sampleMode || reading} key={inputKey} multiple name="file" onChange={(event) => pick(event.currentTarget.files)} type="file" />
+        <small>PDF, CSV, text or screenshots: up to {REPORT_MAX_FILES} files at a time, 4 MB each. The files themselves are not kept.</small>
       </label>
-      <button disabled={sampleMode || reading || !file} type="submit">{reading ? "Reading the report…" : "Read the report"}<b aria-hidden="true">→</b></button>
+      <button disabled={sampleMode || reading || !files.length} type="submit">{progress
+        ? progress.total > 1 ? `Reading files (${progress.done} of ${progress.total} done)…` : "Reading the report…"
+        : files.length > 1 ? `Read ${files.length} files` : "Read the report"}<b aria-hidden="true">→</b></button>
     </form>
     {sampleMode ? <p className="admin-trend-sample-note">{SAMPLE_NOTE}</p> : null}
-    {reading ? <p className="admin-form-message" role="status">This takes up to a minute.</p> : null}
+    {reading ? <p className="admin-form-message" role="status">{files.length > 1 ? `Each file takes up to a minute; ${READS_AT_ONCE} are read at once.` : "This takes up to a minute."}</p> : null}
     {readError ? <p className="admin-form-message error" role="alert">{readError}</p> : null}
+    {problems.length ? <ul aria-label="Files that were not read" className="admin-report-problems" role="alert">{problems.map((problem, index) => <li key={`${index}:${problem.file}`}><b>{problem.file}</b><span>{problem.message}</span></li>)}</ul> : null}
 
     {result ? <div className="admin-report-review">
       {result.rows.length ? <>
-        <p className="admin-report-summary"><b>Found {result.rows.length} daily {result.rows.length === 1 ? "number" : "numbers"}</b>{result.reportDate ? <span> in a report dated {bucketLabel(result.reportDate, "day")}</span> : null}. Untick anything that looks wrong before saving.</p>
+        <p className="admin-report-summary"><b>Found {result.rows.length} daily {result.rows.length === 1 ? "number" : "numbers"}</b>{multi ? <span> in {result.files.length} files</span> : result.reportDate ? <span> in a report dated {bucketLabel(result.reportDate, "day")}</span> : null}. Untick anything that looks wrong before saving.</p>
         <div className="admin-metric-table-wrap">
           <table className="admin-trend-table admin-report-table">
             <thead><tr><th scope="col">Keep</th><th scope="col">Metric</th><th scope="col">Day</th><th scope="col">Number</th><th scope="col">Where it came from</th></tr></thead>
@@ -118,15 +163,15 @@ export function ReportImport({ platform, platformLabel, sampleMode }: { platform
               <th scope="row">{row.label}</th>
               <td><time dateTime={row.date}>{bucketLabel(row.date, "day")}</time></td>
               <td>{formatMetricValue(row.value, "count")}</td>
-              <td className="evidence">{row.evidence}</td>
+              <td className="evidence">{multi ? <small>{row.file}</small> : null}{row.evidence}</td>
             </tr>)}</tbody>
           </table>
         </div>
-      </> : <p className="admin-report-summary"><b>No daily numbers found.</b> This report only has totals for whole periods, which can&apos;t go on a day-by-day chart. Ask Muse for a daily table (below) and upload that.</p>}
+      </> : <p className="admin-report-summary"><b>No daily numbers found.</b> {multi ? "These files only have" : "This report only has"} totals for whole periods, which can&apos;t go on a day-by-day chart. Ask Muse for a daily table (below) and upload that.</p>}
 
       {result.notUsed.length || result.dropped.length ? <details className="admin-trend-recent">
         <summary>Not imported ({result.notUsed.length + result.dropped.length})</summary>
-        <ul className="admin-report-notes">{[...result.dropped, ...result.notUsed].map((note, index) => <li key={`${index}:${note.item}`}><b>{note.item}</b><span>{note.reason}</span></li>)}</ul>
+        <ul className="admin-report-notes">{[...result.dropped, ...result.notUsed].map((note, index) => <li key={`${index}:${note.item}`}><b>{note.item}</b><span>{multi && note.file ? `${note.file}: ` : ""}{note.reason}</span></li>)}</ul>
       </details> : null}
 
       {result.rows.length ? <form action={action} className="admin-form-footer admin-trend-log-foot">

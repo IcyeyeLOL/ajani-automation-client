@@ -82,6 +82,34 @@ describe("saving reviewed report rows", () => {
     expect(await save([{ metricKey: "instagram.reach", date: "2026-10-08", value: 1 }])).toEqual({ status: "error", message: "These numbers could not be saved. Retry in a moment." });
   });
 
+  /** 600 rows: six metrics over the 100 days before today, more than one store call takes. */
+  function sixHundredRows() {
+    const keys = ["instagram.reach", "instagram.followers", "instagram.views", "instagram.likes", "instagram.saves", "instagram.shares"];
+    mocks.loadMetricCatalog.mockResolvedValue({
+      status: "available", today: "2026-10-17", recentEntries: [], dimensionLabels: {}, connectors: { dripify: false },
+      metrics: keys.map((key) => definition(key)),
+    });
+    return keys.flatMap((metricKey) => Array.from({ length: 100 }, (_, back) => ({
+      metricKey, date: new Date(Date.UTC(2026, 9, 17 - back)).toISOString().slice(0, 10), value: back,
+    })));
+  }
+
+  it("saves several files' numbers in batches of 500, the store's limit", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: 500, error: null }).mockResolvedValueOnce({ data: 90, error: null });
+    const result = await save(sixHundredRows());
+    expect(mocks.rpc.mock.calls.map(([, args]) => args.p_values.length)).toEqual([500, 100]);
+    expect(result).toMatchObject({ status: "success", message: "Saved 590 numbers across 100 days. Trends are updated." });
+  });
+
+  it("says how far a batched save got when a later batch fails", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: 500, error: null }).mockResolvedValueOnce({ data: null, error: { code: "XX000", message: "internal detail" } });
+    expect(await save(sixHundredRows())).toEqual({
+      status: "error",
+      message: "Saved 500 of 600 numbers, then the rest failed. Save again to finish; numbers already saved are simply replaced.",
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
+  });
+
   it("says nothing changed when every number was already recorded", async () => {
     mocks.rpc.mockResolvedValueOnce({ data: 0, error: null });
     expect(await save([{ metricKey: "instagram.reach", date: "2026-10-08", value: 1 }])).toMatchObject({ status: "success", message: "Those numbers were already recorded. Nothing changed." });

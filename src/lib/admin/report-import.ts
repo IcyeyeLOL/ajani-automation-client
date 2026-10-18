@@ -6,6 +6,7 @@ import { z } from "zod";
 import { shouldPreferDirectAnthropic } from "@/lib/ai/provider-order";
 import { METRIC_KEY_PATTERN } from "@/lib/admin/metric-query";
 import type { MetricDefinition } from "@/lib/admin/metric-types";
+import { REPORT_FILE_MAX_BYTES } from "@/lib/admin/report-merge";
 import { shiftDay } from "@/lib/connectors/connector-store";
 
 /**
@@ -18,10 +19,13 @@ import { shiftDay } from "@/lib/connectors/connector-store";
 export const REPORT_IMPORT_PROMPT_VERSION = "report-import-v1";
 export const REPORT_IMPORT_PLATFORMS = ["instagram"] as const;
 export type ReportImportPlatform = (typeof REPORT_IMPORT_PLATFORMS)[number];
-export const REPORT_MAX_BYTES = 4_000_000;
+export const REPORT_MAX_BYTES = REPORT_FILE_MAX_BYTES;
 /** Reports cover up to 90 days; anything older is history the charts already have. */
 export const REPORT_MAX_DAYS_BACK = 100;
+/** Per file read, and per store call (the store takes 500 values at a time). */
 export const REPORT_MAX_VALUES = 500;
+/** One save can combine several files: every importable metric for every allowed day fits. */
+export const REPORT_MAX_SAVE_VALUES = 1_200;
 export const DEFAULT_REPORT_IMPORT_MODEL = "anthropic/claude-sonnet-5";
 export const DEFAULT_ANTHROPIC_REPORT_IMPORT_MODEL = "claude-opus-5-5";
 
@@ -81,7 +85,7 @@ export function reportSaveSchema(today: string, allowedKeys: readonly string[]) 
     metricKey: z.string().regex(METRIC_KEY_PATTERN).refine((key) => allowed.has(key), "That metric can't be imported from a report"),
     date: z.iso.date().refine((date) => date >= earliest && date <= today, `Dates must be between ${earliest} and ${today}`),
     value: z.number().int("Numbers must be whole").min(0).max(1e12),
-  }).strict()).min(1, "Pick at least one number to save").max(REPORT_MAX_VALUES)
+  }).strict()).min(1, "Pick at least one number to save").max(REPORT_MAX_SAVE_VALUES, `Save at most ${REPORT_MAX_SAVE_VALUES} numbers at a time`)
     .refine((rows) => new Set(rows.map((row) => `${row.metricKey}|${row.date}`)).size === rows.length, "Each metric and day can be saved once");
 }
 
