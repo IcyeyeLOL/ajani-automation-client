@@ -4,6 +4,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/session";
 import { withinDeadline } from "@/lib/operations/deadline";
 import { aggregateExperimentPerformance } from "@/lib/admin/experiment-performance";
+import { loadMetricSeries } from "@/lib/admin/metrics";
+import { outreachChannelQueries } from "@/lib/admin/outreach-channels";
+import type { MetricSeriesResult } from "@/lib/admin/metric-types";
 import type {
   AdminDashboardData, AdminMetric, OutreachExperiment, OutreachMessageStep, OutreachTotals,
 } from "@/lib/admin/types";
@@ -48,6 +51,24 @@ export async function loadAdminDashboardData(pages: AdminPages = {}): Promise<Ad
   }
 }
 
+/**
+ * The Outreach channels' last 30 days (Dripify, Reddit DMs, cold calls), one
+ * series per channel. null when they cannot load: summarizeOutreachChannels
+ * then reports them unavailable instead of showing zeros.
+ */
+export async function loadOutreachChannelSeries(today: string): Promise<MetricSeriesResult[] | null> {
+  // Outside the try, like the other loaders: an auth redirect is never "unavailable".
+  await requireAdminSession();
+  try {
+    return await Promise.all(outreachChannelQueries(today).map((query) => loadMetricSeries(query)));
+  } catch (error) {
+    console.error("Outreach channels unavailable", {
+      code: error && typeof error === "object" && "code" in error ? error.code : "outreach_channels_unavailable",
+    });
+    return null;
+  }
+}
+
 /** SQL aggregates include every matching row; only detail lists are paginated. */
 export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Required<AdminPages>): AdminDashboardData {
   const payload = objectValue(raw);
@@ -76,7 +97,7 @@ export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Re
       metric("Saved drafts", formatNumber(n("saved_current")), `${n("organizations_current")} new business accounts in the last 30 days, by UTC date`, growth(n("saved_current"), n("saved_previous")), "neutral"),
       metric("Submitted builds", formatNumber(n("builds_current")), n("saved_current") ? `${percentage(n("cohort_submitted_current"), n("saved_current"))?.toFixed(1)}% of drafts saved in the last 30 days became builds` : "No drafts saved in the last 30 days", growth(n("builds_current"), n("builds_previous")), "brand"),
       // Every channel, the same total Trends shows for Outreach.
-      metric("Outreach touches", formatNumber(n("outreach_current")), "All channels: batches, Dripify, Reddit DMs and cold calls", growth(n("outreach_current"), n("outreach_previous")), "brand"),
+      metric("Outreach touches", formatNumber(n("outreach_current")), "All channels: Dripify, Reddit DMs and cold calls", growth(n("outreach_current"), n("outreach_previous")), "brand"),
       metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), "reply_base_current" in totals ? n("reply_base_current") : n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
       // Revenue is not shown here: no code writes billing_subscriptions or build_request_quotes, so
       // those cards always read $0. The growth goals above show the revenue numbers the owner logs.

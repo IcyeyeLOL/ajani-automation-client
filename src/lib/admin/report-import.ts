@@ -71,8 +71,11 @@ export function reportFileKind(bytes: Uint8Array): { mediaType: string; text: bo
 }
 
 /** Metrics an import may fill: every hand-logged number (platforms, cold calls, sales, revenue). */
+/** Sources a file never fills: Dripify syncs nightly, and its two typed outcomes go in Log numbers. */
+const NOT_FROM_FILES = new Set(["dripify"]);
+
 export function importableMetrics(metrics: MetricDefinition[]) {
-  return metrics.filter((metric) => metric.entryMode === "manual" && IMPORTABLE_UNITS.has(metric.unit));
+  return metrics.filter((metric) => metric.entryMode === "manual" && IMPORTABLE_UNITS.has(metric.unit) && !NOT_FROM_FILES.has(metric.source));
 }
 
 function storedValueOk(unit: MetricUnit, value: number) {

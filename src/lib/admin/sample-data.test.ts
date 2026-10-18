@@ -215,22 +215,25 @@ describe("sample daily values", () => {
     expect(Math.min(...impressions)).toBeGreaterThanOrEqual(100);
     expect(Math.max(...impressions)).toBeLessThan(10_000);
 
-    // Outreach adds every channel: logged batches, Dripify, Reddit DMs and cold calls, all on workdays.
+    // Outreach adds the three channels (Dripify, Reddit DMs and cold calls), all on workdays.
     const touches = totalsByDate(sampleMetricRows("outreach.touches", TODAY));
     for (const [date, value] of touches) {
       if (weekday(date)) {
-        expect(value, date).toBeGreaterThanOrEqual(30);
+        expect(value, date).toBeGreaterThanOrEqual(15);
         expect(value, date).toBeLessThanOrEqual(200);
       } else {
         expect(value, date).toBeLessThan(10);
       }
     }
     const sumOf = (key: string) => sampleMetricRows(key, TODAY).reduce((sum, row) => sum + row.value, 0);
-    for (const channel of ["linkedin/manual", "instagram/manual", "linkedin/dripify", "reddit/dm", "phone/cold_call"]) {
+    for (const channel of ["linkedin/dripify", "reddit/dm", "phone/cold_call"]) {
       expect(sampleMetricRows("outreach.touches", TODAY).some((row) => row.dimension === channel && row.value > 0), channel).toBe(true);
     }
+    // Logged batches feed the A/B tests, not Outreach; a cold call's only reply is a positive answer.
+    expect(new Set(sampleMetricRows("outreach.touches", TODAY).map((row) => row.dimension))).toEqual(new Set(["linkedin/dripify", "reddit/dm", "phone/cold_call"]));
+    expect(sumOf("outreach.replies") - sumOf("dripify.new_replies") - sumOf("reddit.dm_replies")).toBe(sumOf("cold_calls.positive_replies"));
     const replyShare = sumOf("outreach.replies") / sumOf("outreach.reply_base");
-    expect(replyShare).toBeGreaterThanOrEqual(0.05);
+    expect(replyShare).toBeGreaterThanOrEqual(0.03);
     expect(replyShare).toBeLessThanOrEqual(0.15);
     const callsPerWeek = (sumOf("outreach.calls_booked") / 181) * 7;
     expect(callsPerWeek).toBeGreaterThanOrEqual(2);
@@ -601,7 +604,7 @@ describe("sample metric catalog", () => {
     // A ratio shows its numerator's stored history; live-derived metrics have none.
     expect(byKey.get("dripify.reply_rate")).toMatchObject({ firstDate: start, lastDate: TODAY, dimensions: ["dripify:101", "dripify:202", "dripify:303"] });
     expect(byKey.get("sales.close_rate")).toMatchObject({ firstDate: expect.any(String), lastDate: YESTERDAY, dimensions: [] });
-    expect(byKey.get("outreach.reply_rate")).toMatchObject({ firstDate: null, lastDate: null, dimensions: ["instagram/manual", "linkedin/dripify", "linkedin/manual", "phone/cold_call", "reddit/dm"] });
+    expect(byKey.get("outreach.reply_rate")).toMatchObject({ firstDate: null, lastDate: null, dimensions: ["linkedin/dripify", "phone/cold_call", "reddit/dm"] });
     expect(byKey.get("ajani.drafts_saved")).toMatchObject({ firstDate: null, lastDate: null, dimensions: [] });
     for (const item of catalog.metrics) {
       if (item.entryMode === "manual" || item.entryMode === "connector") expect(item.lastDate === TODAY || item.lastDate === YESTERDAY, item.key).toBe(true);

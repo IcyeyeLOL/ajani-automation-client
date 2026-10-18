@@ -44,9 +44,13 @@ begin
   end if;
   snapshot := public.load_admin_analytics();
   if (snapshot #>> '{outreach,reply_base}')::bigint - (baseline #>> '{outreach,reply_base}')::bigint <> 210
-    or (snapshot #>> '{outreach,replies}')::bigint - (baseline #>> '{outreach,replies}')::bigint <> 31
-    or (snapshot #>> '{metrics,reply_base_current}')::bigint < 210 then
+    or (snapshot #>> '{outreach,replies}')::bigint - (baseline #>> '{outreach,replies}')::bigint <> 31 then
     raise exception 'aggregate reply rate must use reply_base, not initial DMs';
+  end if;
+  -- Since 20261018020000 Outreach is Dripify, Reddit DMs and cold calls: logged batches
+  -- feed the batch funnel and A/B tests above, but not the overview's outreach totals.
+  if (snapshot #>> '{metrics,reply_base_current}')::bigint <> (baseline #>> '{metrics,reply_base_current}')::bigint then
+    raise exception 'logged batches must not count toward the overview outreach totals';
   end if;
 
   ---------------------------------------------------------------------------
@@ -204,8 +208,9 @@ begin
     raise exception 'ratios must be recomputed from components and stay null without data: %', item;
   end if;
   select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'outreach.reply_rate';
-  if (item->>'current_denominator')::numeric < 160 or (item->>'current')::numeric > 1 then
-    raise exception 'derived reply rate must use reply_base and stay at or below 100%%: %', item;
+  -- Logged batches are not an outreach channel (20261018020000), and no channel has numbers here.
+  if coalesce((item->>'current_denominator')::numeric, 0) <> 0 or item->'current' <> 'null'::jsonb then
+    raise exception 'the derived reply rate must ignore logged batches and stay unknown without channel numbers: %', item;
   end if;
   select value into item from jsonb_array_elements(series->'series') where value->>'metric_key' = 'ajani.drafts_saved';
   if jsonb_array_length(item->'values') <> 2 or item #> '{values,0}' = 'null'::jsonb then
@@ -223,14 +228,14 @@ begin
     raise exception 'a filter that does not apply must read as unknown, never zero: %', series->'series';
   end if;
 
-  -- Free-text legacy channels still produce valid, filterable breakdown keys.
+  -- A free-text logged batch is not an outreach channel: it is neither listed nor counted.
   perform public.create_outreach_batch(today, 'Audit team', 'LinkedIn Ads!', 'Manual', 'Synthetic owners', '', null, '',
     '[{"variantId":null,"variantLabel":"No variant","connectionRequests":0,"connectionsAccepted":0,"initialDms":4,"f1Sent":0,"f2Sent":0,"customSent":0,"replies":1,"attributedReplies":1,"positiveReplies":0,"callsBooked":0}]'::jsonb,
     'audit_metrics');
   select value into item from jsonb_array_elements(public.load_analytics_catalog()->'metrics') where value->>'metric_key' = 'outreach.touches';
-  if not (item->'dimensions' ? 'linkedin-ads-/manual') then raise exception 'outreach breakdown keys must be slugged: %', item->'dimensions'; end if;
-  if (public.load_analytics_series(array['outreach.touches'], 'day', today, today, 'linkedin-ads-/manual') #>> '{series,0,current}')::numeric <> 4 then
-    raise exception 'slugged breakdown keys must filter';
+  if item->'dimensions' ? 'linkedin-ads-/manual' then raise exception 'logged batches must not be outreach channels: %', item->'dimensions'; end if;
+  if coalesce((public.load_analytics_series(array['outreach.touches'], 'day', today, today, 'linkedin-ads-/manual') #>> '{series,0,current}')::numeric, 0) <> 0 then
+    raise exception 'logged batches must not count toward outreach';
   end if;
 
   series := public.load_analytics_series(array['outreach.touches'], 'day', today, today, 'linkedin/dripify');
@@ -268,8 +273,8 @@ begin
     raise exception 'catalog must report coverage and accounts: %', item;
   end if;
   select value into item from jsonb_array_elements(catalog->'metrics') where value->>'metric_key' = 'outreach.touches';
-  if not (item->'dimensions' ? 'linkedin/manual') and not (item->'dimensions' ? 'linkedin/dripify') and jsonb_array_length(item->'dimensions') = 0 then
-    raise exception 'outreach metrics must list channel/method breakdowns';
+  if exists (select 1 from jsonb_array_elements_text(item->'dimensions') d where d not in ('linkedin/dripify', 'reddit/dm', 'phone/cold_call')) then
+    raise exception 'outreach metrics must list only the Dripify, Reddit DM and cold-call channels: %', item->'dimensions';
   end if;
   if jsonb_array_length(catalog->'recent_entries') < 9 then raise exception 'recent manual entries must be listed'; end if;
 

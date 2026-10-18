@@ -56,6 +56,11 @@ describe("importable metrics", () => {
   it("are every hand-logged count, hours or money metric, on any platform", () => {
     expect(importableMetrics(catalog).map((item) => item.key)).toEqual(importable.map((item) => item.key));
   });
+
+  it("never include Dripify, whose typed outcomes go in Log numbers and whose sends sync nightly", () => {
+    const dripify = [metric("dripify.calls_booked"), metric("dripify.positive_replies"), metric("cold_calls.meetings_booked")];
+    expect(importableMetrics(dripify).map((item) => item.key)).toEqual(["cold_calls.meetings_booked"]);
+  });
 });
 
 describe("checking the read rows", () => {

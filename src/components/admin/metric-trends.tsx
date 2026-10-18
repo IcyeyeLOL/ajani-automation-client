@@ -48,12 +48,16 @@ type SeriesState = {
 const LOAD_FAILED = "Trends couldn't load just now.";
 const grainNames: Record<TrendGrain, string> = { day: "Day", week: "Week", month: "Month" };
 
-export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLog = false, onNavigate }: {
+export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLog = false, logSources = null, openView = null, onNavigate }: {
   catalog: MetricCatalog;
   refreshToken: string;
   sampleMode?: boolean;
   /** Open "Log numbers" and scroll to it on arrival, as the Overview button does. */
   openLog?: boolean;
+  /** The tab "Log numbers" opens on (cold calls, Reddit…); null means the view's. */
+  logSources?: string[] | null;
+  /** Arrive on this view (the Outreach page's "See every outreach chart"); null keeps the saved one. */
+  openView?: TrendViewId | null;
   onNavigate?: (section: "connections" | "outreach") => void;
 }) {
   const router = useRouter();
@@ -64,7 +68,10 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
   const definitions = useMemo(() => new Map(catalog.metrics.map((metric) => [metric.key, metric])), [catalog.metrics]);
   // A view is offered only when its sources have something to chart.
   const views = useMemo(() => trendViews.filter((view) => chartable.some((metric) => inView(view, metric.source))), [chartable]);
-  const [preferences, setPreferences] = useState<TrendPreferences>(initialPreferences);
+  const [preferences, setPreferences] = useState<TrendPreferences>(() => {
+    const saved = initialPreferences();
+    return openView ? { ...saved, view: openView } : saved;
+  });
   const view = views.find((item) => item.id === preferences.view) ?? views[0] ?? trendViews[0];
   const picks = useMemo(() => viewPicks(preferences, view, known), [known, preferences, view]);
   const [dimension, setDimension] = useState("");
@@ -73,11 +80,11 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
   const [seriesState, setSeriesState] = useState<SeriesState>({ results: {}, errors: {}, latest: null });
   const [sampleSeries, setSampleSeries] = useState<SampleSeries | null>(null);
   const [sampleFailed, setSampleFailed] = useState(false);
-  const [logRequest, setLogRequest] = useState<LogRequest>({ token: openLog ? 1 : 0, sources: null });
+  const [logRequest, setLogRequest] = useState<LogRequest>({ token: openLog ? 1 : 0, sources: openLog ? logSources : null });
   const [seenOpenLog, setSeenOpenLog] = useState(openLog);
   if (openLog !== seenOpenLog) {
     setSeenOpenLog(openLog);
-    if (openLog) setLogRequest((current) => ({ token: current.token + 1, sources: null }));
+    if (openLog) setLogRequest((current) => ({ token: current.token + 1, sources: logSources }));
   }
 
   const dimensions = useMemo(() => view.account
@@ -252,7 +259,7 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
 
     {view.id === "dripify" ? <DripifyNote catalog={catalog} onNavigate={onNavigate} /> : null}
     {view.id === "outreach" ? <p className="admin-trend-note">
-      Totals for every channel: the batches you log, Dripify, Reddit DMs and cold calls. Pick a channel above to see one on its own.
+      Dripify, Reddit DMs and cold calls added up. A cold call counts as a reply only when the answer is positive. Pick a channel above to see one on its own.
     </p> : null}
     {view.id === "cold_calls" ? <p className="admin-trend-note admin-trend-calls">
       <span>After a calling session, log the calls you made and how people replied: positive, neutral or negative, follow-ups and meetings booked.</span>
@@ -370,7 +377,8 @@ function MetricPicker({ view, metrics, picks, lookup, onToggle, onReset, onDone 
 /** Dripify is managed under Connections; Trends only says when it last synced. */
 function DripifyNote({ catalog, onNavigate }: { catalog: MetricCatalog; onNavigate?: (section: "connections") => void }) {
   const configured = catalog.connectors.dripify;
-  const lastSynced = catalog.metrics.reduce<string | null>((latest, metric) => metric.source === "dripify" && metric.lastDate && (!latest || metric.lastDate > latest) ? metric.lastDate : latest, null);
+  // Synced numbers only: a positive reply typed today says nothing about the sync.
+  const lastSynced = catalog.metrics.reduce<string | null>((latest, metric) => metric.source === "dripify" && metric.entryMode === "connector" && metric.lastDate && (!latest || metric.lastDate > latest) ? metric.lastDate : latest, null);
   return <p className="admin-trend-note">
     <span>{configured ? `Synced from Dripify every night. ${lastSynced ? `Last synced ${bucketLabel(lastSynced, "day", "axis")}.` : "Not synced yet."}` : "Dripify isn't connected yet."}</span>
     {onNavigate ? <button className="admin-trend-link" onClick={() => onNavigate("connections")} type="button">{configured ? "Manage in Connections" : "Set it up in Connections"}</button> : null}

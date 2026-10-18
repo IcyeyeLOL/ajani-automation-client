@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   createExperimentAction,
-  createOutreachBatchAction,
   logExperimentMetricsAction,
   logoutAdminAction,
   setSampleModeAction,
@@ -13,24 +12,25 @@ import {
 } from "@/app/admin/actions";
 import { MetricTrends } from "@/components/admin/metric-trends";
 import { Connections } from "@/components/admin/connections-panel";
-import { DemandBars, OutreachFunnel, SystemHealth, VariantChart } from "@/components/admin/section-charts";
+import { LogOutreachPanel, OutreachChannels } from "@/components/admin/outreach-channels-panel";
+import { DemandBars, SystemHealth, VariantChart } from "@/components/admin/section-charts";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, isEarlyTracking, type GoalProgress, type GoalStatus } from "@/lib/admin/metric-query";
+import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, isEarlyTracking, type GoalProgress, type GoalStatus, type TrendViewId } from "@/lib/admin/metric-query";
 import { optionLabel, plural } from "@/lib/admin/display-labels";
 import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
 import type { ConnectionBoard } from "@/lib/admin/connection-types";
 import type {
   AdminDashboardData,
   AdminMetric,
+  OutreachChannelBoard,
   OutreachExperiment,
-  OutreachVariant,
   TrendPoint,
   VariantPerformance,
 } from "@/lib/admin/types";
 
 type Section = "overview" | "trends" | "outreach" | "experiments" | "website" | "operations" | "connections";
-type MetricKey = "connectionRequests" | "connectionsAccepted" | "initialDms" | "f1Sent" | "f2Sent" | "customSent" | "replies" | "attributedReplies" | "positiveReplies" | "callsBooked";
-type MetricRow = Record<MetricKey, number> & { variantId: string | null; variantLabel: string };
+/** How Trends opens: on a view, and with Log numbers open on a channel's tab. */
+type TrendsRequest = { view: TrendViewId | null; log: boolean; sources: string[] | null };
 type ExperimentMetricRow = {
   variantId: string;
   variantLabel: string;
@@ -52,26 +52,17 @@ const sections: Array<{ id: Section; label: string; number: string }> = [
   { id: "connections", label: "Connections", number: "07" },
 ];
 
-const metricColumns: Array<{ key: MetricKey; short: string; label: string }> = [
-  { key: "connectionRequests", short: "CONNECT", label: "Connection requests" },
-  { key: "connectionsAccepted", short: "ACCEPTED", label: "Connections accepted" },
-  { key: "initialDms", short: "INITIAL", label: "Initial DMs" },
-  { key: "f1Sent", short: "F1", label: "First follow-ups" },
-  { key: "f2Sent", short: "F2", label: "Second follow-ups" },
-  { key: "customSent", short: "CUSTOM", label: "Custom-step sends" },
-  { key: "replies", short: "REPLIES", label: "Unique replies" },
-  { key: "attributedReplies", short: "ATTR.", label: "Replies attributed to the tested step" },
-  { key: "positiveReplies", short: "POSITIVE", label: "Positive replies" },
-  { key: "callsBooked", short: "CALLS", label: "Calls booked" },
-];
-
-export function AdminDashboard({ data, catalog, goals, connections, sampleMode = false }: { data: AdminDashboardData; catalog: MetricCatalog; goals: GoalBoard; connections: ConnectionBoard; sampleMode?: boolean }) {
+export function AdminDashboard({ data, catalog, channels, goals, connections, sampleMode = false }: { data: AdminDashboardData; catalog: MetricCatalog; channels: OutreachChannelBoard; goals: GoalBoard; connections: ConnectionBoard; sampleMode?: boolean }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
-  // "LOG NUMBERS" opens Trends with its log panel open; any other way in starts closed.
-  const [openLog, setOpenLog] = useState(false);
-  if (openLog && activeSection !== "trends") setOpenLog(false);
-  const logNumbers = () => { setOpenLog(true); setActiveSection("trends"); };
+  // "LOG NUMBERS" opens Trends with its log panel open (on a channel's tab when one is named), and
+  // "See every outreach chart" opens its Outreach view; the sidebar opens Trends as it was left.
+  const [trendsRequest, setTrendsRequest] = useState<TrendsRequest | null>(null);
+  if (trendsRequest && activeSection !== "trends") setTrendsRequest(null);
+  const openTrends = (request: TrendsRequest) => { setTrendsRequest(request); setActiveSection("trends"); };
+  const logNumbers = () => openTrends({ view: null, log: true, sources: null });
+  const logOutreach = (sources: string[] | null) => openTrends({ view: null, log: true, sources });
+  const outreachCharts = () => openTrends({ view: "outreach", log: false, sources: null });
   const earlyTracking = !sampleMode && isEarlyTracking(catalog.metrics, data.trend.filter((point) => point.outreach > 0).length, catalog.today);
   const [isRefreshing, startRefresh] = useTransition();
   const lastAutomaticRefreshAt = useRef(0);
@@ -117,14 +108,14 @@ export function AdminDashboard({ data, catalog, goals, connections, sampleMode =
       {data.dataNotice && activeSection !== "trends" && activeSection !== "connections" ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
       {earlyTracking && activeSection !== "connections" ? <EarlyTrackingPrompt /> : null}
       {data.dataStatus !== "unavailable" ? <>
-      {activeSection === "overview" ? <Overview data={data} goals={goals} onLogNumbers={logNumbers} onNavigate={setActiveSection} /> : null}
-      {activeSection === "outreach" ? <Outreach data={data} key={data.pagination.experimentPage} sampleMode={sampleMode} /> : null}
+      {activeSection === "overview" ? <Overview channels={channels} data={data} goals={goals} onLogNumbers={logNumbers} onLogOutreach={logOutreach} onNavigate={setActiveSection} onOutreachCharts={outreachCharts} /> : null}
+      {activeSection === "outreach" ? <Outreach channels={channels} data={data} onLogOutreach={logOutreach} onOutreachCharts={outreachCharts} /> : null}
       {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} sampleMode={sampleMode} /> : null}
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
       {activeSection === "operations" ? <Operations data={data} /> : null}
       </> : activeSection === "overview" ? <div className="admin-section-stack"><GrowthGoals board={goals} onLogNumbers={logNumbers} onNavigate={setActiveSection} /></div> : null}
       {/* Trends and connection settings load on their own, so they show even when the dashboard numbers cannot load. */}
-      {activeSection === "trends" ? <MetricTrends catalog={catalog} onNavigate={setActiveSection} openLog={openLog} refreshToken={data.generatedAt} sampleMode={sampleMode} /> : null}
+      {activeSection === "trends" ? <MetricTrends catalog={catalog} logSources={trendsRequest?.sources ?? null} onNavigate={setActiveSection} openLog={Boolean(trendsRequest?.log)} openView={trendsRequest?.view ?? null} refreshToken={data.generatedAt} sampleMode={sampleMode} /> : null}
       {activeSection === "connections" ? <Connections board={connections} sampleMode={sampleMode} /> : null}
     </section>
   </main>;
@@ -198,7 +189,7 @@ function SetupBanner({ connected }: { connected: boolean }) {
   </aside>;
 }
 
-function Overview({ data, goals, onNavigate, onLogNumbers }: { data: AdminDashboardData; goals: GoalBoard; onNavigate: (section: Section) => void; onLogNumbers: () => void }) {
+function Overview({ data, channels, goals, onNavigate, onLogNumbers, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; goals: GoalBoard; onNavigate: (section: Section) => void; onLogNumbers: () => void; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
   return <div className="admin-section-stack">
     <GrowthGoals board={goals} onLogNumbers={onLogNumbers} onNavigate={onNavigate} />
     <section className="admin-metric-grid">{data.metrics.map((item) => <MetricCard item={item} key={item.label} />)}</section>
@@ -207,12 +198,8 @@ function Overview({ data, goals, onNavigate, onLogNumbers }: { data: AdminDashbo
       <FunnelCard data={data} />
     </section>
     <section className="admin-two-column admin-bottom-row">
-      <RecentActivity data={data} />
-      <article className="admin-action-panel">
-        <p>QUICK ACTION</p><h2>Log today&apos;s outreach without slowing the work.</h2>
-        <span>One aggregate batch captures manual or Dripify volume, outcomes, audience, team member, and every active variant.</span>
-        <button onClick={() => onNavigate("outreach")} type="button">OPEN BATCH LOGGER <b>→</b></button>
-      </article>
+      <OutreachChannels board={channels} onCharts={onOutreachCharts} />
+      <LogOutreachPanel board={channels} onLog={onLogOutreach} />
     </section>
   </div>;
 }
@@ -348,9 +335,10 @@ function FunnelCard({ data }: { data: AdminDashboardData }) {
   </article>;
 }
 
-function RecentActivity({ data, allowVoid = false, sampleMode = false }: { data: AdminDashboardData; allowVoid?: boolean; sampleMode?: boolean }) {
-  return <article className="admin-panel admin-recent-panel"><header className="admin-panel-head"><div><p>RECENT OUTREACH</p><h2>Latest team batches.</h2></div><span>{String(data.recentBatches.length).padStart(2, "0")} LOGS</span></header>
-    {data.recentBatches.length ? <div className={`admin-recent-list${allowVoid ? " with-actions" : ""}`}>{data.recentBatches.map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{contextLabel(batch.context)}</span></p><strong>{batch.sent}<small> TOUCHES</small></strong><em>{plural(batch.replies, "reply", "replies")} / {plural(batch.calls, "call", "calls")}</em>{allowVoid ? <VoidBatchControl batchId={batch.id} sampleMode={sampleMode} /> : null}</div>)}</div> : <EmptyState title="No outreach batches yet" copy="The first submitted batch will appear here with its owner, context, volume, and results." />}
+/** Experiment results as they were saved, newest first, so a mistaken one can be voided. */
+function RecentActivity({ data, sampleMode }: { data: AdminDashboardData; sampleMode: boolean }) {
+  return <article className="admin-panel admin-recent-panel"><header className="admin-panel-head"><div><p>RECENT ENTRIES</p><h2>Latest results logged.</h2></div><span>{String(data.recentBatches.length).padStart(2, "0")} LOGS</span></header>
+    {data.recentBatches.length ? <div className="admin-recent-list with-actions">{data.recentBatches.map((batch) => <div key={batch.id}><time>{shortDate(batch.date)}</time><p><b>{batch.teamMember}</b><span>{contextLabel(batch.context)}</span></p><strong>{batch.sent}<small> SENT</small></strong><em>{plural(batch.replies, "reply", "replies")} / {plural(batch.calls, "call", "calls")}</em><VoidBatchControl batchId={batch.id} sampleMode={sampleMode} /></div>)}</div> : <EmptyState title="No results logged yet" copy="Results you save under Enter performance appear here, and one logged by mistake can be voided." />}
     <AdminPagination data={data} kind="batches" />
   </article>;
 }
@@ -372,59 +360,12 @@ function VoidBatchControl({ batchId, sampleMode }: { batchId: string; sampleMode
   </form>;
 }
 
-function Outreach({ data, sampleMode }: { data: AdminDashboardData; sampleMode: boolean }) {
-  const totals = data.outreach;
-  const cards = [
-    ["Connection requests", totals.connectionRequests, totals.acceptanceRate === null ? "None logged yet" : `${totals.acceptanceRate.toFixed(1)}% accepted`],
-    ["Initial DMs", totals.initialDms, totals.replyRate === null ? "No first messages yet" : `${totals.replyRate.toFixed(1)}% of people messaged replied`],
-    ["Follow-ups", totals.f1Sent + totals.f2Sent, `${totals.f1Sent} F1 / ${totals.f2Sent} F2`],
-    ["Replies", totals.replies, `${totals.positiveReplies} positive`],
-    ["Calls booked", totals.callsBooked, "Qualified outcomes"],
-  ] as const;
+/** Outreach is three channels added up: Dripify, Reddit DMs and cold calls. */
+function Outreach({ data, channels, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
   return <div className="admin-section-stack">
-    <section aria-label="All-time outreach totals" className="admin-outreach-strip"><header><span>ALL TIME</span><small>Every batch logged so far</small></header>{cards.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{formatNumber(value)}</strong><small>{detail}</small></article>)}</section>
-    <section className="admin-two-column admin-chart-row admin-outreach-charts"><GrowthChart only="outreach" trend={data.trend} /><OutreachFunnel totals={totals} /></section>
-    <BatchLogger enabled={data.outreachSchemaReady} experiments={data.experiments} pager={<AdminPagination data={data} kind="experiments" />} sampleMode={sampleMode} />
-    <RecentActivity allowVoid data={data} sampleMode={sampleMode} />
+    <OutreachChannels board={channels} onCharts={onOutreachCharts} />
+    <section className="admin-two-column admin-chart-row admin-outreach-charts"><GrowthChart only="outreach" trend={data.trend} /><LogOutreachPanel board={channels} onLog={onLogOutreach} /></section>
   </div>;
-}
-
-function BatchLogger({ experiments, enabled, pager, sampleMode }: { experiments: OutreachExperiment[]; enabled: boolean; pager: React.ReactNode; sampleMode: boolean }) {
-  const router = useRouter();
-  const [state, action, pending] = useActionState(createOutreachBatchAction, initialAdminActionState);
-  const [experimentId, setExperimentId] = useState("");
-  const experiment = experiments.find((item) => item.id === experimentId) ?? null;
-  const rowVariants = useMemo(() => experiment ? [...experiment.variants, { id: "", label: "NONE", title: "No variant" }] : [{ id: "", label: "NONE", title: "No variant" }], [experiment]);
-
-  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.status]);
-  return <article className="admin-panel admin-logger-panel">
-    <header className="admin-panel-head"><div><p>FAST BATCH ENTRY</p><h2>Log the day once. Keep moving.</h2></div><span>AGGREGATE FIRST</span></header>
-    <form action={action} key={state.entityId ?? "new-batch"}>
-      {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
-      <div className="admin-context-grid">
-        <Field label="Date"><input defaultValue={new Date().toISOString().slice(0, 10)} name="activityDate" required type="date" /></Field>
-        <Field label="Team member"><input maxLength={100} name="teamMember" placeholder="Kunle" required /></Field>
-        <Field label="Channel"><select defaultValue="linkedin" name="channel"><option value="linkedin">LinkedIn</option><option value="reddit">Reddit</option><option value="youtube">YouTube</option><option value="instagram">Instagram</option></select></Field>
-        <Field label="Method"><select defaultValue="manual" name="method"><option value="manual">Manual</option><option value="dripify">Dripify</option><option value="organic">Organic content</option></select></Field>
-        <Field label="Audience"><input maxLength={120} name="audience" placeholder="Insurance agency owners" required /></Field>
-        <Field label="Campaign"><input maxLength={120} name="campaign" placeholder="August founder outreach" /></Field>
-        <Field label="A/B test"><select name="experimentId" onChange={(event) => setExperimentId(event.target.value)} value={experimentId}><option value="">No experiment</option>{experiments.filter((item) => item.status === "active").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-        <Field label="Notes"><input maxLength={1000} name="notes" placeholder="Optional context" /></Field>
-      </div>
-      <BatchMetricGrid key={`${experimentId}:${state.entityId ?? "draft"}`} variants={rowVariants} />
-      <div className="admin-form-footer"><div>{sampleMode ? <SampleFormNote /> : state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>Rates are calculated from summed counts, never by averaging daily percentages.</p>}</div><button disabled={sampleMode || !enabled || pending} type="submit">{pending ? "SAVING BATCH" : enabled ? "SUBMIT BATCH" : "STORAGE NOT READY"}<b>→</b></button></div>
-    </form>
-    {pager}
-  </article>;
-}
-
-function BatchMetricGrid({ variants }: { variants: Array<Pick<OutreachVariant, "id" | "label" | "title">> }) {
-  const [rows, setRows] = useState<MetricRow[]>(() => rowsForVariants(variants));
-  const updateMetric = (index: number, key: MetricKey, rawValue: string) => setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: Math.max(0, Number.parseInt(rawValue || "0", 10) || 0) } : row));
-  return <>
-    <input name="metrics" type="hidden" value={JSON.stringify(rows)} />
-    <div className="admin-metric-table-wrap"><table className="admin-metric-table"><thead><tr><th>VARIANT</th>{metricColumns.map((column) => <th key={column.key} title={column.label}>{column.short}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.variantId}-${row.variantLabel}`}><th><b>{row.variantLabel}</b><span>{variants[index]?.title}</span></th>{metricColumns.map((column) => <td key={column.key}><label><span className="sr-only">{row.variantLabel} {column.label}</span><input inputMode="numeric" min="0" onChange={(event) => updateMetric(index, column.key, event.target.value)} type="number" value={row[column.key]} /></label></td>)}</tr>)}</tbody></table></div>
-  </>;
 }
 
 function Experiments({ data, sampleMode }: { data: AdminDashboardData; sampleMode: boolean }) {
@@ -434,6 +375,7 @@ function Experiments({ data, sampleMode }: { data: AdminDashboardData; sampleMod
   return <div className="admin-section-stack">
     <section className="admin-two-column admin-experiment-layout"><ExperimentForm enabled={data.outreachSchemaReady} sampleMode={sampleMode} /><ExperimentComparison experiment={experiment} experiments={data.experiments} pager={<AdminPagination data={data} kind="experiments" />} performance={performance} selectedId={selectedId} setSelectedId={setSelectedId} /></section>
     <ExperimentMetricEntry enabled={data.outreachSchemaReady} experiment={experiment} key={experiment?.id ?? "no-experiment"} sampleMode={sampleMode} />
+    <RecentActivity data={data} sampleMode={sampleMode} />
     <article className="admin-panel admin-rules-panel"><header className="admin-panel-head"><div><p>MEASUREMENT RULES</p><h2>How results are judged.</h2></div></header><div>{[["01","Fair comparison","Each variant is measured against how many it sent at the step being tested."],["02","Points and percent","Going from 5% to 8% is 3 points higher, which is 60% better."],["03","Replies stay put","A reply counts for the step and variant that earned it."],["04","No early winners","A variant is only marked as leading once there is enough data and the gap is too big to be luck."]].map(([number,title,copy]) => <section key={number}><b>{number}</b><h3>{title}</h3><p>{copy}</p></section>)}</div></article>
   </div>;
 }
@@ -517,7 +459,7 @@ function ExperimentMetricEntry({ experiment, enabled, sampleMode }: { experiment
           <ExperimentCountInput label="Connections accepted" onChange={(value) => updateMetric(index, "connectionsAccepted", value)} value={row.connectionsAccepted} />
         </div>
       </section>)}</div>
-      <div className="admin-form-footer"><div>{sampleMode ? <SampleFormNote /> : state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>Each save adds to the totals, so log only activity since your last entry. Void a mistaken entry from Recent outreach.</p>}</div><button disabled={sampleMode || !enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
+      <div className="admin-form-footer"><div>{sampleMode ? <SampleFormNote /> : state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>Each save adds to the totals, so log only activity since your last entry. Void a mistaken entry under Recent entries below.</p>}</div><button disabled={sampleMode || !enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
     </form> : <EmptyState title="Select or create an experiment" copy="Once a comparison exists, its variants and performance fields will appear here automatically." />}
   </article>;
 }
@@ -550,10 +492,6 @@ function SampleFormNote() {
 
 function EmptyState({ title, copy }: { title: string; copy: string }) {
   return <div className="admin-empty"><i>+</i><b>{title}</b><p>{copy}</p></div>;
-}
-
-function rowsForVariants(variants: Array<Pick<OutreachVariant, "id" | "label" | "title">>): MetricRow[] {
-  return variants.map((variant) => ({ variantId: variant.id || null, variantLabel: variant.label === "NONE" ? "No variant" : variant.label, connectionRequests: 0, connectionsAccepted: 0, initialDms: 0, f1Sent: 0, f2Sent: 0, customSent: 0, replies: 0, attributedReplies: 0, positiveReplies: 0, callsBooked: 0 }));
 }
 
 function experimentRows(experiment: OutreachExperiment | null): ExperimentMetricRow[] {

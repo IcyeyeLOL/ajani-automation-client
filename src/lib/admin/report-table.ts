@@ -108,7 +108,7 @@ const SOURCE_NAMES: Record<string, string> = {
   x: "X", threads: "Threads", cold_calls: "Cold calls", sales: "Sales", revenue: "Revenue", dripify: "Dripify",
 };
 const UNTRACKED_REASONS: Record<string, string> = {
-  dripify: "Dripify numbers come from its nightly sync, not from files",
+  dripify: "Dripify numbers come from its nightly sync and Log numbers, not from files",
 };
 const QUALIFIERS = new Set(["page", "profile", "account", "business", "creator", "company", "personal", "official", "main"]);
 const TOTAL_WORDS = new Set(["total", "totals", "all", "combined", "overall", "sum", "grand_total", "all_platforms"]);

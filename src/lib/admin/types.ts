@@ -81,6 +81,41 @@ export type OutreachTotals = {
   replyRate: number | null;
 };
 
+/** The three ways the owner reaches people; each id is also its Log numbers source. */
+export type OutreachChannelId = "dripify" | "reddit" | "cold_calls";
+
+/** Last-30-day outreach for one channel. null means not logged (or not synced) in the window, never zero. */
+export type OutreachChannelSummary = {
+  id: OutreachChannelId;
+  label: string;
+  /** Outreach's Channel-filter key, e.g. "linkedin/dripify". */
+  dimension: string;
+  /** Its sends and replies come from a nightly sync (Dripify), not from Log numbers. */
+  synced: boolean;
+  touches: number | null;
+  replies: number | null;
+  /** People reached: what the reply rate is measured against. */
+  reached: number | null;
+  /** Replies ÷ people reached, 0–1. */
+  replyRate: number | null;
+  callsBooked: number | null;
+  /** The last sync for a synced channel; otherwise the newest day anything was logged. */
+  lastDate: string | null;
+  /** Whether Log numbers has a tab for this channel yet. */
+  loggable: boolean;
+};
+
+export type OutreachChannelBoard = {
+  status: "available" | "unavailable";
+  from: string;
+  to: string;
+  channels: OutreachChannelSummary[];
+  /** The three channels added up: what Outreach totals show. */
+  total: Pick<OutreachChannelSummary, "touches" | "replies" | "reached" | "replyRate" | "callsBooked">;
+  /** Dripify's key is set, so its numbers sync every night. */
+  dripifyConnected: boolean;
+};
+
 export type OperationsStatus = {
   label: string;
   healthy: number;

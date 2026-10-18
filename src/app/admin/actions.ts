@@ -127,7 +127,7 @@ export async function createExperimentAction(_state: AdminActionState, formData:
     });
     if (error) throw error;
     revalidatePath("/admin");
-    return { status: "success", message: "Experiment created and ready for batch logging.", entityId: String(data) };
+    return { status: "success", message: "Experiment created and ready for performance entry.", entityId: String(data) };
   } catch {
     return { status: "error", message: "The outreach tables are not ready yet. Apply the latest database migration and retry." };
   }

@@ -1,8 +1,8 @@
 "use client";
 
-import { barWidth, healthSummary, outreachSteps } from "@/lib/admin/chart-math";
+import { barWidth, healthSummary } from "@/lib/admin/chart-math";
 import { plural } from "@/lib/admin/display-labels";
-import type { OperationsStatus, OutreachExperiment, OutreachTotals, VariantPerformance } from "@/lib/admin/types";
+import type { OperationsStatus, OutreachExperiment, VariantPerformance } from "@/lib/admin/types";
 
 type Measure = { key: "acceptanceRate" | "replyRate" | "positiveRate" | "bookingRate"; count: "connectionsAccepted" | "replies" | "positiveReplies" | "callsBooked"; label: string; one: string; many: string; tone: string };
 const acceptedMeasure: Measure = { key: "acceptanceRate", count: "connectionsAccepted", label: "Accepted", one: "accepted", many: "accepted", tone: "accepted" };
@@ -11,19 +11,6 @@ const outcomeMeasures: Measure[] = [
   { key: "positiveRate", count: "positiveReplies", label: "Positive reply", one: "positive reply", many: "positive replies", tone: "k1" },
   { key: "bookingRate", count: "callsBooked", label: "Booked a call", one: "call booked", many: "calls booked", tone: "k2" },
 ];
-
-export function OutreachFunnel({ totals }: { totals: OutreachTotals }) {
-  const steps = outreachSteps(totals);
-  const max = Math.max(0, ...steps.map((step) => step.value));
-  return <article className="admin-panel admin-outreach-funnel">
-    <header className="admin-panel-head"><div><p>OUTREACH FUNNEL</p><h2>Request to booked call.</h2></div><span>ALL TIME</span></header>
-    {max ? <ol aria-label="Outreach funnel, all time" className="admin-hbar-list">{steps.map((step, index) => <li key={step.key}>
-      <p><b>{pad(index + 1)}</b><span>{step.label}</span><strong>{formatNumber(step.value)}</strong></p>
-      <i aria-hidden="true"><span style={{ width: `${barWidth(step.value, max)}%` }} /></i>
-      <small>{step.note}</small>
-    </li>)}</ol> : <ChartEmpty copy="No outreach logged yet. Each step fills in once you submit a batch below." />}
-  </article>;
-}
 
 /** Tests judged on connection acceptance lead with an Accepted bar, measured against connection requests. */
 export function VariantChart({ experiment, performance }: { experiment: Pick<OutreachExperiment, "messageStep" | "primaryMetric">; performance: VariantPerformance[] }) {

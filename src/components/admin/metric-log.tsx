@@ -16,6 +16,8 @@ const SAMPLE_NOTE = "Sample data is on, so nothing can be saved. Switch to real 
 export const entryGroups: Array<{ id: string; label: string; sources: string[] }> = [
   { id: "revenue", label: "Sales & revenue", sources: ["sales", "revenue"] },
   { id: "cold_calls", label: "Cold calls", sources: ["cold_calls"] },
+  // Only Dripify's manual numbers: what it syncs never appears as a field.
+  { id: "dripify", label: "Dripify", sources: ["dripify"] },
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"] },
   { id: "instagram", label: "Instagram", sources: ["instagram"] },
   { id: "youtube", label: "YouTube", sources: ["youtube"] },
@@ -23,10 +25,17 @@ export const entryGroups: Array<{ id: string; label: string; sources: string[] }
   { id: "x", label: "X", sources: ["x"] },
 ];
 
+/** The tabs whose numbers Outreach adds up. */
+const outreachGroups = ["cold_calls", "reddit", "dripify"];
+
+/** Groups logged for the whole business, with no account picker. */
+const businessGroups = new Set(["revenue", "cold_calls", "dripify"]);
+
 /** What to know before typing a group's numbers. */
 const groupNotes: Record<string, string> = {
   youtube: "YouTube syncs these every night once it's connected. Type numbers only for days before the sync started: a typed day from the last week is replaced by the next sync.",
-  reddit: "Log Reddit DMs here, not as an Outreach batch, so they're counted once.",
+  reddit: "Log every Reddit DM here; Outreach adds them up with Dripify and cold calls.",
+  dripify: "Dripify syncs its sends, acceptances and replies every night. Log the positive replies and calls booked from Dripify conversations here.",
 };
 
 /** A request to open the panel (and scroll to it) on the tab for these sources; null means the current view's. */
@@ -43,7 +52,10 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
 }) {
   const router = useRouter();
   const groups = entryGroups.filter((item) => catalog.metrics.some((metric) => metric.entryMode === "manual" && item.sources.includes(metric.source)));
-  const groupFor = (sources: string[] | null) => groups.find((item) => sources?.some((source) => item.sources.includes(source))) ?? groups[0];
+  const groupFor = (sources: string[] | null) => groups.find((item) => sources?.some((source) => item.sources.includes(source)))
+    // The Outreach view starts on the first tab that feeds it.
+    ?? (sources?.includes("outreach") ? groups.find((item) => outreachGroups.includes(item.id)) : undefined)
+    ?? groups[0];
   const [open, setOpen] = useState(request.token > 0);
   const [groupId, setGroupId] = useState(() => groupFor(request.sources ?? viewSources)?.id ?? "");
   const [handled, setHandled] = useState(request.token);
@@ -55,8 +67,8 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
   const [state, action, pending] = useActionState(recordMetricValuesAction, initialAdminActionState);
   const group = groups.find((item) => item.id === groupId) ?? groups[0];
   const fields = group ? catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source)) : [];
-  // Sales, revenue and cold calls belong to the business, not to a platform account.
-  const accounts = group?.id === "revenue" || group?.id === "cold_calls" ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
+  // Sales, revenue, cold calls and Dripify's logged outcomes belong to the business, not to a platform account.
+  const accounts = !group || businessGroups.has(group.id) ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
 
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   useEffect(() => {
@@ -74,7 +86,7 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
   return <details className="admin-panel admin-trend-log" id="log-numbers" onToggle={toggle} open={open}>
     <summary><b>Log numbers</b><span>Type in what LinkedIn, Instagram and the others show you.</span></summary>
     <div className="admin-trend-log-body">
-      {viewId === "outreach" && onNavigate ? <p className="admin-trend-log-pointer">Outreach batches are logged under <button className="admin-trend-link" onClick={() => onNavigate("outreach")} type="button">Outreach →</button></p> : null}
+      {viewId === "outreach" ? <p className="admin-trend-log-pointer">Outreach adds up Dripify, Reddit DMs and cold calls.{onNavigate ? <> Each channel&apos;s last 30 days is under <button className="admin-trend-link" onClick={() => onNavigate("outreach")} type="button">Outreach →</button></> : null}</p> : null}
       <div aria-label="Platform" className="admin-trend-chips small" role="group">
         {groups.map((item) => <button aria-pressed={item.id === group?.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label}</button>)}
       </div>

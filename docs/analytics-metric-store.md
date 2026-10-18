@@ -80,7 +80,7 @@ Migration: `supabase/migrations/20261016020000_dripify_connector.sql`. Code: `sr
 - **Rate limits.** Dripify allows 60 requests a minute and 5,000 a day. One run makes at most 50 requests, active campaigns first. When there are more campaigns than that, the rest rotate in on later days and keep their last snapshot meanwhile; the run still counts as synced. A 429 pauses every request until `Retry-After`; a longer wait ends the run as partial.
 - **Outcomes.** The cron returns 200 when synced or when no key is configured yet, and 503 when partial or rejected (bad key: 401, plan without the Open API: 403, Open API switched off: 404). A missing or malformed count is never stored as zero. The three counts the rates use (contacted, accepted, replied) are stored together or not at all: if one is missing or malformed, none are stored that day and the campaign counts as failed, so a rate never pairs a new count with a carried-forward one. Leads loaded feeds no rate and is stored whenever it is valid.
 - **Privacy.** Only aggregate counts and campaign names are stored. No lead, prospect or message data is read.
-- **Manual Dripify logs** in Outreach still feed `outreach.*` (channel `linkedin/dripify`). Since `20261018010000`, the sync's new activity feeds `outreach.*` too and takes over logged Dripify sends while it runs; see "Outreach totals".
+- **In Outreach.** Since `20261018020000`, Outreach's Dripify channel (`linkedin/dripify`) reads the sync's new activity plus the positive replies and calls booked logged in Log numbers. Logged Dripify batches feed only the A/B tests. See "Outreach totals".
 
 ### Dripify dashboard parity (`20261016050000`)
 
@@ -137,7 +137,7 @@ Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no ac
 
 - **Rates are per call made.** Picked-up calls are not logged separately, so the rates are measured against all dials.
 - **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match. A sheet with one row per caller per day is added up per day, and a "Total" row is checked against that sum. A dialer export with one row per call is counted with the AI agent's rules, which pick the outcome values that count. Prospects' names and numbers are never read.
-- **Part of Outreach.** Since `20261018010000`, cold calls count toward the Outreach totals as the channel `phone/cold_call` (see "Outreach totals").
+- **Part of Outreach.** Since `20261018010000`, cold calls count toward the Outreach totals as the channel `phone/cold_call`, with only positive answers as replies since `20261018020000` (see "Outreach totals").
 
 The migration is additive (definitions only). It was applied to the live database on 2026-10-18.
 
@@ -149,34 +149,30 @@ The owner asked for the TikTok section to be removed on 2026-10-18. Like X, its 
 - **Import guard.** The spreadsheet reader still recognises "tiktok" in a file name or title, so a TikTok export is left out ("TikTok numbers aren't tracked") rather than read as another platform's. Without TikTok, "profile views" only matches LinkedIn and "videos" only YouTube. A bare header that only one platform has is now never put on a different platform the file names; it goes to the AI reader instead.
 - **Live.** Needs the usual backup, rehearsal and apply, each with the owner's approval.
 
-## Outreach totals (`20261018010000`)
+## Outreach totals (`20261018010000`, narrowed by `20261018020000`)
 
-The owner asked on 2026-10-18 for Outreach to be the total of all outreach. `outreach.touches`, `replies`, `reply_base`, `positive_replies` and `calls_booked` (and every rate built on them) now add up four channels in `analytics_daily_values`. Each channel is still a Channel-filter option:
+The owner reaches people three ways: Dripify, Reddit DMs and cold calls. Nobody hand-logs LinkedIn, Instagram, Reddit or YouTube outreach batches, so since `20261018020000` Outreach adds up only those three channels. `outreach.touches`, `replies`, `reply_base` ("People reached"), `positive_replies` and `calls_booked`, and every rate built on them, come from `analytics_daily_values`. Each channel is a Channel-filter option:
 
-| Channel (dimension) | Touches | Replies | Reply base | Positive | Calls booked |
+| Channel (dimension) | Touches | Replies | People reached | Positive | Calls booked |
 |---|---|---|---|---|---|
-| Logged batches (`channel/method`) | requests + first messages + follow-ups | replies | `reply_base` | positive | calls booked |
-| Dripify sync (`linkedin/dripify`) | `dripify.new_contacted` (as connection requests; `dripify.new_accepted` as accepted) | `dripify.new_replies` | `dripify.new_contacted` | none | none |
-| Reddit DMs (`reddit/dm`) | `reddit.dms_sent` (first messages) | `reddit.dm_replies` | `reddit.dms_sent` | none | `reddit.dm_calls_booked` |
-| Cold calls (`phone/cold_call`) | `cold_calls.dials` | positive + neutral + negative | `cold_calls.dials` | `cold_calls.positive_replies` | `cold_calls.meetings_booked` |
+| Dripify (`linkedin/dripify`) | `dripify.new_contacted` (also connection requests; `dripify.new_accepted` is accepted) | `dripify.new_replies` | `dripify.new_contacted` | `dripify.positive_replies` (Log numbers) | `dripify.calls_booked` (Log numbers) |
+| Reddit DMs (`reddit/dm`) | `reddit.dms_sent` | `reddit.dm_replies` | `reddit.dms_sent` | none | `reddit.dm_calls_booked` |
+| Cold calls (`phone/cold_call`) | `cold_calls.dials` | `cold_calls.positive_replies` only | `cold_calls.dials` | `cold_calls.positive_replies` | `cold_calls.meetings_booked` |
 
-- **No double counting with Dripify.** The sync takes over between the first and the latest day it records new activity (`min` and `max(metric_date)` of `dripify.new_contacted`; a first sync writes none).
-  - **Inside that span,** the sync counts Dripify's touches, connection requests, acceptances, replies and reply base, and logged Dripify batches (`method = 'dripify'`) add only their positive replies and calls booked. Each sync covers everything since the previous one, so a day the cron missed is still covered.
-  - **Before it, or after it** (the sync stopped, for example a plan downgrade), logged Dripify batches count in full. A batch logged today counts until tonight's sync covers it.
-  - **Acceptance.** Dripify reports leads contacted, not invites, and its own acceptance rate is accepted ÷ contacted. A Dripify lead is therefore one touch and one connection request, so `outreach.acceptance_rate` includes Dripify and matches its screen. Before the sync, logged Dripify batches counted each request, message and follow-up, so touches per Dripify lead drop from about three to one when the sync starts.
-- **No double counting with Reddit.** Reddit DMs belong in Log numbers, and the Reddit tab says so. Log numbers may cover several days in one entry, so each Reddit number it has takes over that number from Reddit batches (`channel = 'reddit'`) between its first and latest logged day:
-  - `reddit.dms_sent` covers the batches' sends (requests, accepted, first messages, follow-ups, reply base);
-  - `reddit.dm_replies` covers their replies;
-  - `reddit.dm_calls_booked` covers their calls booked.
-  - Positive replies always come from the batches, because Log numbers doesn't record them.
-  - A logged 0 still counts as logged. An entry for any Reddit account covers every Reddit batch, because batches carry no account.
-  - The Reddit option stays on the batch form because Reddit A/B tests use it.
-- **Cold calls** are logged in Log numbers only.
+- **Cold calls count only a positive answer as a reply.** The owner asked for this on 2026-10-18: everyone who picks up gives some answer, so counting neutral and negative answers inflated the reply rate. The per-call rates on the Cold calls view are unchanged.
+- **Dripify outcomes.** Dripify's API reports leads contacted, acceptances and replies, but not interest or bookings. The owner logs `dripify.positive_replies` and `dripify.calls_booked` in Log numbers (Dripify tab, manual).
+- **Acceptance.** Dripify reports leads contacted, not invites, and its own acceptance rate is accepted ÷ contacted. A Dripify lead is therefore one touch and one connection request, so `outreach.acceptance_rate` matches Dripify's screen.
+- **Logged batches are not a channel.** `outreach_batches` still feed the Experiments page (A/B tests) and the batch funnel in `load_admin_analytics` (`outreach`, `recent_batches`, `experiment_metrics`), but not Outreach. Nothing can be counted twice.
+- **Retired.** `outreach.follow_ups` and `outreach.initial_dms` are inactive, because nothing the owner uses feeds them. `analytics_daily_values` still returns them for `load_admin_analytics`.
 - **Rates can read above 100% over short ranges.** Dripify and Reddit replies, and Dripify acceptances, are counted on the day they arrive, against that day's new sends.
-- **Gaps in the totals.** Cold-call follow-ups are not extra replies (they are already counted in a reply). Dripify and Reddit don't record positive replies, so the combined positive reply rate is lower than the per-channel ones.
-- **Overview.** `load_admin_analytics`'s "Outreach touches" and "Replies" cards and the 90-day trend read the same totals, so they agree with Trends. The Outreach page's batch funnel, recent batches and A/B tests still read the batches.
+- **Positive reply rate.** Reddit DMs don't record positive replies, so they lower the combined positive reply rate.
+- **Overview.** The "Outreach touches" and "Replies" cards and the 90-day trend in `load_admin_analytics` read the same totals, so they agree with Trends.
 - **Catalog.** The Channel filter lists `linkedin/dripify`, `reddit/dm` and `phone/cold_call` once they have numbers. `channelLabel` shows them as "LinkedIn · Dripify", "Reddit · DMs" and "Phone · Cold calls".
-- **Checks.** `scripts/db-outreach-totals-regressions.sql` covers the totals, per-channel filters, the Dripify takeover window (before, inside and after the sync's span), Dripify in the acceptance rate, Reddit batches against each Log numbers span, the catalog and the overview. Sample data mirrors all of it (`buildOutreachTotals`).
+- **History.** `20261018010000` first added logged batches as a fourth channel, with rules that stopped Dripify and Reddit batches from double counting. It was applied live on 2026-10-18, then narrowed the same day.
+- **Checks.**
+  - `scripts/db-outreach-totals-regressions.sql` covers the three-channel totals, cold calls counting positive answers only, the Dripify Log numbers outcomes, per-channel filters, batches not counting, the retired metrics, the catalog and the overview.
+  - `db-metrics-regressions.sql` checks that logged batches stay out of the overview totals.
+  - Sample data mirrors all of it (`buildOutreachTotals`).
 
 ## Import numbers (any platform)
 
