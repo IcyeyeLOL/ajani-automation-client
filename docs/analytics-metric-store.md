@@ -139,7 +139,7 @@ Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no ac
 - **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match.
 - **Kept separate.** Cold-call meetings are not added to `outreach.calls_booked`, which counts logged outreach batches.
 
-The migration is additive (definitions only) and must be applied to the live database before the view shows there. Until then the live site simply has no Cold calls numbers.
+The migration is additive (definitions only). It was applied to the live database on 2026-10-18.
 
 ## Import numbers (any platform)
 

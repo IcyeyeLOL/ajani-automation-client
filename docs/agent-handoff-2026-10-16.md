@@ -79,7 +79,11 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
      - **Import numbers** at the top of Trends, for any platform, sales and revenue (see `docs/analytics-metric-store.md` → "Import numbers").
      - **Cold calls** (`docs/analytics-metric-store.md` → "Cold calls").
      - **Logging notes** from a YouTube, Reddit and LinkedIn audit.
-   - **Pending migration.** `20261017000000_cold_calls.sql` has passed the local database suite. It still needs the usual live procedure, each step with fresh owner approval: a backup, a rehearsal on a restored copy, then applying it through the Management API. The Supabase token from 2026-10-16 may have been revoked.
+   - **Migration applied live on 2026-10-18** with the owner's explicit approval.
+     - Before: a backup of the definitions and migration history (`Documents/ajani-database-backups/ajani-live-definitions-before-cold-calls-2026-10-18T15-59-09.json`; the full backup was blocked by the agent's safety check), and a rehearsal on a rebuilt copy that matched live exactly.
+     - Applied as one transaction through the Management API and recorded in `supabase_migrations.schema_migrations`.
+     - After: latest version `20261017000000`, 36 recorded, 100 definitions (8 cold calls), daily values unchanged at 181. The chart loader returns the cold-call series.
+     - The one-off Supabase token was deleted locally; the owner should revoke it.
    - **Live admin access.** Vercel Production now has `AJANI_ADMIN_EMAIL_ALLOWLIST` (lime71129@gmail.com, lime17451@gmail.com), `AJANI_ADMIN_ACCESS_KEY` and `AJANI_ADMIN_SESSION_SECRET`, and live `/admin` reaches the key screen. The saved access key does not match the owner's copy ("The access key is not valid"). The owner was asked to replace it under Vercel → Environment Variables → Edit and redeploy. The agent's own write was blocked by the safety classifier. The local `.env.local` access key was changed to match the owner's copy.
    - **AI key.** The owner made a new Anthropic key and their billing is fine. It is in the local `.env.local` with `AI_PRIMARY_PROVIDER=anthropic`. A real run read the owner's Muse PDF correctly. Vercel's `ANTHROPIC_API_KEY` is 65 days old and probably the old rejected key; it must be replaced before the live import can use AI.
    - **YouTube channel.** The tracked channel is `UCr5_PR9yjdKV266rzB9GoFA` (@olakunleajani-q1d), which has 0 videos. The owner was asked whether they post on a different channel.
