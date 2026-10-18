@@ -86,6 +86,12 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
      - The one-off Supabase token was deleted locally; the owner should revoke it.
    - **TikTok removed (2026-10-18, owner request).** Migration `20261018000000_retire_tiktok.sql` sets its definitions inactive (data kept, like X), and the code drops the view, the log tab, the outreach channel option, sample data and ingest. The import reader now leaves a TikTok export out instead of putting its columns on LinkedIn or YouTube. Lint, type-check, 556 unit tests and the local database suite (37 migrations, `db-tiktok-retired-regressions.sql`) pass. **Not applied live yet**: it needs a new Supabase token and the owner's explicit go-ahead.
    - **Outreach totals (2026-10-18, owner request).** Migration `20261018010000_outreach_totals.sql` makes Outreach the total of logged batches, Dripify, Reddit DMs and cold calls, with each channel still filterable. The overview cards follow (see `docs/analytics-metric-store.md` → "Outreach totals"). The local database suite (38 migrations, `db-outreach-totals-regressions.sql`), 556 unit tests, lint and type-check pass. **Not applied live yet**: same token and go-ahead, and it can go in with the TikTok change. The new code also needs a deploy.
+     - **Revised before applying (2026-10-18).** A four-subagent database review found three counting bugs, and an adversarial re-review found two more in the first fix.
+       - The Dripify takeover is now limited to the sync's first-to-latest day, so manual Dripify logs count again if the sync stops.
+       - The sync feeds connection requests and acceptances, so Dripify is part of the acceptance rate.
+       - Reddit batches no longer repeat what Log numbers has for Reddit. Each number is checked separately, over Log numbers' first-to-latest logged day.
+       - The suite passes, and a mutation (the old Dripify rule) fails it.
+       - On Windows, `npm run test:database` exits 0 even when a regression fails, so read its `PASS:` lines.
    - **Import rebuilt (2026-10-18, owner request).** The old reader saved the owner's combined Instagram and LinkedIn CSV wrongly:
      - Live `instagram.followers` for Sep 18 – Oct 17 holds LinkedIn's counts (2,362–2,533, 30 rows).
      - Instagram views (30 days), interactions (24) and posts (9) from that file are missing, and so are all its LinkedIn numbers.

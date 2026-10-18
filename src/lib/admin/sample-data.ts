@@ -58,17 +58,17 @@ export const SAMPLE_DEFINITIONS: MetricDefinition[] = [
   definition("ajani.builds_submitted", "business", "Builds submitted", "Approved build requests entering the delivery pipeline, by UTC day submitted.", "count", "sum", "derived"),
   definition("ajani.new_workspaces", "business", "New client workspaces", "Business workspaces created when a client signs in to submit.", "count", "sum", "derived"),
   definition("ajani.brief_to_build_rate", "business", "Brief → build conversion", "Share of briefs saved in the period that became submitted builds (cohort).", "ratio", "ratio", "derived", { numeratorKey: "ajani.cohort_submitted", denominatorKey: "ajani.drafts_saved" }),
-  definition("outreach.touches", "outreach", "Outreach touches", "Every outreach attempt: connection requests, first messages and follow-ups from logged batches, Dripify leads contacted, Reddit DMs sent and cold calls made. Voided entries excluded.", "count", "sum", "derived"),
-  definition("outreach.connection_requests", "outreach", "Connection requests", "Connection requests sent.", "count", "sum", "derived"),
-  definition("outreach.connections_accepted", "outreach", "Connections accepted", "Connection requests accepted.", "count", "sum", "derived"),
+  definition("outreach.touches", "outreach", "Outreach touches", "Every outreach attempt: connection requests, first messages and follow-ups from logged batches, Dripify leads contacted, Reddit DMs sent and cold calls made. Dripify reports each lead once, not each message, so a Dripify lead is one touch. Voided entries excluded.", "count", "sum", "derived"),
+  definition("outreach.connection_requests", "outreach", "Connection requests", "Connection requests from logged batches, plus leads Dripify contacted (Dripify reports leads contacted, not invites).", "count", "sum", "derived"),
+  definition("outreach.connections_accepted", "outreach", "Connections accepted", "Connections accepted, from logged batches and the Dripify sync.", "count", "sum", "derived"),
   definition("outreach.initial_dms", "outreach", "First messages", "Unique first messages sent.", "count", "sum", "derived"),
   definition("outreach.follow_ups", "outreach", "Follow-ups", "First, second and custom follow-ups sent.", "count", "sum", "derived"),
   definition("outreach.replies", "outreach", "Replies", "People who replied on any channel, including everyone who answered a cold call with a positive, neutral or negative reply.", "count", "sum", "derived"),
   definition("outreach.reply_base", "outreach", "Reply base", "What replies are measured against: first messages sent (for an A/B test, the sends at the tested step), Dripify leads contacted, Reddit DMs sent and cold calls made.", "count", "sum", "derived", { chartable: false }),
   definition("outreach.positive_replies", "outreach", "Positive replies", "Replies showing interest, from logged batches and cold calls. Dripify and Reddit DMs don't record this.", "count", "sum", "derived"),
   definition("outreach.calls_booked", "outreach", "Calls booked", "Sales calls booked from outreach on every channel: logged batches, Reddit DMs and cold calls. Count a call only once Calendly confirms the booking.", "count", "sum", "derived"),
-  definition("outreach.acceptance_rate", "outreach", "Connection acceptance", "Connections accepted ÷ connection requests.", "ratio", "ratio", "derived", { numeratorKey: "outreach.connections_accepted", denominatorKey: "outreach.connection_requests" }),
-  definition("outreach.reply_rate", "outreach", "Reply rate", "Replies ÷ people reached, across every channel.", "ratio", "ratio", "derived", { numeratorKey: "outreach.replies", denominatorKey: "outreach.reply_base" }),
+  definition("outreach.acceptance_rate", "outreach", "Connection acceptance", "Connections accepted ÷ connection requests, including Dripify (accepted ÷ leads contacted, as Dripify shows it). Acceptances come in after the request, so a short range can read high.", "ratio", "ratio", "derived", { numeratorKey: "outreach.connections_accepted", denominatorKey: "outreach.connection_requests" }),
+  definition("outreach.reply_rate", "outreach", "Reply rate", "Replies ÷ people reached, across every channel. Replies can come in a later period than the message they answer, so a short range can read high.", "ratio", "ratio", "derived", { numeratorKey: "outreach.replies", denominatorKey: "outreach.reply_base" }),
   definition("outreach.positive_reply_rate", "outreach", "Positive reply rate", "Positive replies ÷ people reached. Dripify and Reddit DMs don't record positive replies, so they lower this rate; filter by channel to compare.", "ratio", "ratio", "derived", { numeratorKey: "outreach.positive_replies", denominatorKey: "outreach.reply_base" }),
   definition("outreach.reply_to_call_rate", "outreach", "Replies → calls", "Calls booked ÷ replies.", "ratio", "ratio", "derived", { numeratorKey: "outreach.calls_booked", denominatorKey: "outreach.replies" }),
   definition("dripify.leads_total", "outreach", "Dripify leads loaded", "Leads loaded into launched Dripify campaigns, from the latest daily sync of each campaign.", "count", "last", "connector"),
@@ -513,16 +513,29 @@ const OUTREACH_KEYS = [
 
 /**
  * Outreach across every channel, like analytics_daily_values: logged batches,
- * the Dripify sync (which takes over Dripify's sends and replies from its first
- * day of new activity), Reddit DMs and cold calls.
+ * the Dripify sync (which takes over Dripify's sends, acceptances and replies
+ * between its first and latest day of new activity), Reddit DMs in Log numbers
+ * (each number taking over Reddit batches between its first and latest logged
+ * day) and cold calls.
  */
 function buildOutreachTotals(batches: RowMap, dripify: RowMap, reddit: RowMap, coldCalls: RowMap): RowMap {
   const rows: RowMap = new Map();
-  const synced = (dripify.get("dripify.new_contacted") ?? []).reduce<string | null>((first, row) => first === null || row.date < first ? row.date : first, null);
+  const span = (map: RowMap, key: string) => {
+    const dates = (map.get(key) ?? []).map((row) => row.date).sort();
+    return (date: string) => dates.length > 0 && date >= dates[0] && date <= dates[dates.length - 1];
+  };
+  const [synced, redditSends, redditReplies, redditCalls] = [
+    span(dripify, "dripify.new_contacted"), span(reddit, "reddit.dms_sent"), span(reddit, "reddit.dm_replies"), span(reddit, "reddit.dm_calls_booked"),
+  ];
   for (const key of OUTREACH_KEYS) {
     for (const row of batches.get(key) ?? []) {
-      const handedOver = synced !== null && row.dimension === "linkedin/dripify" && row.date >= synced && key !== "outreach.positive_replies" && key !== "outreach.calls_booked";
-      addRow(rows, key, row.date, row.dimension, handedOver ? 0 : row.value);
+      const dripifySynced = row.dimension.endsWith("/dripify") && synced(row.date);
+      const isReddit = row.dimension.startsWith("reddit/");
+      const covered = key === "outreach.positive_replies" ? false
+        : key === "outreach.calls_booked" ? isReddit && redditCalls(row.date)
+        : key === "outreach.replies" ? dripifySynced || (isReddit && redditReplies(row.date))
+        : dripifySynced || (isReddit && redditSends(row.date));
+      addRow(rows, key, row.date, row.dimension, covered ? 0 : row.value);
     }
   }
   const byDate = (map: RowMap, keys: string[]) => {
@@ -539,7 +552,10 @@ function buildOutreachTotals(batches: RowMap, dripify: RowMap, reddit: RowMap, c
     }
   };
   const contacted = byDate(dripify, ["dripify.new_contacted"]);
-  channel("linkedin/dripify", { other: contacted, "outreach.reply_base": contacted, "outreach.replies": byDate(dripify, ["dripify.new_replies"]) });
+  channel("linkedin/dripify", {
+    "outreach.connection_requests": contacted, "outreach.connections_accepted": byDate(dripify, ["dripify.new_accepted"]),
+    "outreach.reply_base": contacted, "outreach.replies": byDate(dripify, ["dripify.new_replies"]),
+  });
   const dms = byDate(reddit, ["reddit.dms_sent"]);
   channel("reddit/dm", { "outreach.initial_dms": dms, "outreach.reply_base": dms, "outreach.replies": byDate(reddit, ["reddit.dm_replies"]), "outreach.calls_booked": byDate(reddit, ["reddit.dm_calls_booked"]) });
   const dials = byDate(coldCalls, ["cold_calls.dials"]);

@@ -6,17 +6,28 @@
 -- available under the Channel filter:
 --
 --   logged batches   channel/method as logged ("linkedin/manual")
---   Dripify sync     linkedin/dripify: leads contacted (touches and reply
---                    base) and replies, summed over campaigns
+--   Dripify sync     linkedin/dripify: leads contacted (touches, connection
+--                    requests and reply base), connections accepted and
+--                    replies, summed over campaigns
 --   Reddit DMs       reddit/dm: DMs sent (first messages), replies, calls booked
 --   cold calls       phone/cold_call: calls made (touches and reply base),
 --                    everyone who answered with a positive, neutral or
 --                    negative reply, positive replies, meetings booked
 --
--- Nothing is counted twice. From the first day the Dripify sync records new
--- activity, it counts Dripify's sends and replies, and logged Dripify batches
--- add only what it can't see (positive replies and calls booked). Reddit DMs
--- and cold calls are logged in Log numbers only.
+-- Nothing is counted twice:
+--   * Between the Dripify sync's first and latest day of new activity, it
+--     counts Dripify's sends, acceptances and replies, and logged Dripify
+--     batches add only what it can't see (positive replies and calls booked).
+--     Before or after that span (the sync not started, or stopped), logged
+--     Dripify batches count in full. Each sync covers everything since the
+--     previous one, so a day it missed inside the span is still covered.
+--   * Reddit DMs belong in Log numbers, which may cover several days at once.
+--     Each Reddit number Log numbers has (DMs sent, replies, calls booked)
+--     takes over the same number from Reddit batches between its first and
+--     latest logged day; Reddit batches always keep their positive replies.
+-- Dripify reports leads contacted, not each invite or message, so a Dripify
+-- lead is one touch and one connection request, as in Dripify's own
+-- acceptance rate (accepted ÷ contacted).
 --
 -- The overview's outreach cards and trend show the same totals. The Outreach
 -- page's batch funnel, recent batches and A/B tests still read the batches.
@@ -61,40 +72,61 @@ language sql stable security definer set search_path = '' as $$
       sum(s.connections_accepted) as connections_accepted,
       sum(s.initial_dms) as initial_dms,
       sum(s.follow_ups) as follow_ups,
-      -- Touches that are not LinkedIn steps: Dripify leads contacted, cold calls made.
+      -- Touches that are not LinkedIn steps: cold calls made.
       sum(s.other_touches) as other_touches,
       sum(s.replies) as replies,
       sum(s.reply_base) as reply_base,
       sum(s.positive_replies) as positive_replies,
       sum(s.calls_booked) as calls_booked
     from (
-      -- Logged batches. A Dripify batch on or after the sync's first day of new
-      -- activity keeps only its positive replies and calls booked.
+      -- Logged batches. A batch whose sends another source already counts
+      -- (the Dripify sync, or Reddit DMs in Log numbers) keeps only what that
+      -- source can't see.
       select b.activity_date,
         public.analytics_dimension_slug(b.channel, 39) || '/' || public.analytics_dimension_slug(b.method, 40) as dimension_key,
-        case when dripify.skip then 0 else m.connection_requests end::numeric as connection_requests,
-        case when dripify.skip then 0 else m.connections_accepted end::numeric as connections_accepted,
-        case when dripify.skip then 0 else m.initial_dms end::numeric as initial_dms,
-        case when dripify.skip then 0 else m.f1_sent::bigint + m.f2_sent + m.custom_sent end::numeric as follow_ups,
+        case when covered.sends then 0 else m.connection_requests end::numeric as connection_requests,
+        case when covered.sends then 0 else m.connections_accepted end::numeric as connections_accepted,
+        case when covered.sends then 0 else m.initial_dms end::numeric as initial_dms,
+        case when covered.sends then 0 else m.f1_sent::bigint + m.f2_sent + m.custom_sent end::numeric as follow_ups,
         0::numeric as other_touches,
-        case when dripify.skip then 0 else m.replies end::numeric as replies,
-        case when dripify.skip then 0 else m.reply_base end::numeric as reply_base,
+        case when covered.replies then 0 else m.replies end::numeric as replies,
+        case when covered.sends then 0 else m.reply_base end::numeric as reply_base,
         m.positive_replies::numeric as positive_replies,
-        m.calls_booked::numeric as calls_booked
+        case when covered.calls then 0 else m.calls_booked end::numeric as calls_booked
       from public.outreach_batches b
       join public.outreach_batch_metrics m on m.batch_id = b.id
-      cross join lateral (select public.analytics_dimension_slug(b.method, 40) = 'dripify'
-        and b.activity_date >= (select min(d.metric_date) from public.analytics_metric_daily d where d.metric_key = 'dripify.new_contacted') as skip) dripify
+      -- Each source's span: first and latest day it has the number.
+      cross join (select min(d.metric_date) as first_day, max(d.metric_date) as last_day
+        from public.analytics_metric_daily d where d.metric_key = 'dripify.new_contacted') dripify
+      cross join (select
+          min(r.metric_date) filter (where r.metric_key = 'reddit.dms_sent') as sends_from,
+          max(r.metric_date) filter (where r.metric_key = 'reddit.dms_sent') as sends_to,
+          min(r.metric_date) filter (where r.metric_key = 'reddit.dm_replies') as replies_from,
+          max(r.metric_date) filter (where r.metric_key = 'reddit.dm_replies') as replies_to,
+          min(r.metric_date) filter (where r.metric_key = 'reddit.dm_calls_booked') as calls_from,
+          max(r.metric_date) filter (where r.metric_key = 'reddit.dm_calls_booked') as calls_to
+        from public.analytics_metric_daily r
+        where r.metric_key in ('reddit.dms_sent', 'reddit.dm_replies', 'reddit.dm_calls_booked')) reddit
+      cross join lateral (select
+        public.analytics_dimension_slug(b.method, 40) = 'dripify' and b.activity_date between dripify.first_day and dripify.last_day as dripify,
+        public.analytics_dimension_slug(b.channel, 39) = 'reddit' as reddit) kind
+      cross join lateral (select
+        coalesce(kind.dripify, false) or coalesce(kind.reddit and b.activity_date between reddit.sends_from and reddit.sends_to, false) as sends,
+        coalesce(kind.dripify, false) or coalesce(kind.reddit and b.activity_date between reddit.replies_from and reddit.replies_to, false) as replies,
+        coalesce(kind.reddit and b.activity_date between reddit.calls_from and reddit.calls_to, false) as calls) covered
       where b.voided_at is null and b.activity_date between p_from and p_to
       union all
-      -- Dripify sync: new leads contacted and new replies, every campaign.
-      select f.metric_date, 'linkedin/dripify', 0, 0, 0, 0,
+      -- Dripify sync: new leads contacted (as connection requests), new
+      -- acceptances and new replies, every campaign.
+      select f.metric_date, 'linkedin/dripify',
         coalesce(sum(f.value) filter (where f.metric_key = 'dripify.new_contacted'), 0),
+        coalesce(sum(f.value) filter (where f.metric_key = 'dripify.new_accepted'), 0),
+        0, 0, 0,
         coalesce(sum(f.value) filter (where f.metric_key = 'dripify.new_replies'), 0),
         coalesce(sum(f.value) filter (where f.metric_key = 'dripify.new_contacted'), 0),
         0, 0
       from public.analytics_metric_daily f
-      where f.metric_key in ('dripify.new_contacted', 'dripify.new_replies') and f.metric_date between p_from and p_to
+      where f.metric_key in ('dripify.new_contacted', 'dripify.new_accepted', 'dripify.new_replies') and f.metric_date between p_from and p_to
       group by f.metric_date
       union all
       -- Reddit DMs: each DM is a first message.
@@ -171,7 +203,7 @@ with per_dimension as materialized (
       union
       select channel.dimension_key
       from (values
-        ('linkedin/dripify', array['dripify.new_contacted', 'dripify.new_replies']),
+        ('linkedin/dripify', array['dripify.new_contacted', 'dripify.new_accepted', 'dripify.new_replies']),
         ('reddit/dm', array['reddit.dms_sent', 'reddit.dm_replies', 'reddit.dm_calls_booked']),
         ('phone/cold_call', array['cold_calls.dials', 'cold_calls.positive_replies', 'cold_calls.neutral_replies', 'cold_calls.negative_replies', 'cold_calls.meetings_booked'])
       ) channel(dimension_key, metric_keys)
@@ -363,8 +395,14 @@ grant execute on function public.load_admin_analytics(integer, integer) to servi
 -------------------------------------------------------------------------------
 -- 4. Definitions say what the totals include.
 -------------------------------------------------------------------------------
-update public.analytics_metric_definitions set description = 'Every outreach attempt: connection requests, first messages and follow-ups from logged batches, Dripify leads contacted, Reddit DMs sent and cold calls made. Voided entries excluded.'
+update public.analytics_metric_definitions set description = 'Every outreach attempt: connection requests, first messages and follow-ups from logged batches, Dripify leads contacted, Reddit DMs sent and cold calls made. Dripify reports each lead once, not each message, so a Dripify lead is one touch. Voided entries excluded.'
 where metric_key = 'outreach.touches';
+update public.analytics_metric_definitions set description = 'Connection requests from logged batches, plus leads Dripify contacted (Dripify reports leads contacted, not invites).'
+where metric_key = 'outreach.connection_requests';
+update public.analytics_metric_definitions set description = 'Connections accepted, from logged batches and the Dripify sync.'
+where metric_key = 'outreach.connections_accepted';
+update public.analytics_metric_definitions set description = 'Connections accepted ÷ connection requests, including Dripify (accepted ÷ leads contacted, as Dripify shows it). Acceptances come in after the request, so a short range can read high.'
+where metric_key = 'outreach.acceptance_rate';
 update public.analytics_metric_definitions set description = 'People who replied on any channel, including everyone who answered a cold call with a positive, neutral or negative reply.'
 where metric_key = 'outreach.replies';
 update public.analytics_metric_definitions set description = 'What replies are measured against: first messages sent (for an A/B test, the sends at the tested step), Dripify leads contacted, Reddit DMs sent and cold calls made.'
@@ -373,7 +411,7 @@ update public.analytics_metric_definitions set description = 'Replies showing in
 where metric_key = 'outreach.positive_replies';
 update public.analytics_metric_definitions set description = 'Sales calls booked from outreach on every channel: logged batches, Reddit DMs and cold calls. Count a call only once Calendly confirms the booking.'
 where metric_key = 'outreach.calls_booked';
-update public.analytics_metric_definitions set description = 'Replies ÷ people reached, across every channel.'
+update public.analytics_metric_definitions set description = 'Replies ÷ people reached, across every channel. Replies can come in a later period than the message they answer, so a short range can read high.'
 where metric_key = 'outreach.reply_rate';
 update public.analytics_metric_definitions set description = 'Positive replies ÷ people reached. Dripify and Reddit DMs don''t record positive replies, so they lower this rate; filter by channel to compare.'
 where metric_key = 'outreach.positive_reply_rate';
