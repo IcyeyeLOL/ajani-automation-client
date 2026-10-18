@@ -18,6 +18,8 @@ export type TableRead = {
   note: string;
 };
 
+// TikTok is retired but still recognised, so a TikTok export is left out
+// rather than read as another platform's numbers.
 const PLATFORM_WORDS: Record<string, string[]> = {
   instagram: ["instagram", "ig", "insta"],
   youtube: ["youtube", "yt"],
@@ -25,6 +27,7 @@ const PLATFORM_WORDS: Record<string, string[]> = {
   linkedin: ["linkedin"],
   reddit: ["reddit"],
 };
+const PLATFORM_NAMES: Record<string, string> = { instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", reddit: "Reddit" };
 
 /** Header names people and exports use, beyond each metric's key and label. */
 const EXTRA_ALIASES: Record<string, string[]> = {
@@ -34,7 +37,6 @@ const EXTRA_ALIASES: Record<string, string[]> = {
   "instagram.posts_published": ["posts", "posts_and_reels"],
   "youtube.videos_published": ["videos", "uploads"],
   "youtube.watch_hours": ["watch_time_hours", "watch_time"],
-  "tiktok.videos_published": ["videos", "posts"],
   "linkedin.posts_published": ["posts"],
   "reddit.posts_published": ["posts"],
   "reddit.dms_sent": ["dms"],
@@ -193,6 +195,7 @@ export function readDailyTable(text: string, fileName: string, metrics: MetricDe
   const values: TableValue[] = [];
   const notUsed: TableNote[] = [];
   const unresolved = new Set<string>();
+  const untracked = new Set<string>();
   let dailyTables = 0;
   let totalsTables = 0;
 
@@ -201,8 +204,8 @@ export function readDailyTable(text: string, fileName: string, metrics: MetricDe
     if (CONTACT_TAPS.includes(name)) return { index: 0, header, key: null, contact: true, candidates: [] };
     const known = exact.get(name);
     if (known) return { index: 0, header, key: known, contact: false, candidates: [] };
-    const candidates = [...(loose.get(name) ?? [])];
-    return { index: 0, header, key: candidates.length === 1 ? candidates[0] : null, contact: false, candidates: candidates.length > 1 ? candidates : [] };
+    // A bare header ("likes") is settled once the table's platform is known.
+    return { index: 0, header, key: null, contact: false, candidates: [...(loose.get(name) ?? [])] };
   };
 
   for (let start = 0; start < rows.length; start += 1) {
@@ -233,18 +236,28 @@ export function readDailyTable(text: string, fileName: string, metrics: MetricDe
 
     // Which platform unprefixed headers ("followers", "comments") are about.
     const hinted = [...new Set([...platformsIn(title), ...fileHints])];
-    const certain = [...new Set(columns.flatMap((column) => column.key ? [sourceOf.get(column.key) ?? ""] : []).filter((source) => PLATFORM_WORDS[source]))];
+    const certain = [...new Set(columns.flatMap((column) => {
+      const key = column.key ?? (column.candidates.length === 1 ? column.candidates[0] : null);
+      return key ? [sourceOf.get(key) ?? ""] : [];
+    }).filter((source) => PLATFORM_WORDS[source]))];
     const platform = hinted.length === 1 ? hinted[0] : hinted.length === 0 && certain.length === 1 ? certain[0] : null;
+    const tracked = platform !== null && metrics.some((metric) => metric.source === platform);
     for (const column of columns) {
       if (column.key || !column.candidates.length) continue;
-      const pick = platform ? column.candidates.find((key) => sourceOf.get(key) === platform) : undefined;
+      const only = column.candidates.length === 1 ? column.candidates[0] : undefined;
+      // A named platform takes its own number; a number only another platform has is never put on it.
+      const pick = platform
+        ? column.candidates.find((key) => sourceOf.get(key) === platform) ?? (only && !PLATFORM_WORDS[sourceOf.get(only) ?? ""] ? only : undefined)
+        : only;
       if (pick) column.key = pick;
+      else if (platform && !tracked) untracked.add(PLATFORM_NAMES[platform]);
       else unresolved.add(column.header);
     }
     const linkTaps = columns.find((column) => column.key === "instagram.profile_link_taps");
     const contact = columns.find((column) => column.contact);
     for (const column of columns) {
       if (!column.key && !column.contact && !column.candidates.length) notUsed.push({ item: `Column "${column.header}"`, reason: "Not a number these charts track" });
+      if (!column.key && column.candidates.length && platform && !tracked) notUsed.push({ item: `Column "${column.header}"`, reason: `${PLATFORM_NAMES[platform]} numbers aren't tracked` });
       if (column.contact && !linkTaps) notUsed.push({ item: `Column "${column.header}"`, reason: "Counted with link taps, which this table doesn't have" });
     }
 
@@ -288,7 +301,8 @@ export function readDailyTable(text: string, fileName: string, metrics: MetricDe
     : [
       values.length
         ? `Read ${values.length} ${values.length === 1 ? "number" : "numbers"} across ${days} ${days === 1 ? "day" : "days"} straight from the spreadsheet, column by column.`
-        : "Found a day-by-day table, but its cells were blank or not numbers.",
+        : untracked.size ? "" : "Found a day-by-day table, but its cells were blank or not numbers.",
+      untracked.size ? `${[...untracked].join(" and ")} numbers aren't tracked on these charts, so those columns were left out.` : "",
       unresolved.size ? "Some columns don't say which platform they're for; put the platform in the file name, for example instagram-daily.csv." : "",
       totalsTables ? "The totals table was left out." : "",
     ];

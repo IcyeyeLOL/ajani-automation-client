@@ -129,7 +129,7 @@ export function trendRange(period: TrendPeriod, grain: MetricGrain, today: strin
   return { grain: shown, ...rangeForPreset(shown, trendPeriod(period).counts[shown] ?? 1, today) };
 }
 
-export type TrendViewId = "key" | "sales" | "outreach" | "cold_calls" | "dripify" | "linkedin" | "instagram" | "youtube" | "tiktok" | "reddit" | "website";
+export type TrendViewId = "key" | "sales" | "outreach" | "cold_calls" | "dripify" | "linkedin" | "instagram" | "youtube" | "reddit" | "website";
 export type TrendView = {
   id: TrendViewId;
   label: string;
@@ -151,7 +151,6 @@ export const trendViews: TrendView[] = [
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"], suggested: ["linkedin.followers", "linkedin.impressions", "linkedin.engagements", "linkedin.posts_published"], account: byAccount },
   { id: "instagram", label: "Instagram", sources: ["instagram"], suggested: ["instagram.followers", "instagram.reach", "instagram.views", "instagram.interactions"], account: byAccount },
   { id: "youtube", label: "YouTube", sources: ["youtube"], suggested: ["youtube.subscribers", "youtube.subscribers_gained", "youtube.subscribers_lost", "youtube.views", "youtube.watch_hours", "youtube.shorts_views", "youtube.videos_published"], account: byAccount },
-  { id: "tiktok", label: "TikTok", sources: ["tiktok"], suggested: ["tiktok.followers", "tiktok.views", "tiktok.likes", "tiktok.videos_published"], account: byAccount },
   { id: "reddit", label: "Reddit", sources: ["reddit"], suggested: ["reddit.views", "reddit.upvotes", "reddit.karma", "reddit.posts_published", "reddit.dms_sent", "reddit.dm_replies", "reddit.dm_calls_booked", "reddit.dm_reply_rate"], account: byAccount },
   { id: "website", label: "Website", sources: ["ajani"], suggested: ["ajani.drafts_saved", "ajani.builds_submitted", "ajani.brief_to_build_rate", "ajani.new_workspaces"], account: null },
 ];

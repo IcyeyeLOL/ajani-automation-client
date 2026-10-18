@@ -137,7 +137,7 @@ function IngestCard({ enabled, keyTooShort, path }: { enabled: boolean; keyTooSh
       <span><i className={enabled ? "online" : "offline"} />{enabled ? "ON" : "OFF"}</span>
     </header>
     <div className="admin-connection-body">
-      <p>{enabled ? "Accepts daily totals for your main YouTube, Instagram, Reddit, TikTok and LinkedIn accounts from tools you run, such as Zapier or a script, for the last 35 days. It cannot read anything back, saves them as logged entries you can delete, and rejects names, links, extra fields and any number only a connector may write."
+      <p>{enabled ? "Accepts daily totals for your main YouTube, Instagram, Reddit and LinkedIn accounts from tools you run, such as Zapier or a script, for the last 35 days. It cannot read anything back, saves them as logged entries you can delete, and rejects names, links, extra fields and any number only a connector may write."
         : keyTooShort ? "AJANI_METRICS_INGEST_KEY is set but shorter than 32 characters, so the endpoint stays off. Replace it with a longer random value."
         : "Add AJANI_METRICS_INGEST_KEY (at least 32 random characters) in Vercel to let your own automations send daily totals. Until then the endpoint answers “not found”."}</p>
       <pre>{example}</pre>

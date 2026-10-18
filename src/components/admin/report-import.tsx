@@ -132,7 +132,7 @@ export function ReportImport({ sampleMode }: { sampleMode: boolean }) {
   }
 
   return <section aria-label="Import numbers from files" className="admin-report-import">
-    <p className="admin-report-intro">Muse reports, exports from Instagram, YouTube, TikTok, LinkedIn or Reddit, screenshots, and sales or revenue sheets. Day-by-day spreadsheets are read column by column; anything else is read by the AI agent. You check every number before it&apos;s saved.</p>
+    <p className="admin-report-intro">Muse reports, exports from Instagram, YouTube, LinkedIn or Reddit, screenshots, and sales or revenue sheets. Day-by-day spreadsheets are read column by column; anything else is read by the AI agent. You check every number before it&apos;s saved.</p>
 
     <form className="admin-report-pick" onSubmit={readFiles}>
       <label className="admin-field">

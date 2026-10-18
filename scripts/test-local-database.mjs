@@ -72,7 +72,7 @@ try {
     await client.query(await readFile(path.join(root, "supabase", "migrations", name), "utf8"));
   }
   console.log(`PASS: ${migrations.length} migrations applied to a new local PostgreSQL cluster.`);
-  for (const name of ["db-regressions.sql", "db-analytics-regressions.sql", "db-webhook-regressions.sql", "db-metrics-regressions.sql", "db-connector-regressions.sql", "db-goals-regressions.sql", "db-platform-regressions.sql", "db-dripify-parity-regressions.sql", "db-cold-calls-regressions.sql"]) {
+  for (const name of ["db-regressions.sql", "db-analytics-regressions.sql", "db-webhook-regressions.sql", "db-metrics-regressions.sql", "db-connector-regressions.sql", "db-goals-regressions.sql", "db-platform-regressions.sql", "db-dripify-parity-regressions.sql", "db-cold-calls-regressions.sql", "db-tiktok-retired-regressions.sql"]) {
     await client.query(await readFile(path.join(root, "scripts", name), "utf8"));
     console.log(`PASS: ${name}`);
   }

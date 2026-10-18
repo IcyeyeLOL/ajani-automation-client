@@ -14,7 +14,7 @@ import { shiftDay, utcDay } from "@/lib/connectors/connector-store";
  * only recent days, so a leaked key cannot rewrite the business history.
  */
 export const INGEST_ACTOR = "connector:ingest";
-export const INGEST_SOURCES = ["youtube", "instagram", "reddit", "tiktok", "linkedin"] as const;
+export const INGEST_SOURCES = ["youtube", "instagram", "reddit", "linkedin"] as const;
 export const INGEST_MAX_BYTES = 64_000;
 export const INGEST_MAX_DAYS_BACK = 35;
 const MIN_KEY_LENGTH = 32;
@@ -38,7 +38,7 @@ export function ingestSchema(today: string) {
   return z.preprocess((input) => (hasForbiddenKey(input) ? null : input), z.object({
     values: z.array(z.object({
       metricKey: z.string().regex(METRIC_KEY_PATTERN)
-        .refine((key) => (INGEST_SOURCES as readonly string[]).includes(key.split(".")[0]), "Only platform metrics (YouTube, Instagram, Reddit, TikTok, LinkedIn) can be sent here"),
+        .refine((key) => (INGEST_SOURCES as readonly string[]).includes(key.split(".")[0]), "Only platform metrics (YouTube, Instagram, Reddit, LinkedIn) can be sent here"),
       date: z.iso.date().refine((date) => date >= earliest && date <= today, `Dates must be between ${earliest} and ${today} (UTC)`),
       value: z.number().finite().min(0).max(1e14),
     }).strict()).min(1).max(200)

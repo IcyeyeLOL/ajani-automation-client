@@ -112,7 +112,7 @@ Code: `src/lib/connectors/` (`provider-http.ts`, `youtube.ts`, `instagram.ts`, `
 
 ### Private ingest endpoint
 
-`POST /api/metrics/ingest` with `Authorization: Bearer <AJANI_METRICS_INGEST_KEY>` (at least 32 characters; otherwise the route answers 404) lets the owner's own automations send daily totals: `{"values":[{"metricKey":"reddit.dms_sent","date":"2026-10-15","value":12}]}`. Least privilege: YouTube, Instagram, Reddit, TikTok and LinkedIn metrics only; the main account only (an account name could carry a prospect's handle); the last 35 UTC days; at most 200 values and 64 KB; strict fields. Values are written as **manual** entries (actor `connector:ingest`), so the store refuses connector-only metrics and every row shows under recent entries and can be deleted. Errors never echo submitted values or database text.
+`POST /api/metrics/ingest` with `Authorization: Bearer <AJANI_METRICS_INGEST_KEY>` (at least 32 characters; otherwise the route answers 404) lets the owner's own automations send daily totals: `{"values":[{"metricKey":"reddit.dms_sent","date":"2026-10-15","value":12}]}`. Least privilege: YouTube, Instagram, Reddit and LinkedIn metrics only; the main account only (an account name could carry a prospect's handle); the last 35 UTC days; at most 200 values and 64 KB; strict fields. Values are written as **manual** entries (actor `connector:ingest`), so the store refuses connector-only metrics and every row shows under recent entries and can be deleted. Errors never echo submitted values or database text.
 
 ### Security model
 
@@ -141,9 +141,17 @@ Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no ac
 
 The migration is additive (definitions only). It was applied to the live database on 2026-10-18.
 
+## TikTok retired (`20261018000000`)
+
+The owner asked for the TikTok section to be removed on 2026-10-18. Like X, its seven definitions are set inactive and any logged numbers are kept, so setting `active` back to true restores the section with its history.
+
+- **Gone from the desk.** The Trends view, the Log numbers tab, the "Add a chart" list, Import numbers, the ingest endpoint, the Outreach channel lists and sample data. The store refuses new TikTok numbers, and `load_analytics_series` refuses to chart them.
+- **Import guard.** The spreadsheet reader still recognises "tiktok" in a file name or title, so a TikTok export is left out ("TikTok numbers aren't tracked") rather than read as another platform's. Without TikTok, "profile views" only matches LinkedIn and "videos" only YouTube. A bare header that only one platform has is now never put on a different platform the file names; it goes to the AI reader instead.
+- **Live.** Needs the usual backup, rehearsal and apply, each with the owner's approval.
+
 ## Import numbers (any platform)
 
-Code: `src/lib/admin/report-table.ts` (spreadsheets), `src/lib/admin/report-import.ts` (agent and rules), `src/lib/admin/report-merge.ts` (several files), `src/app/admin/reports/read/route.ts`, `saveReportValuesAction` in `src/app/admin/actions.ts`, `src/components/admin/report-import.tsx`. **Import numbers** sits at the top of Trends. It takes Muse reports, platform exports, screenshots, and sales or revenue sheets: PDF, CSV/TSV, Markdown or text, PNG, JPEG or WEBP, up to 10 files at a time, 4 MB each. Every hand-logged number can be filled: Instagram, YouTube, TikTok, LinkedIn and Reddit, sales and revenue (`entry_mode = 'manual'`, units count, hours or money). Nothing is saved until the owner reviews the rows and presses Save.
+Code: `src/lib/admin/report-table.ts` (spreadsheets), `src/lib/admin/report-import.ts` (agent and rules), `src/lib/admin/report-merge.ts` (several files), `src/app/admin/reports/read/route.ts`, `saveReportValuesAction` in `src/app/admin/actions.ts`, `src/components/admin/report-import.tsx`. **Import numbers** sits at the top of Trends. It takes Muse reports, platform exports, screenshots, and sales or revenue sheets: PDF, CSV/TSV, Markdown or text, PNG, JPEG or WEBP, up to 10 files at a time, 4 MB each. Every hand-logged number can be filled: Instagram, YouTube, LinkedIn and Reddit, cold calls, sales and revenue (`entry_mode = 'manual'`, units count, hours or money). Nothing is saved until the owner reviews the rows and presses Save.
 
 - **Spreadsheets are read without AI.** A text file with a header row that has a date column and known number columns is read column by column. That read is exact, instant and free, and it works without an Anthropic key.
   - **Matching columns to metrics.** Headers match a metric's key, its label without the platform name, or a short alias list (`EXTRA_ALIASES`). A prefix such as `instagram_reach` or "LinkedIn followers" is exact. An unprefixed header that several platforms share (`followers`, `views`, `comments`) takes its platform from a title row above the table or the file name. Failing that, it takes it from columns only one platform has (`saves`, `link_taps`, `interactions` mean Instagram). If none of these settles it, the column is not guessed.

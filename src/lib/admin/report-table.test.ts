@@ -52,12 +52,28 @@ Last 7 days,2202
   });
 
   it("takes the platform from the file name, and keeps prefixed and sales columns exact", () => {
-    expect(pairs("date,followers,views\n2026-10-08,512,9000\n", "tiktok-daily.csv")).toEqual([
-      ["tiktok.followers", "2026-10-08", 512], ["tiktok.views", "2026-10-08", 9000],
+    expect(pairs("date,followers,views\n2026-10-08,512,9000\n", "linkedin-daily.csv")).toEqual([
+      ["linkedin.followers", "2026-10-08", 512],
+    ]);
+    expect(pairs("date,followers,views\n2026-10-08,73,900\n", "ig-daily.csv")).toEqual([
+      ["instagram.followers", "2026-10-08", 73], ["instagram.views", "2026-10-08", 900],
     ]);
     expect(pairs("Date,Instagram followers,LinkedIn followers,Clients signed,Cash collected\n2026-10-14,73,1200,1,\"$1,250.50\"\n")).toEqual([
       ["instagram.followers", "2026-10-14", 73], ["linkedin.followers", "2026-10-14", 1200], ["sales.deals_won", "2026-10-14", 1], ["revenue.cash_collected", "2026-10-14", 1250.5],
     ]);
+  });
+
+  it("never puts a named platform's columns on another platform", () => {
+    // TikTok is retired: "profile views" now only matches LinkedIn and "videos" only YouTube.
+    const tiktok = read("Date,Followers,Views,Profile views,Videos\n2026-10-08,231,1500,22,1\n", "tiktok-daily.csv")!;
+    expect(tiktok.values).toEqual([]);
+    expect(tiktok.unresolved).toEqual([]);
+    expect(tiktok.notUsed).toContainEqual({ item: "Column \"Profile views\"", reason: "TikTok numbers aren't tracked" });
+    expect(tiktok.note).toBe("TikTok numbers aren't tracked on these charts, so those columns were left out.");
+    // An Instagram file's "profile views" is not LinkedIn's; business columns still count.
+    const instagram = read("Date,Reach,Profile views,Clients signed\n2026-10-08,2219,60,1\n", "instagram-daily.csv")!;
+    expect(instagram.values.map((value) => value.metricKey)).toEqual(["instagram.reach", "sales.deals_won"]);
+    expect(instagram.unresolved).toEqual(["Profile views"]);
   });
 
   it("reads a cold-call log", () => {

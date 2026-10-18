@@ -19,7 +19,6 @@ export const entryGroups: Array<{ id: string; label: string; sources: string[] }
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"] },
   { id: "instagram", label: "Instagram", sources: ["instagram"] },
   { id: "youtube", label: "YouTube", sources: ["youtube"] },
-  { id: "tiktok", label: "TikTok", sources: ["tiktok"] },
   { id: "reddit", label: "Reddit", sources: ["reddit"] },
   { id: "x", label: "X", sources: ["x"] },
 ];

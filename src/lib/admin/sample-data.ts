@@ -36,7 +36,7 @@ type RowMap = Map<string, SampleRow[]>;
 
 // ---------------------------------------------------------------------------
 // Built-in definitions: the active rows of analytics_metric_definitions after
-// every 20261016 migration (X is retired), in catalog order.
+// every migration (X and TikTok are retired), in catalog order.
 // ---------------------------------------------------------------------------
 
 type DefinitionOptions = Partial<Pick<MetricDefinition, "numeratorKey" | "denominatorKey" | "higherIsBetter" | "chartable">>;
@@ -111,13 +111,6 @@ export const SAMPLE_DEFINITIONS: MetricDefinition[] = [
   definition("youtube.shares", "content", "YouTube shares", "Shares during the recorded day or period.", "count", "sum", "manual"),
   definition("youtube.subscribers_gained", "content", "YouTube subscribers gained", "New subscribers during the recorded day (synced from YouTube Analytics).", "count", "sum", "connector"),
   definition("youtube.subscribers_lost", "content", "YouTube subscribers lost", "Unsubscribes during the recorded day (synced from YouTube Analytics).", "count", "sum", "connector", { higherIsBetter: false }),
-  definition("tiktok.followers", "content", "TikTok followers", "Account followers on the recorded day.", "count", "last", "manual"),
-  definition("tiktok.views", "content", "TikTok views", "Video views during the recorded day or period.", "count", "sum", "manual"),
-  definition("tiktok.likes", "content", "TikTok likes", "Likes received during the recorded day or period.", "count", "sum", "manual"),
-  definition("tiktok.comments", "content", "TikTok comments", "Comments received during the recorded day or period.", "count", "sum", "manual"),
-  definition("tiktok.shares", "content", "TikTok shares", "Shares during the recorded day or period.", "count", "sum", "manual"),
-  definition("tiktok.profile_views", "content", "TikTok profile views", "Profile views during the recorded day or period.", "count", "sum", "manual"),
-  definition("tiktok.videos_published", "content", "TikTok videos published", "Videos published.", "count", "sum", "manual"),
   definition("instagram.followers", "content", "Instagram followers", "Account followers on the recorded day.", "count", "last", "manual"),
   definition("instagram.reach", "content", "Instagram reach", "Accounts reached during the recorded day or period. Added up across days, so an account reached on two days counts twice.", "count", "sum", "manual"),
   definition("instagram.views", "content", "Instagram views", "Views during the recorded day or period.", "count", "sum", "manual"),
@@ -426,36 +419,6 @@ function buildInstagram(line: Timeline): RowMap {
   }
   const followers = followerCounts(788, gained, lost, pause);
   for (let index = 0; index <= YESTERDAY_INDEX; index += 1) addRow(rows, "instagram.followers", line.dates[index], "", followers[index]);
-  return rows;
-}
-
-function buildTikTok(line: Timeline): RowMap {
-  const rows: RowMap = new Map();
-  const pause = postingBreak(line, 2);
-  const videos = publishing("tiktok.videos_published", "", line, [0.4, 0.35, 0.3, 0.4, 0.3, 0.45, 0.45], 0.05, pause);
-  // Most videos reach a few hundred to a couple of thousand people; about one in thirty takes off.
-  const reach = (day: number) => {
-    const date = line.dates[day];
-    return rand("tiktok.viral", date) < 0.035 ? between(6_000, 12_000, rand("tiktok.reach", date)) : between(250, 2_200, rand("tiktok.reach", date));
-  };
-  const gained = new Array<number>(line.dates.length).fill(0);
-  const lost = new Array<number>(line.dates.length).fill(0);
-  for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
-    const date = line.dates[index];
-    const unit = (salt: string) => rand("tiktok", date, salt);
-    const views = Math.round(between(60, 160, unit("base")) * audience(index) + postReach(videos, index, [1, 0.5, 0.2, 0.08], reach));
-    const profileViews = Math.round(views * between(0.012, 0.025, unit("profile")));
-    gained[index] = countEvents(profileViews * between(0.06, 0.12, unit("follow")), "tiktok.followed", date);
-    lost[index] = countEvents(0.7, "tiktok.unfollowed", date);
-    addRow(rows, "tiktok.views", date, "", views);
-    addRow(rows, "tiktok.likes", date, "", Math.round(views * between(0.05, 0.09, unit("likes"))));
-    addRow(rows, "tiktok.comments", date, "", Math.round(views * between(0.003, 0.008, unit("comments"))));
-    addRow(rows, "tiktok.shares", date, "", Math.round(views * between(0.002, 0.006, unit("shares"))));
-    addRow(rows, "tiktok.profile_views", date, "", profileViews);
-    addRow(rows, "tiktok.videos_published", date, "", videos[index]);
-  }
-  const followers = followerCounts(231, gained, lost, pause);
-  for (let index = 0; index <= YESTERDAY_INDEX; index += 1) addRow(rows, "tiktok.followers", line.dates[index], "", followers[index]);
   return rows;
 }
 
@@ -888,9 +851,9 @@ function buildColdCalls(line: Timeline): RowMap {
 // Row cache, keyed by today: groups are generated once and only read after.
 // ---------------------------------------------------------------------------
 
-type GroupId = "linkedin" | "youtube" | "instagram" | "tiktok" | "reddit" | "cold_calls" | "outreach" | "ajani" | "dripify" | "business";
+type GroupId = "linkedin" | "youtube" | "instagram" | "reddit" | "cold_calls" | "outreach" | "ajani" | "dripify" | "business";
 const GROUP_BY_SOURCE: Record<string, GroupId> = {
-  linkedin: "linkedin", youtube: "youtube", instagram: "instagram", tiktok: "tiktok", reddit: "reddit", cold_calls: "cold_calls",
+  linkedin: "linkedin", youtube: "youtube", instagram: "instagram", reddit: "reddit", cold_calls: "cold_calls",
   outreach: "outreach", ajani: "ajani", dripify: "dripify", sales: "business", revenue: "business",
 };
 const rowCache = new Map<string, { line: Timeline; groups: Map<GroupId, RowMap>; generic: Map<string, SampleRow[]> }>();
@@ -913,7 +876,6 @@ function groupRows(group: GroupId, today: string): RowMap {
     rows = group === "linkedin" ? buildLinkedIn(line)
       : group === "youtube" ? buildYouTube(line)
         : group === "instagram" ? buildInstagram(line)
-          : group === "tiktok" ? buildTikTok(line)
             : group === "reddit" ? buildReddit(line)
               : group === "cold_calls" ? buildColdCalls(line)
               : group === "outreach" ? buildOutreach(line)
@@ -953,7 +915,7 @@ export function sampleMetricRows(key: string, today: string, definitions: Metric
 
 const RECENT_ENTRY_ORDER = [
   "linkedin.followers", "linkedin.impressions", "linkedin.posts_published", "revenue.cash_collected", "sales.calls_held",
-  "youtube.subscribers", "youtube.views", "instagram.followers", "instagram.reach", "tiktok.followers", "tiktok.views", "reddit.karma",
+  "youtube.subscribers", "youtube.views", "instagram.followers", "instagram.reach", "reddit.karma",
 ];
 
 export function sampleMetricCatalog(definitions: MetricDefinition[], today: string): MetricCatalog {

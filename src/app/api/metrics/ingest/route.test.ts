@@ -53,7 +53,7 @@ describe("private metrics endpoint", () => {
     const response = await POST(post({ values: [
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: 12 },
       { metricKey: "reddit.dm_replies", date: "2026-10-16", value: 3 },
-      { metricKey: "tiktok.views", date: "2026-10-15", value: 900 },
+      { metricKey: "instagram.reach", date: "2026-10-15", value: 900 },
     ] }));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -71,6 +71,8 @@ describe("private metrics endpoint", () => {
       { metricKey: "revenue.cash_collected", date: "2026-10-15", value: 1 },
       { metricKey: "dripify.contacted", date: "2026-10-15", value: 1 },
       { metricKey: "outreach.touches", date: "2026-10-15", value: 1 },
+      // TikTok is retired.
+      { metricKey: "tiktok.views", date: "2026-10-15", value: 1 },
       { metricKey: "reddit.dms_sent", date: "2026-10-17", value: 1 },
       { metricKey: "reddit.dms_sent", date: "2026-06-01", value: 1 },
       { metricKey: "reddit.dms_sent", date: "2026-10-15", value: -1 },

@@ -293,7 +293,7 @@ describe("sample daily values", () => {
   });
 
   it("let followers dip while they grow: some days lose followers, and a posting break gives a down week and a down month", () => {
-    for (const key of ["linkedin.followers", "instagram.followers", "tiktok.followers", "youtube.subscribers", "reddit.karma"]) {
+    for (const key of ["linkedin.followers", "instagram.followers", "youtube.subscribers", "reddit.karma"]) {
       const daily = [...totalsByDate(sampleMetricRows(key, TODAY)).entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, value]) => value);
       const changes = daily.slice(1).map((value, index) => value - daily[index]);
       const lossShare = changes.filter((change) => change < 0).length / changes.length;
