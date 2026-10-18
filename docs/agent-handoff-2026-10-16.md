@@ -92,6 +92,12 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
        - Reddit batches no longer repeat what Log numbers has for Reddit. Each number is checked separately, over Log numbers' first-to-latest logged day.
        - The suite passes, and a mutation (the old Dripify rule) fails it.
        - On Windows, `npm run test:database` exits 0 even when a regression fails, so read its `PASS:` lines.
+   - **TikTok and Outreach totals applied live on 2026-10-18**, with the owner's typed approval.
+     - Before: a backup of the definitions, the three replaced functions with their grants, the migration history and the outreach numbers (`Documents/ajani-database-backups/ajani-live-before-tiktok-and-outreach-totals-2026-10-18T20-50-15.json`), and a rehearsal on a rebuilt copy whose definitions and functions matched live exactly. All five related regression files passed.
+     - Applied each file as one transaction through the Management API and recorded both in `supabase_migrations.schema_migrations`.
+     - After: latest version `20261018010000`, 38 recorded, 100 definitions (TikTok inactive), daily values unchanged at 515, grants unchanged.
+     - Access: a project-scoped, database-only token with 24-hour expiry. The owner clicked Create, because the safety classifier blocks the agent creating it. The agent then deleted it on the Tokens page. The older "cold calls" and "Claude" tokens (no expiry) are still active; the owner was asked to delete them.
+     - **Live data at the time.** There are no outreach batches. Dripify's `new_contacted` is 0 on 10-17 and 10-18: contacted is stuck at 694 with 186 leads remaining. The sync brought in 4 acceptances and 1 reply. Outreach therefore shows those, with rates unknown (0 new sends).
    - **Import rebuilt (2026-10-18, owner request).** The old reader saved the owner's combined Instagram and LinkedIn CSV wrongly:
      - Live `instagram.followers` for Sep 18 – Oct 17 holds LinkedIn's counts (2,362–2,533, 30 rows).
      - Instagram views (30 days), interactions (24) and posts (9) from that file are missing, and so are all its LinkedIn numbers.
