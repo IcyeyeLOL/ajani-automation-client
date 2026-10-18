@@ -24,6 +24,12 @@ export const entryGroups: Array<{ id: string; label: string; sources: string[] }
   { id: "x", label: "X", sources: ["x"] },
 ];
 
+/** What to know before typing a group's numbers. */
+const groupNotes: Record<string, string> = {
+  youtube: "YouTube syncs these every night once it's connected. Type numbers only for days before the sync started: a typed day from the last week is replaced by the next sync.",
+  reddit: "Log Reddit DMs here, not as an Outreach batch, so they're counted once.",
+};
+
 /** A request to open the panel (and scroll to it) on the tab for these sources; null means the current view's. */
 export type LogRequest = { token: number; sources: string[] | null };
 
@@ -73,6 +79,7 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
       <div aria-label="Platform" className="admin-trend-chips small" role="group">
         {groups.map((item) => <button aria-pressed={item.id === group?.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label}</button>)}
       </div>
+      {group && groupNotes[group.id] ? <p className="admin-trend-log-pointer">{groupNotes[group.id]}</p> : null}
       {group ? <EntryForm accounts={accounts} action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} sampleMode={sampleMode} status={state.status} today={catalog.today} /> : null}
       <RecentEntries definitions={definitions} entries={catalog.recentEntries} sampleMode={sampleMode} />
     </div>

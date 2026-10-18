@@ -150,9 +150,9 @@ export const trendViews: TrendView[] = [
   { id: "dripify", label: "Dripify", sources: ["dripify"], suggested: ["dripify.new_contacted", "dripify.new_replies", "dripify.reply_rate", "dripify.acceptance_rate", "dripify.leads_remaining", "dripify.unread_messages"], account: { label: "Campaign", all: "All campaigns", noun: "campaign" } },
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"], suggested: ["linkedin.followers", "linkedin.impressions", "linkedin.engagements", "linkedin.posts_published"], account: byAccount },
   { id: "instagram", label: "Instagram", sources: ["instagram"], suggested: ["instagram.followers", "instagram.reach", "instagram.views", "instagram.interactions"], account: byAccount },
-  { id: "youtube", label: "YouTube", sources: ["youtube"], suggested: ["youtube.subscribers", "youtube.views", "youtube.watch_hours", "youtube.videos_published"], account: byAccount },
+  { id: "youtube", label: "YouTube", sources: ["youtube"], suggested: ["youtube.subscribers", "youtube.subscribers_gained", "youtube.subscribers_lost", "youtube.views", "youtube.watch_hours", "youtube.shorts_views", "youtube.videos_published"], account: byAccount },
   { id: "tiktok", label: "TikTok", sources: ["tiktok"], suggested: ["tiktok.followers", "tiktok.views", "tiktok.likes", "tiktok.videos_published"], account: byAccount },
-  { id: "reddit", label: "Reddit", sources: ["reddit"], suggested: ["reddit.views", "reddit.upvotes", "reddit.dms_sent", "reddit.dm_reply_rate"], account: byAccount },
+  { id: "reddit", label: "Reddit", sources: ["reddit"], suggested: ["reddit.views", "reddit.upvotes", "reddit.karma", "reddit.posts_published", "reddit.dms_sent", "reddit.dm_replies", "reddit.dm_calls_booked", "reddit.dm_reply_rate"], account: byAccount },
   { id: "website", label: "Website", sources: ["ajani"], suggested: ["ajani.drafts_saved", "ajani.builds_submitted", "ajani.brief_to_build_rate", "ajani.new_workspaces"], account: null },
 ];
 
