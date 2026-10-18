@@ -24,9 +24,8 @@ const definition = (key: string, entryMode = "manual") => ({
   numeratorKey: null, denominatorKey: null, entryMode, higherIsBetter: true, chartable: true, firstDate: null, lastDate: null, dimensions: [],
 });
 
-function save(rows: unknown, platform = "instagram") {
+function save(rows: unknown) {
   const form = new FormData();
-  form.set("platform", platform);
   form.set("rows", typeof rows === "string" ? rows : JSON.stringify(rows));
   return saveReportValuesAction(initialAdminActionState, form);
 }
@@ -39,7 +38,7 @@ describe("saving reviewed report rows", () => {
     mocks.rpc.mockResolvedValue({ data: 3, error: null });
     mocks.loadMetricCatalog.mockResolvedValue({
       status: "available", today: "2026-10-17", recentEntries: [], dimensionLabels: {}, connectors: { dripify: false },
-      metrics: [definition("instagram.reach"), definition("instagram.followers"), definition("instagram.synced", "connector"), definition("youtube.views")],
+      metrics: [definition("instagram.reach"), definition("instagram.followers"), definition("instagram.synced", "connector"), definition("youtube.views"), { ...definition("revenue.cash_collected"), unit: "currency_cents" }, { ...definition("instagram.rate", "derived"), unit: "ratio" }],
     });
   });
 
@@ -62,16 +61,25 @@ describe("saving reviewed report rows", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
   });
 
+  it("saves any platform's hand-logged numbers, money in cents", async () => {
+    await save([{ metricKey: "youtube.views", date: "2026-10-08", value: 320 }, { metricKey: "revenue.cash_collected", date: "2026-10-14", value: 125050 }]);
+    expect(mocks.rpc.mock.calls[0][1].p_values).toEqual([
+      { metricKey: "youtube.views", date: "2026-10-08", value: 320, dimension: "" },
+      { metricKey: "revenue.cash_collected", date: "2026-10-14", value: 125050, dimension: "" },
+    ]);
+  });
+
   it("checks the rows again instead of trusting the browser", async () => {
     for (const rows of [
-      [{ metricKey: "youtube.views", date: "2026-10-08", value: 1 }],
+      [{ metricKey: "tiktok.views", date: "2026-10-08", value: 1 }],
+      [{ metricKey: "instagram.rate", date: "2026-10-08", value: 1 }],
+      [{ metricKey: "revenue.cash_collected", date: "2026-10-08", value: 1250.5 }],
       [{ metricKey: "instagram.synced", date: "2026-10-08", value: 1 }],
       [{ metricKey: "instagram.reach", date: "2026-10-18", value: 1 }],
       [{ metricKey: "instagram.reach", date: "2026-10-08", value: 1, dimension: "@prospect" }],
       [],
       "not json",
     ]) expect((await save(rows)).status, JSON.stringify(rows)).toBe("error");
-    expect((await save([{ metricKey: "instagram.reach", date: "2026-10-08", value: 1 }], "tiktok")).status).toBe("error");
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

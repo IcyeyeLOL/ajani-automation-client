@@ -4,7 +4,6 @@ import { startTransition, useActionState, useEffect, useState, type FormEvent, t
 import { useRouter } from "next/navigation";
 import { deleteMetricValueAction, recordMetricValuesAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import { ReportImport } from "@/components/admin/report-import";
 import { bucketLabel, formatMetricValue, shortMetricLabel } from "@/lib/admin/metric-query";
 import type { TrendViewId } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricDefinition } from "@/lib/admin/metric-types";
@@ -67,14 +66,13 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
   };
 
   return <details className="admin-panel admin-trend-log" id="log-numbers" onToggle={toggle} open={open}>
-    <summary><b>Log numbers</b><span>Type in what LinkedIn, Instagram and the others show you, or import an Instagram report.</span></summary>
+    <summary><b>Log numbers</b><span>Type in what LinkedIn, Instagram and the others show you.</span></summary>
     <div className="admin-trend-log-body">
       {viewId === "outreach" && onNavigate ? <p className="admin-trend-log-pointer">Outreach batches are logged under <button className="admin-trend-link" onClick={() => onNavigate("outreach")} type="button">Outreach →</button></p> : null}
       <div aria-label="Platform" className="admin-trend-chips small" role="group">
         {groups.map((item) => <button aria-pressed={item.id === group?.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label}</button>)}
       </div>
       {group ? <EntryForm accounts={accounts} action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} sampleMode={sampleMode} status={state.status} today={catalog.today} /> : null}
-      {group?.id === "instagram" ? <ReportImport platform="instagram" platformLabel="Instagram" sampleMode={sampleMode} /> : null}
       <RecentEntries definitions={definitions} entries={catalog.recentEntries} sampleMode={sampleMode} />
     </div>
   </details>;

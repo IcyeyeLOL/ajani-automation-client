@@ -1,3 +1,5 @@
+import type { MetricUnit } from "@/lib/admin/metric-types";
+
 /**
  * Several report files in one import: each file is read on its own (one model
  * call, one 4 MB request each), then the browser combines the answers into a
@@ -6,15 +8,24 @@
 export const REPORT_MAX_FILES = 10;
 export const REPORT_FILE_MAX_BYTES = 4_000_000;
 
-export type ReportReadRow = { metricKey: string; label: string; date: string; value: number; evidence: string };
+/** value is in the store's unit (cents for money). */
+export type ReportReadRow = { metricKey: string; label: string; unit: MetricUnit; date: string; value: number; evidence: string };
 export type ReportReadNote = { item: string; reason: string };
-export type ReportReadResult = { platform: string; reportDate: string | null; rows: ReportReadRow[]; notUsed: ReportReadNote[]; dropped: ReportReadNote[] };
+export type ReportReadResult = {
+  method: "table" | "ai";
+  /** The reader's plain-words summary of the file. */
+  note: string;
+  reportDate: string | null;
+  rows: ReportReadRow[];
+  notUsed: ReportReadNote[];
+  dropped: ReportReadNote[];
+};
 
 export type MergedReportRow = ReportReadRow & { file: string };
 export type MergedReportNote = ReportReadNote & { file?: string };
 export type MergedReports = {
-  platform: string;
   files: string[];
+  notes: Array<{ file: string; note: string; method: "table" | "ai" }>;
   /** The report date when every file gives the same one. */
   reportDate: string | null;
   rows: MergedReportRow[];
@@ -41,8 +52,8 @@ export function mergeReports(reads: Array<{ file: string; result: ReportReadResu
   }
   const dates = new Set(reads.map(({ result }) => result.reportDate));
   return {
-    platform: reads[0]?.result.platform ?? "",
     files: reads.map(({ file }) => file),
+    notes: reads.filter(({ result }) => result.note).map(({ file, result }) => ({ file, note: result.note, method: result.method })),
     reportDate: dates.size === 1 ? reads[0]?.result.reportDate ?? null : null,
     rows: [...found.values()].filter((entry) => !entry.conflict).map((entry) => entry.row)
       .sort((a, b) => a.metricKey.localeCompare(b.metricKey) || a.date.localeCompare(b.date)),

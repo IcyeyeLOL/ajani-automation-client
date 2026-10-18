@@ -23,7 +23,7 @@ import {
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
 import { loadMetricCatalog } from "@/lib/admin/metrics";
-import { importableMetrics, REPORT_IMPORT_PLATFORMS, REPORT_MAX_VALUES, reportSaveSchema, type ReportImportPlatform } from "@/lib/admin/report-import";
+import { importableMetrics, REPORT_MAX_VALUES, reportSaveSchema } from "@/lib/admin/report-import";
 import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
 import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
 import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/admin/sample-mode";
@@ -284,8 +284,6 @@ export async function saveReportValuesAction(_state: AdminActionState, formData:
   const actor = await requireAdminSession();
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
-  const platform = String(formData.get("platform") ?? "");
-  if (!(REPORT_IMPORT_PLATFORMS as readonly string[]).includes(platform)) return { status: "error", message: "The platform for these numbers is missing. Read the report again." };
   let rows: unknown;
   try {
     rows = JSON.parse(String(formData.get("rows") || "[]"));
@@ -294,7 +292,7 @@ export async function saveReportValuesAction(_state: AdminActionState, formData:
   }
   const catalog = await loadMetricCatalog();
   if (catalog.status !== "available") return { status: "error", message: "Trends are unavailable right now, so nothing was saved. Retry in a moment." };
-  const allowed = importableMetrics(platform as ReportImportPlatform, catalog.metrics).map((metric) => metric.key);
+  const allowed = new Map(importableMetrics(catalog.metrics).map((metric) => [metric.key, metric.unit]));
   const parsed = reportSaveSchema(catalog.today, allowed).safeParse(rows);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the numbers and retry." };
 
@@ -306,7 +304,7 @@ export async function saveReportValuesAction(_state: AdminActionState, formData:
     for (let start = 0; start < parsed.data.length; start += REPORT_MAX_VALUES) {
       const batch = parsed.data.slice(start, start + REPORT_MAX_VALUES);
       const { data, error } = await admin.rpc("upsert_analytics_metric_values", {
-        // The report is about the owner's main account, which has no account name.
+        // Imports are about the owner's main accounts, which have no account name.
         p_values: batch.map((row) => ({ ...row, dimension: "" })),
         p_origin: "manual",
         p_actor: actor,

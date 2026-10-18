@@ -1,7 +1,5 @@
 import { loadMetricCatalog } from "@/lib/admin/metrics";
-import {
-  extractReportValues, importableMetrics, REPORT_IMPORT_PLATFORMS, REPORT_MAX_BYTES, reportFileKind, type ReportImportPlatform,
-} from "@/lib/admin/report-import";
+import { extractReportValues, importableMetrics, REPORT_MAX_BYTES, reportFileKind } from "@/lib/admin/report-import";
 import { isSampleMode } from "@/lib/admin/sample-mode";
 import { resolveAdminSession } from "@/lib/admin/session";
 
@@ -10,13 +8,14 @@ export const maxDuration = 60;
 
 const ERRORS: Record<string, [string, number]> = {
   unsupported_file: ["Upload a PDF, a CSV or text file, or a PNG, JPEG or WebP screenshot.", 415],
-  no_metrics: ["No metrics can be imported for this platform yet. Apply the latest database migration.", 409],
-  ai_unavailable: ["The report reader is unavailable right now, so nothing was read. Check the Anthropic key in the site settings, or type the numbers in by hand.", 503],
+  no_metrics: ["No numbers can be imported yet. Apply the latest database migration.", 409],
+  ai_unavailable: ["The AI reader is unavailable right now, so this file wasn't read. Day-by-day spreadsheets still import without it; for this file, check the Anthropic key in the site settings or type the numbers in by hand.", 503],
 };
 
 /**
- * POST multipart: file (the report) and platform ("instagram"). Reads the report
- * with the import agent and returns the rows it found for review. Saves nothing:
+ * POST multipart: file (a report, export, screenshot or spreadsheet about any
+ * platform, sales or revenue). A day-by-day spreadsheet is read column by column;
+ * anything else goes to the import agent. Returns the rows found for review. Saves nothing:
  * the owner saves the reviewed rows with saveReportValuesAction.
  * Lives under /admin so the path-scoped admin session cookie is sent.
  */
@@ -35,8 +34,6 @@ export async function POST(request: Request) {
   } catch {
     return json({ error: "The upload could not be read. Try again." }, 400);
   }
-  const platform = String(form.get("platform") ?? "");
-  if (!(REPORT_IMPORT_PLATFORMS as readonly string[]).includes(platform)) return json({ error: "Pick a platform to import." }, 400);
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) return json({ error: "Choose a report file first." }, 400);
   if (file.size > REPORT_MAX_BYTES) return json({ error: tooLarge() }, 413);
@@ -45,26 +42,26 @@ export async function POST(request: Request) {
 
   const catalog = await loadMetricCatalog();
   if (catalog.status !== "available") return json({ error: "Trends are unavailable, so nothing can be imported right now." }, 503);
-  const metrics = importableMetrics(platform as ReportImportPlatform, catalog.metrics);
+  const metrics = new Map(importableMetrics(catalog.metrics).map((metric) => [metric.key, metric]));
 
-  const result = await extractReportValues({ platform: platform as ReportImportPlatform, bytes, fileName: file.name, metrics: catalog.metrics, today: catalog.today });
+  const result = await extractReportValues({ bytes, fileName: file.name, metrics: catalog.metrics, today: catalog.today });
   if (result.status !== "ok") {
     const [message, status] = ERRORS[result.code] ?? ERRORS.ai_unavailable;
     return json({ error: message }, status);
   }
-  const labels = new Map(metrics.map((metric) => [metric.key, metric.label]));
   return json({
-    platform,
     today: catalog.today,
+    method: result.method,
+    note: result.note,
     reportDate: result.reportDate,
-    rows: result.rows.map((row) => ({ ...row, label: labels.get(row.metricKey) ?? row.metricKey })),
+    rows: result.rows.map((row) => ({ ...row, label: metrics.get(row.metricKey)?.label ?? row.metricKey, unit: metrics.get(row.metricKey)?.unit ?? "count" })),
     notUsed: result.notUsed,
     dropped: result.dropped,
   }, 200);
 }
 
 function tooLarge() {
-  return `That file is over ${Math.round(REPORT_MAX_BYTES / 1_000_000)} MB. Export a smaller PDF or upload a screenshot.`;
+  return `That file is over ${Math.round(REPORT_MAX_BYTES / 1_000_000)} MB. Export a smaller file or upload a screenshot.`;
 }
 
 function json(body: unknown, status: number) {

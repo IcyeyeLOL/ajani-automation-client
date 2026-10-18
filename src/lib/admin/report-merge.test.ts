@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { mergeReports, type ReportReadResult } from "@/lib/admin/report-merge";
 
 const row = (metricKey: string, date: string, value: number, evidence = "table") => ({
-  metricKey, label: metricKey === "instagram.reach" ? "Instagram reach" : "Instagram followers", date, value, evidence,
+  metricKey, label: metricKey === "instagram.reach" ? "Instagram reach" : "Instagram followers", unit: "count" as const, date, value, evidence,
 });
 const read = (rows: ReportReadResult["rows"], extra: Partial<ReportReadResult> = {}): ReportReadResult => ({
-  platform: "instagram", reportDate: "2026-10-17", rows, notUsed: [], dropped: [], ...extra,
+  method: "ai", note: "", reportDate: "2026-10-17", rows, notUsed: [], dropped: [], ...extra,
 });
 
 describe("combining several report files", () => {
@@ -19,7 +19,7 @@ describe("combining several report files", () => {
       ["instagram.reach", "2026-10-08", 2219, "week-1.csv"],
       ["instagram.reach", "2026-10-15", 90, "week-2.csv"],
     ]);
-    expect(merged).toMatchObject({ platform: "instagram", files: ["week-2.csv", "week-1.csv"], reportDate: "2026-10-17" });
+    expect(merged).toMatchObject({ files: ["week-2.csv", "week-1.csv"], reportDate: "2026-10-17", notes: [] });
   });
 
   it("keeps a day two files agree on once, from the first file", () => {
@@ -48,6 +48,13 @@ describe("combining several report files", () => {
     ]);
     expect(merged.notUsed).toEqual([{ item: "Views, last 30 days: 9,329", reason: "A 30-day total", file: "a.pdf" }]);
     expect(merged.dropped).toEqual([{ item: "Instagram reach on 2026-10-18", reason: "The date is in the future", file: "b.png" }]);
+  });
+
+  it("keeps each file's own summary from the reader", () => {
+    expect(mergeReports([
+      { file: "a.csv", result: read([], { method: "table", note: "Read 30 numbers across 30 days straight from the spreadsheet." }) },
+      { file: "b.pdf", result: read([]) },
+    ]).notes).toEqual([{ file: "a.csv", note: "Read 30 numbers across 30 days straight from the spreadsheet.", method: "table" }]);
   });
 
   it("names a report date only when every file has the same one", () => {

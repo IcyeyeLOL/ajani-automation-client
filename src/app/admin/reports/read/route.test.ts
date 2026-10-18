@@ -15,10 +15,8 @@ import { POST } from "@/app/admin/reports/read/route";
 const PDF = new TextEncoder().encode("%PDF-1.7\nreport");
 const followers = { key: "instagram.followers", source: "instagram", category: "content", label: "Instagram followers", description: "", unit: "count", aggregation: "last", numeratorKey: null, denominatorKey: null, entryMode: "manual", higherIsBetter: true, chartable: true, firstDate: null, lastDate: null, dimensions: [] };
 
-function upload(fields: { platform?: string; file?: Blob | null; name?: string } = {}) {
+function upload(fields: { file?: Blob | null; name?: string } = {}) {
   const body = new FormData();
-  if (fields.platform !== undefined) body.set("platform", fields.platform);
-  else body.set("platform", "instagram");
   if (fields.file !== null) body.set("file", fields.file ?? new Blob([PDF], { type: "application/pdf" }), fields.name ?? "report.pdf");
   return new Request("https://ajani.test/admin/reports/read", { method: "POST", body });
 }
@@ -30,7 +28,7 @@ describe("report read route", () => {
     mocks.sample.mockResolvedValue(false);
     mocks.catalog.mockResolvedValue({ status: "available", today: "2026-10-17", metrics: [followers], recentEntries: [], dimensionLabels: {}, connectors: { dripify: false } });
     mocks.extract.mockResolvedValue({
-      status: "ok", reportDate: "2026-10-17", provider: "anthropic", model: "claude-opus-5-5",
+      status: "ok", method: "ai", note: "Mostly 30-day totals; I took today's followers.", reportDate: "2026-10-17", provider: "anthropic", model: "claude-opus-5-5",
       rows: [{ metricKey: "instagram.followers", date: "2026-10-17", value: 73, evidence: "73 followers" }],
       notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
     });
@@ -46,8 +44,7 @@ describe("report read route", () => {
     expect(mocks.extract).not.toHaveBeenCalled();
   });
 
-  it("refuses a missing platform or file, a file that is too big, and files that are not reports", async () => {
-    expect((await POST(upload({ platform: "tiktok" }))).status).toBe(400);
+  it("refuses a missing file, a file that is too big, and files that are not reports", async () => {
     expect((await POST(upload({ file: null }))).status).toBe(400);
     expect((await POST(upload({ file: new Blob([new Uint8Array(4_000_001)]) }))).status).toBe(413);
     const zip = await POST(upload({ file: new Blob([new Uint8Array([0x50, 0x4b, 3, 4, 0])]), name: "report.pdf" }));
@@ -55,17 +52,17 @@ describe("report read route", () => {
     expect(mocks.extract).not.toHaveBeenCalled();
   });
 
-  it("returns the rows for review, labelled, uncached and unsaved", async () => {
+  it("returns the rows for review, labelled with their unit, with the reader's note, uncached and unsaved", async () => {
     const response = await POST(upload());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toEqual({
-      platform: "instagram", today: "2026-10-17", reportDate: "2026-10-17",
-      rows: [{ metricKey: "instagram.followers", label: "Instagram followers", date: "2026-10-17", value: 73, evidence: "73 followers" }],
+      today: "2026-10-17", method: "ai", note: "Mostly 30-day totals; I took today's followers.", reportDate: "2026-10-17",
+      rows: [{ metricKey: "instagram.followers", label: "Instagram followers", unit: "count", date: "2026-10-17", value: 73, evidence: "73 followers" }],
       notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
     });
     const [input] = mocks.extract.mock.calls[0];
-    expect(input).toMatchObject({ platform: "instagram", fileName: "report.pdf", today: "2026-10-17" });
+    expect(input).toMatchObject({ fileName: "report.pdf", today: "2026-10-17" });
     expect(Array.from(input.bytes)).toEqual(Array.from(PDF));
   });
 
@@ -75,6 +72,6 @@ describe("report read route", () => {
     mocks.extract.mockResolvedValueOnce({ status: "error", code: "ai_unavailable" });
     const response = await POST(upload());
     expect(response.status).toBe(503);
-    expect((await response.json()).error).toMatch(/type the numbers in by hand/);
+    expect((await response.json()).error).toMatch(/Day-by-day spreadsheets still import without it/);
   });
 });

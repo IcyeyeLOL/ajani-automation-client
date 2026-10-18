@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { MetricLog, entryGroups, type LogRequest } from "@/components/admin/metric-log";
+import { ReportImport } from "@/components/admin/report-import";
 import { TrendCard, TrendTable } from "@/components/admin/trend-card";
 import {
   LEGACY_TREND_STORAGE_KEY,
@@ -217,6 +218,11 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
   </button>;
 
   return <div className="admin-section-stack admin-trends">
+    <details className="admin-panel admin-trend-log admin-trend-import" id="import-numbers">
+      <summary><b>Import numbers</b><span>Upload reports, exports, screenshots or spreadsheets from any platform, sales or revenue.</span><em aria-hidden="true">Upload files</em></summary>
+      <div className="admin-trend-log-body"><ReportImport sampleMode={sampleMode} /></div>
+    </details>
+
     <section aria-label="Trend filters" className="admin-trend-filters">
       <div aria-label="Show" className="admin-trend-chips admin-trend-views" role="group">
         {views.map((item) => <button aria-pressed={item.id === view.id} key={item.id} onClick={() => chooseView(item.id)} type="button">{item.label}</button>)}
