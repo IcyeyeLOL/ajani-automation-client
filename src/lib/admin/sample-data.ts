@@ -58,18 +58,18 @@ export const SAMPLE_DEFINITIONS: MetricDefinition[] = [
   definition("ajani.builds_submitted", "business", "Builds submitted", "Approved build requests entering the delivery pipeline, by UTC day submitted.", "count", "sum", "derived"),
   definition("ajani.new_workspaces", "business", "New client workspaces", "Business workspaces created when a client signs in to submit.", "count", "sum", "derived"),
   definition("ajani.brief_to_build_rate", "business", "Brief → build conversion", "Share of briefs saved in the period that became submitted builds (cohort).", "ratio", "ratio", "derived", { numeratorKey: "ajani.cohort_submitted", denominatorKey: "ajani.drafts_saved" }),
-  definition("outreach.touches", "outreach", "Outreach touches", "Connection requests, first messages and follow-ups sent. Voided entries excluded.", "count", "sum", "derived"),
+  definition("outreach.touches", "outreach", "Outreach touches", "Every outreach attempt: connection requests, first messages and follow-ups from logged batches, Dripify leads contacted, Reddit DMs sent and cold calls made. Voided entries excluded.", "count", "sum", "derived"),
   definition("outreach.connection_requests", "outreach", "Connection requests", "Connection requests sent.", "count", "sum", "derived"),
   definition("outreach.connections_accepted", "outreach", "Connections accepted", "Connection requests accepted.", "count", "sum", "derived"),
   definition("outreach.initial_dms", "outreach", "First messages", "Unique first messages sent.", "count", "sum", "derived"),
   definition("outreach.follow_ups", "outreach", "Follow-ups", "First, second and custom follow-ups sent.", "count", "sum", "derived"),
-  definition("outreach.replies", "outreach", "Replies", "Unique replies received.", "count", "sum", "derived"),
-  definition("outreach.reply_base", "outreach", "Reply base", "What replies are measured against: first messages sent, or for an A/B test the sends at the tested step.", "count", "sum", "derived", { chartable: false }),
-  definition("outreach.positive_replies", "outreach", "Positive replies", "Replies showing interest.", "count", "sum", "derived"),
-  definition("outreach.calls_booked", "outreach", "Calls booked", "Sales calls booked from logged outreach. Count a call only once Calendly confirms the booking.", "count", "sum", "derived"),
+  definition("outreach.replies", "outreach", "Replies", "People who replied on any channel, including everyone who answered a cold call with a positive, neutral or negative reply.", "count", "sum", "derived"),
+  definition("outreach.reply_base", "outreach", "Reply base", "What replies are measured against: first messages sent (for an A/B test, the sends at the tested step), Dripify leads contacted, Reddit DMs sent and cold calls made.", "count", "sum", "derived", { chartable: false }),
+  definition("outreach.positive_replies", "outreach", "Positive replies", "Replies showing interest, from logged batches and cold calls. Dripify and Reddit DMs don't record this.", "count", "sum", "derived"),
+  definition("outreach.calls_booked", "outreach", "Calls booked", "Sales calls booked from outreach on every channel: logged batches, Reddit DMs and cold calls. Count a call only once Calendly confirms the booking.", "count", "sum", "derived"),
   definition("outreach.acceptance_rate", "outreach", "Connection acceptance", "Connections accepted ÷ connection requests.", "ratio", "ratio", "derived", { numeratorKey: "outreach.connections_accepted", denominatorKey: "outreach.connection_requests" }),
-  definition("outreach.reply_rate", "outreach", "Reply rate", "Replies ÷ people messaged at the measured step.", "ratio", "ratio", "derived", { numeratorKey: "outreach.replies", denominatorKey: "outreach.reply_base" }),
-  definition("outreach.positive_reply_rate", "outreach", "Positive reply rate", "Positive replies ÷ people messaged at the measured step.", "ratio", "ratio", "derived", { numeratorKey: "outreach.positive_replies", denominatorKey: "outreach.reply_base" }),
+  definition("outreach.reply_rate", "outreach", "Reply rate", "Replies ÷ people reached, across every channel.", "ratio", "ratio", "derived", { numeratorKey: "outreach.replies", denominatorKey: "outreach.reply_base" }),
+  definition("outreach.positive_reply_rate", "outreach", "Positive reply rate", "Positive replies ÷ people reached. Dripify and Reddit DMs don't record positive replies, so they lower this rate; filter by channel to compare.", "ratio", "ratio", "derived", { numeratorKey: "outreach.positive_replies", denominatorKey: "outreach.reply_base" }),
   definition("outreach.reply_to_call_rate", "outreach", "Replies → calls", "Calls booked ÷ replies.", "ratio", "ratio", "derived", { numeratorKey: "outreach.calls_booked", denominatorKey: "outreach.replies" }),
   definition("dripify.leads_total", "outreach", "Dripify leads loaded", "Leads loaded into launched Dripify campaigns, from the latest daily sync of each campaign.", "count", "last", "connector"),
   definition("dripify.leads_contacted", "outreach", "Dripify leads contacted", "Leads that received at least one Dripify step, added up across campaigns (a lead in two campaigns counts twice).", "count", "last", "connector"),
@@ -506,6 +506,53 @@ function buildOutreach(line: Timeline): RowMap {
   return rows;
 }
 
+const OUTREACH_KEYS = [
+  "outreach.touches", "outreach.connection_requests", "outreach.connections_accepted", "outreach.initial_dms", "outreach.follow_ups",
+  "outreach.replies", "outreach.reply_base", "outreach.positive_replies", "outreach.calls_booked",
+] as const;
+
+/**
+ * Outreach across every channel, like analytics_daily_values: logged batches,
+ * the Dripify sync (which takes over Dripify's sends and replies from its first
+ * day of new activity), Reddit DMs and cold calls.
+ */
+function buildOutreachTotals(batches: RowMap, dripify: RowMap, reddit: RowMap, coldCalls: RowMap): RowMap {
+  const rows: RowMap = new Map();
+  const synced = (dripify.get("dripify.new_contacted") ?? []).reduce<string | null>((first, row) => first === null || row.date < first ? row.date : first, null);
+  for (const key of OUTREACH_KEYS) {
+    for (const row of batches.get(key) ?? []) {
+      const handedOver = synced !== null && row.dimension === "linkedin/dripify" && row.date >= synced && key !== "outreach.positive_replies" && key !== "outreach.calls_booked";
+      addRow(rows, key, row.date, row.dimension, handedOver ? 0 : row.value);
+    }
+  }
+  const byDate = (map: RowMap, keys: string[]) => {
+    const totals = new Map<string, number>();
+    for (const key of keys) for (const row of map.get(key) ?? []) totals.set(row.date, (totals.get(row.date) ?? 0) + row.value);
+    return totals;
+  };
+  const channel = (dimension: string, parts: Partial<Record<(typeof OUTREACH_KEYS)[number] | "other", Map<string, number>>>) => {
+    const dates = new Set(Object.values(parts).flatMap((totals) => [...totals.keys()]));
+    for (const date of dates) {
+      const part = (name: keyof typeof parts) => parts[name]?.get(date) ?? 0;
+      const touches = part("outreach.connection_requests") + part("outreach.initial_dms") + part("outreach.follow_ups") + part("other");
+      for (const key of OUTREACH_KEYS) addRow(rows, key, date, dimension, key === "outreach.touches" ? touches : part(key));
+    }
+  };
+  const contacted = byDate(dripify, ["dripify.new_contacted"]);
+  channel("linkedin/dripify", { other: contacted, "outreach.reply_base": contacted, "outreach.replies": byDate(dripify, ["dripify.new_replies"]) });
+  const dms = byDate(reddit, ["reddit.dms_sent"]);
+  channel("reddit/dm", { "outreach.initial_dms": dms, "outreach.reply_base": dms, "outreach.replies": byDate(reddit, ["reddit.dm_replies"]), "outreach.calls_booked": byDate(reddit, ["reddit.dm_calls_booked"]) });
+  const dials = byDate(coldCalls, ["cold_calls.dials"]);
+  channel("phone/cold_call", {
+    other: dials, "outreach.reply_base": dials,
+    "outreach.replies": byDate(coldCalls, ["cold_calls.positive_replies", "cold_calls.neutral_replies", "cold_calls.negative_replies"]),
+    "outreach.positive_replies": byDate(coldCalls, ["cold_calls.positive_replies"]),
+    "outreach.calls_booked": byDate(coldCalls, ["cold_calls.meetings_booked"]),
+  });
+  for (const list of rows.values()) list.sort((left, right) => left.date.localeCompare(right.date) || left.dimension.localeCompare(right.dimension));
+  return rows;
+}
+
 /** Website briefs: each saved draft moves through the funnel, and some become builds days later. */
 function buildAjani(line: Timeline): RowMap {
   const rows: RowMap = new Map();
@@ -851,7 +898,8 @@ function buildColdCalls(line: Timeline): RowMap {
 // Row cache, keyed by today: groups are generated once and only read after.
 // ---------------------------------------------------------------------------
 
-type GroupId = "linkedin" | "youtube" | "instagram" | "reddit" | "cold_calls" | "outreach" | "ajani" | "dripify" | "business";
+// "batches" is the Outreach page's logged batches; "outreach" adds every channel, as Trends shows it.
+type GroupId = "linkedin" | "youtube" | "instagram" | "reddit" | "cold_calls" | "batches" | "outreach" | "ajani" | "dripify" | "business";
 const GROUP_BY_SOURCE: Record<string, GroupId> = {
   linkedin: "linkedin", youtube: "youtube", instagram: "instagram", reddit: "reddit", cold_calls: "cold_calls",
   outreach: "outreach", ajani: "ajani", dripify: "dripify", sales: "business", revenue: "business",
@@ -878,10 +926,11 @@ function groupRows(group: GroupId, today: string): RowMap {
         : group === "instagram" ? buildInstagram(line)
             : group === "reddit" ? buildReddit(line)
               : group === "cold_calls" ? buildColdCalls(line)
-              : group === "outreach" ? buildOutreach(line)
+              : group === "batches" ? buildOutreach(line)
+              : group === "outreach" ? buildOutreachTotals(groupRows("batches", today), groupRows("dripify", today), groupRows("reddit", today), groupRows("cold_calls", today))
                 : group === "ajani" ? buildAjani(line)
                   : group === "dripify" ? buildDripify(line)
-                    : buildBusiness(line, groupRows("outreach", today), groupRows("reddit", today));
+                    : buildBusiness(line, groupRows("batches", today), groupRows("reddit", today));
     entry.groups.set(group, rows);
   }
   return rows;
@@ -921,7 +970,7 @@ const RECENT_ENTRY_ORDER = [
 export function sampleMetricCatalog(definitions: MetricDefinition[], today: string): MetricCatalog {
   const metrics = definitions.length ? definitions : SAMPLE_DEFINITIONS;
   const lookup = new Map(metrics.map((item) => [item.key, item]));
-  const outreachDimensions = OUTREACH_CHANNELS.map((channel) => channel.dimension).sort();
+  const outreachDimensions = [...new Set((groupRows("outreach", today).get("outreach.touches") ?? []).map((row) => row.dimension))].sort();
   const catalogMetrics = metrics.map((item): MetricDefinition => {
     // Like load_analytics_catalog: a ratio shows its numerator's stored history.
     const dataKey = item.aggregation === "ratio" ? item.numeratorKey ?? item.key : item.key;
@@ -1239,7 +1288,9 @@ const SAMPLE_CONTENT_DEMAND = [
 // Sample data fits on one page, so page numbers from the URL are accepted and ignored.
 export function sampleDashboardData(_pages: { experimentPage?: number; batchPage?: number }, now: Date = new Date()): AdminDashboardData {
   const today = now.toISOString().slice(0, 10);
-  const outreach = groupRows("outreach", today);
+  // Like load_admin_analytics: the overview adds every channel; the Outreach page reads logged batches.
+  const outreach = groupRows("batches", today);
+  const totals = groupRows("outreach", today);
   const ajani = groupRows("ajani", today);
   const rowsOf = (map: RowMap, key: string) => map.get(key) ?? [];
   const total = (rows: SampleRow[], from: string, to: string) => rows.reduce((sum, row) => row.date >= from && row.date <= to ? sum + row.value : sum, 0);
@@ -1250,11 +1301,11 @@ export function sampleDashboardData(_pages: { experimentPage?: number; batchPage
 
   const saved = window(ajani, "ajani.drafts_saved");
   const builds = window(ajani, "ajani.builds_submitted");
-  const touches = window(outreach, "outreach.touches");
-  const replies = window(outreach, "outreach.replies");
+  const touches = window(totals, "outreach.touches");
+  const replies = window(totals, "outreach.replies");
   const cohortSubmitted = total(rowsOf(ajani, "ajani.cohort_submitted"), currentStart, today);
   const organizations = total(rowsOf(ajani, "ajani.new_workspaces"), currentStart, today);
-  const replyBase = total(rowsOf(outreach, "outreach.reply_base"), currentStart, today);
+  const replyBase = total(rowsOf(totals, "outreach.reply_base"), currentStart, today);
 
   const daily = (map: RowMap, key: string) => {
     const byDate = new Map<string, number>();
@@ -1263,8 +1314,8 @@ export function sampleDashboardData(_pages: { experimentPage?: number; batchPage
   };
   const drafts = daily(ajani, "ajani.drafts_saved");
   const submissions = daily(ajani, "ajani.builds_submitted");
-  const touchesByDay = daily(outreach, "outreach.touches");
-  const repliesByDay = daily(outreach, "outreach.replies");
+  const touchesByDay = daily(totals, "outreach.touches");
+  const repliesByDay = daily(totals, "outreach.replies");
   const trend = Array.from({ length: 90 }, (_, index) => {
     const date = addDays(today, index - 89);
     return { date, drafts: drafts.get(date) ?? 0, submissions: submissions.get(date) ?? 0, outreach: touchesByDay.get(date) ?? 0, replies: repliesByDay.get(date) ?? 0 };
@@ -1351,7 +1402,7 @@ export function sampleDashboardData(_pages: { experimentPage?: number; batchPage
     metrics: [
       metricCard("Saved drafts", formatNumber(saved.current), `${organizations} new business accounts in the last 30 days, by UTC date`, growth(saved.current, saved.previous), "neutral"),
       metricCard("Submitted builds", formatNumber(builds.current), saved.current ? `${(percentage(cohortSubmitted, saved.current) ?? 0).toFixed(1)}% of drafts saved in the last 30 days became builds` : "No drafts saved in the last 30 days", growth(builds.current, builds.previous), "brand"),
-      metricCard("Outreach touches", formatNumber(touches.current), "From outreach batches you log", growth(touches.current, touches.previous), "brand"),
+      metricCard("Outreach touches", formatNumber(touches.current), "All channels: batches, Dripify, Reddit DMs and cold calls", growth(touches.current, touches.previous), "brand"),
       metricCard("Replies", formatNumber(replies.current), rateLabel(replies.current, replyBase, "reply rate"), growth(replies.current, replies.previous), "success"),
     ],
     trend,

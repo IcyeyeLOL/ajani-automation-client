@@ -251,6 +251,9 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
     </section>
 
     {view.id === "dripify" ? <DripifyNote catalog={catalog} onNavigate={onNavigate} /> : null}
+    {view.id === "outreach" ? <p className="admin-trend-note">
+      Totals for every channel: the batches you log, Dripify, Reddit DMs and cold calls. Pick a channel above to see one on its own.
+    </p> : null}
     {view.id === "cold_calls" ? <p className="admin-trend-note admin-trend-calls">
       <span>After a calling session, log the calls you made and how people replied: positive, neutral or negative, follow-ups and meetings booked.</span>
       <button className="admin-trend-button primary" onClick={() => requestLog(["cold_calls"])} type="button">Log today&apos;s calls</button>

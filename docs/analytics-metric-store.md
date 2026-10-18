@@ -137,7 +137,7 @@ Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no ac
 
 - **Rates are per call made.** Picked-up calls are not logged separately, so the rates are measured against all dials.
 - **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match.
-- **Kept separate.** Cold-call meetings are not added to `outreach.calls_booked`, which counts logged outreach batches.
+- **Part of Outreach.** Since `20261018010000`, cold calls count toward the Outreach totals as the channel `phone/cold_call` (see "Outreach totals").
 
 The migration is additive (definitions only). It was applied to the live database on 2026-10-18.
 
@@ -148,6 +148,26 @@ The owner asked for the TikTok section to be removed on 2026-10-18. Like X, its 
 - **Gone from the desk.** The Trends view, the Log numbers tab, the "Add a chart" list, Import numbers, the ingest endpoint, the Outreach channel lists and sample data. The store refuses new TikTok numbers, and `load_analytics_series` refuses to chart them.
 - **Import guard.** The spreadsheet reader still recognises "tiktok" in a file name or title, so a TikTok export is left out ("TikTok numbers aren't tracked") rather than read as another platform's. Without TikTok, "profile views" only matches LinkedIn and "videos" only YouTube. A bare header that only one platform has is now never put on a different platform the file names; it goes to the AI reader instead.
 - **Live.** Needs the usual backup, rehearsal and apply, each with the owner's approval.
+
+## Outreach totals (`20261018010000`)
+
+The owner asked on 2026-10-18 for Outreach to be the total of all outreach. `outreach.touches`, `replies`, `reply_base`, `positive_replies` and `calls_booked` (and every rate built on them) now add up four channels in `analytics_daily_values`. Each channel is still a Channel-filter option:
+
+| Channel (dimension) | Touches | Replies | Reply base | Positive | Calls booked |
+|---|---|---|---|---|---|
+| Logged batches (`channel/method`) | requests + first messages + follow-ups | replies | `reply_base` | positive | calls booked |
+| Dripify sync (`linkedin/dripify`) | `dripify.new_contacted` | `dripify.new_replies` | `dripify.new_contacted` | none | none |
+| Reddit DMs (`reddit/dm`) | `reddit.dms_sent` (first messages) | `reddit.dm_replies` | `reddit.dms_sent` | none | `reddit.dm_calls_booked` |
+| Cold calls (`phone/cold_call`) | `cold_calls.dials` | positive + neutral + negative | `cold_calls.dials` | `cold_calls.positive_replies` | `cold_calls.meetings_booked` |
+
+- **No double counting with Dripify.** Takeover starts on the first day the Dripify sync records new activity (`min(metric_date)` of `dripify.new_contacted`; a first sync writes none).
+  - **From that day,** the sync counts Dripify's touches, replies and reply base, and logged Dripify batches (`method = 'dripify'`) add only their positive replies and calls booked.
+  - **Before that day,** logged Dripify batches count in full.
+- **Reddit DMs and cold calls** are logged in Log numbers only. A Reddit batch logged on the Outreach page would be counted on top, and the Reddit tab says so.
+- **Gaps in the totals.** Cold-call follow-ups are not extra replies (they are already counted in a reply). Dripify and Reddit don't record positive replies, so the combined positive reply rate is lower than the per-channel ones.
+- **Overview.** `load_admin_analytics`'s "Outreach touches" and "Replies" cards and the 90-day trend read the same totals, so they agree with Trends. The Outreach page's batch funnel, recent batches and A/B tests still read the batches.
+- **Catalog.** The Channel filter lists `linkedin/dripify`, `reddit/dm` and `phone/cold_call` once they have numbers. `channelLabel` shows them as "LinkedIn · Dripify", "Reddit · DMs" and "Phone · Cold calls".
+- **Checks.** `scripts/db-outreach-totals-regressions.sql` covers the totals, per-channel filters, the Dripify takeover, the catalog and the overview. Sample data mirrors all of it (`buildOutreachTotals`).
 
 ## Import numbers (any platform)
 

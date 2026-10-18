@@ -227,7 +227,7 @@ export function sourceLabel(source: string) {
 
 const channelNames: Record<string, string> = {
   linkedin: "LinkedIn", instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok", reddit: "Reddit", x: "X",
-  manual: "Manual", dripify: "Dripify", organic: "Organic",
+  manual: "Manual", dripify: "Dripify", organic: "Organic", phone: "Phone", cold_call: "Cold calls", dm: "DMs",
 };
 
 /** Outreach splits by channel and method: "linkedin/dripify" → "LinkedIn · Dripify". */

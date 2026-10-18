@@ -215,23 +215,26 @@ describe("sample daily values", () => {
     expect(Math.min(...impressions)).toBeGreaterThanOrEqual(100);
     expect(Math.max(...impressions)).toBeLessThan(10_000);
 
+    // Outreach adds every channel: logged batches, Dripify, Reddit DMs and cold calls, all on workdays.
     const touches = totalsByDate(sampleMetricRows("outreach.touches", TODAY));
-    const replies = totalsByDate(sampleMetricRows("outreach.replies", TODAY));
     for (const [date, value] of touches) {
       if (weekday(date)) {
-        expect(value, date).toBeGreaterThanOrEqual(20);
-        expect(value, date).toBeLessThanOrEqual(60);
+        expect(value, date).toBeGreaterThanOrEqual(30);
+        expect(value, date).toBeLessThanOrEqual(200);
       } else {
         expect(value, date).toBeLessThan(10);
       }
     }
-    const touchTotal = [...touches.values()].reduce((sum, value) => sum + value, 0);
-    const replyShare = [...replies.values()].reduce((sum, value) => sum + value, 0) / touchTotal;
+    const sumOf = (key: string) => sampleMetricRows(key, TODAY).reduce((sum, row) => sum + row.value, 0);
+    for (const channel of ["linkedin/manual", "instagram/manual", "linkedin/dripify", "reddit/dm", "phone/cold_call"]) {
+      expect(sampleMetricRows("outreach.touches", TODAY).some((row) => row.dimension === channel && row.value > 0), channel).toBe(true);
+    }
+    const replyShare = sumOf("outreach.replies") / sumOf("outreach.reply_base");
     expect(replyShare).toBeGreaterThanOrEqual(0.05);
-    expect(replyShare).toBeLessThanOrEqual(0.12);
-    const callsPerWeek = (sampleMetricRows("outreach.calls_booked", TODAY).reduce((sum, row) => sum + row.value, 0) / 181) * 7;
-    expect(callsPerWeek).toBeGreaterThanOrEqual(1.5);
-    expect(callsPerWeek).toBeLessThanOrEqual(5);
+    expect(replyShare).toBeLessThanOrEqual(0.15);
+    const callsPerWeek = (sumOf("outreach.calls_booked") / 181) * 7;
+    expect(callsPerWeek).toBeGreaterThanOrEqual(2);
+    expect(callsPerWeek).toBeLessThanOrEqual(8);
 
     // About one or two clients a month, each paying a $1,500-$3,000 setup fee.
     const deals = sampleMetricRows("sales.deals_won", TODAY).filter((row) => row.value > 0);
@@ -598,7 +601,7 @@ describe("sample metric catalog", () => {
     // A ratio shows its numerator's stored history; live-derived metrics have none.
     expect(byKey.get("dripify.reply_rate")).toMatchObject({ firstDate: start, lastDate: TODAY, dimensions: ["dripify:101", "dripify:202", "dripify:303"] });
     expect(byKey.get("sales.close_rate")).toMatchObject({ firstDate: expect.any(String), lastDate: YESTERDAY, dimensions: [] });
-    expect(byKey.get("outreach.reply_rate")).toMatchObject({ firstDate: null, lastDate: null, dimensions: ["instagram/manual", "linkedin/dripify", "linkedin/manual"] });
+    expect(byKey.get("outreach.reply_rate")).toMatchObject({ firstDate: null, lastDate: null, dimensions: ["instagram/manual", "linkedin/dripify", "linkedin/manual", "phone/cold_call", "reddit/dm"] });
     expect(byKey.get("ajani.drafts_saved")).toMatchObject({ firstDate: null, lastDate: null, dimensions: [] });
     for (const item of catalog.metrics) {
       if (item.entryMode === "manual" || item.entryMode === "connector") expect(item.lastDate === TODAY || item.lastDate === YESTERDAY, item.key).toBe(true);

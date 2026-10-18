@@ -228,6 +228,8 @@ describe("trend cards", () => {
   it("names outreach channels and methods", () => {
     expect(channelLabel("linkedin/dripify")).toBe("LinkedIn · Dripify");
     expect(channelLabel("instagram/manual")).toBe("Instagram · Manual");
+    expect(channelLabel("reddit/dm")).toBe("Reddit · DMs");
+    expect(channelLabel("phone/cold_call")).toBe("Phone · Cold calls");
     expect(channelLabel("constructor")).toBe("Constructor");
   });
 

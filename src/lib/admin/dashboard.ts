@@ -75,8 +75,8 @@ export function shapeAdminAnalytics(raw: unknown, generatedAt: string, pages: Re
     metrics: [
       metric("Saved drafts", formatNumber(n("saved_current")), `${n("organizations_current")} new business accounts in the last 30 days, by UTC date`, growth(n("saved_current"), n("saved_previous")), "neutral"),
       metric("Submitted builds", formatNumber(n("builds_current")), n("saved_current") ? `${percentage(n("cohort_submitted_current"), n("saved_current"))?.toFixed(1)}% of drafts saved in the last 30 days became builds` : "No drafts saved in the last 30 days", growth(n("builds_current"), n("builds_previous")), "brand"),
-      // Batches logged on the Outreach page only: the nightly Dripify sync feeds Trends, not this card.
-      metric("Outreach touches", formatNumber(n("outreach_current")), "From outreach batches you log", growth(n("outreach_current"), n("outreach_previous")), "brand"),
+      // Every channel, the same total Trends shows for Outreach.
+      metric("Outreach touches", formatNumber(n("outreach_current")), "All channels: batches, Dripify, Reddit DMs and cold calls", growth(n("outreach_current"), n("outreach_previous")), "brand"),
       metric("Replies", formatNumber(n("replies_current")), rateLabel(n("replies_current"), "reply_base_current" in totals ? n("reply_base_current") : n("initial_dms_current"), "reply rate"), growth(n("replies_current"), n("replies_previous")), "success"),
       // Revenue is not shown here: no code writes billing_subscriptions or build_request_quotes, so
       // those cards always read $0. The growth goals above show the revenue numbers the owner logs.
