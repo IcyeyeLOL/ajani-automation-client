@@ -74,6 +74,21 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
    - charts in Outreach, Experiments, Website funnel and Operations (`section-charts.tsx`, `chart-math.ts`)
 
    The nightly Dripify and platform crons use the same `CRON_SECRET` as the existing crons. Per the README, never push to `main` or deploy without explicit approval from the owner.
+7. **2026-10-17: on the branch, not deployed.**
+   - **Commits.** `ecdbabb` through `b321ec3` on `claude/exciting-bardeen-3j7j3m`, with lint, type-check, 555 unit tests, a production build and the local database suite (36 migrations) all passing:
+     - **Import numbers** at the top of Trends, for any platform, sales and revenue (see `docs/analytics-metric-store.md` → "Import numbers").
+     - **Cold calls** (`docs/analytics-metric-store.md` → "Cold calls").
+     - **Logging notes** from a YouTube, Reddit and LinkedIn audit.
+   - **Pending migration.** `20261017000000_cold_calls.sql` has passed the local database suite. It still needs the usual live procedure, each step with fresh owner approval: a backup, a rehearsal on a restored copy, then applying it through the Management API. The Supabase token from 2026-10-16 may have been revoked.
+   - **Live admin access.** Vercel Production now has `AJANI_ADMIN_EMAIL_ALLOWLIST` (lime71129@gmail.com, lime17451@gmail.com), `AJANI_ADMIN_ACCESS_KEY` and `AJANI_ADMIN_SESSION_SECRET`, and live `/admin` reaches the key screen. The saved access key does not match the owner's copy ("The access key is not valid"). The owner was asked to replace it under Vercel → Environment Variables → Edit and redeploy. The agent's own write was blocked by the safety classifier. The local `.env.local` access key was changed to match the owner's copy.
+   - **AI key.** The owner made a new Anthropic key and their billing is fine. It is in the local `.env.local` with `AI_PRIMARY_PROVIDER=anthropic`. A real run read the owner's Muse PDF correctly. Vercel's `ANTHROPIC_API_KEY` is 65 days old and probably the old rejected key; it must be replaced before the live import can use AI.
+   - **YouTube channel.** The tracked channel is `UCr5_PR9yjdKV266rzB9GoFA` (@olakunleajani-q1d), which has 0 videos. The owner was asked whether they post on a different channel.
+   - **Audit findings not yet fixed:**
+     - The 8 manual YouTube metrics are also written by the connector. The proposed fix is a migration setting `entry_mode = 'connector'`.
+     - "0 numbers changed" in Connections: the status RPC doesn't return `values_written`.
+     - YouTube period comparisons read low while its data lags.
+     - Reddit DMs can also be logged as an Outreach batch.
+     - LinkedIn followers can inflate across stale or duplicate accounts.
 
 ## 5. Next work, in the owner's priority order
 
