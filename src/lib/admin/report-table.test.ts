@@ -60,6 +60,15 @@ Last 7 days,2202
     ]);
   });
 
+  it("reads a cold-call log", () => {
+    expect(pairs("Date,Dials,Positive,Neutral,Negative,Follow-ups,Meetings booked\n2026-10-14,42,1,2,2,2,1\n2026-10-15,38,0,1,3,1,\n", "calls.csv")).toEqual([
+      ["cold_calls.dials", "2026-10-14", 42], ["cold_calls.positive_replies", "2026-10-14", 1], ["cold_calls.neutral_replies", "2026-10-14", 2],
+      ["cold_calls.negative_replies", "2026-10-14", 2], ["cold_calls.follow_ups", "2026-10-14", 2], ["cold_calls.meetings_booked", "2026-10-14", 1],
+      ["cold_calls.dials", "2026-10-15", 38], ["cold_calls.positive_replies", "2026-10-15", 0], ["cold_calls.neutral_replies", "2026-10-15", 1],
+      ["cold_calls.negative_replies", "2026-10-15", 3], ["cold_calls.follow_ups", "2026-10-15", 1],
+    ]);
+  });
+
   it("never guesses a platform, and never takes YouTube's daily subscriber change as the total", () => {
     const unclear = read("date,followers\n2026-10-08,70\n")!;
     expect(unclear.values).toEqual([]);

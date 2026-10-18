@@ -15,6 +15,7 @@ const SAMPLE_NOTE = "Sample data is on, so nothing can be saved. Switch to real 
 // shows only while the catalog has active manual metrics for it.
 export const entryGroups: Array<{ id: string; label: string; sources: string[] }> = [
   { id: "revenue", label: "Sales & revenue", sources: ["sales", "revenue"] },
+  { id: "cold_calls", label: "Cold calls", sources: ["cold_calls"] },
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"] },
   { id: "instagram", label: "Instagram", sources: ["instagram"] },
   { id: "youtube", label: "YouTube", sources: ["youtube"] },
@@ -49,8 +50,8 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
   const [state, action, pending] = useActionState(recordMetricValuesAction, initialAdminActionState);
   const group = groups.find((item) => item.id === groupId) ?? groups[0];
   const fields = group ? catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source)) : [];
-  // Sales and revenue belong to the business, not to a platform account.
-  const accounts = group?.id === "revenue" ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
+  // Sales, revenue and cold calls belong to the business, not to a platform account.
+  const accounts = group?.id === "revenue" || group?.id === "cold_calls" ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
 
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   useEffect(() => {

@@ -120,6 +120,27 @@ Code: `src/lib/connectors/` (`provider-http.ts`, `youtube.ts`, `instagram.ts`, `
 - Keys travel in headers (`x-goog-api-key`, `Authorization`) except Instagram's, which Meta's Graph API takes as `access_token` in the query string; no URL is ever logged or returned.
 - Tables are RLS-on with all grants revoked; security-definer RPCs with `search_path = ''` are granted to `service_role` only. Browser-facing code receives setting names, booleans, counts and fixed messages.
 
+## Cold calls (`20261017000000`)
+
+Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no account picker: calls belong to the business, like sales. The view's **Log today's calls** button opens that tab. Whoever made the calls logs the day's numbers. They are counts only, with no prospect names or phone numbers:
+
+| Metric | Aggregation | Meaning |
+|---|---|---|
+| `cold_calls.dials` | `sum` | Calls dialled, answered or not |
+| `cold_calls.positive_replies` | `sum` | Picked up and interested |
+| `cold_calls.neutral_replies` | `sum` | Picked up, neither interested nor against |
+| `cold_calls.negative_replies` | `sum` | Picked up and said no (`higher_is_better = false`) |
+| `cold_calls.follow_ups` | `sum` | Asked to be called or messaged back; also counted in their reply type |
+| `cold_calls.meetings_booked` | `sum` | Meetings set up from a call, once Calendly confirms |
+| `cold_calls.positive_rate` | `ratio` | Positive replies ÷ calls made |
+| `cold_calls.meeting_rate` | `ratio` | Meetings booked ÷ calls made |
+
+- **Rates are per call made.** Picked-up calls are not logged separately, so the rates are measured against all dials.
+- **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match.
+- **Kept separate.** Cold-call meetings are not added to `outreach.calls_booked`, which counts logged outreach batches.
+
+The migration is additive (definitions only) and must be applied to the live database before the view shows there. Until then the live site simply has no Cold calls numbers.
+
 ## Import numbers (any platform)
 
 Code: `src/lib/admin/report-table.ts` (spreadsheets), `src/lib/admin/report-import.ts` (agent and rules), `src/lib/admin/report-merge.ts` (several files), `src/app/admin/reports/read/route.ts`, `saveReportValuesAction` in `src/app/admin/actions.ts`, `src/components/admin/report-import.tsx`. **Import numbers** sits at the top of Trends. It takes Muse reports, platform exports, screenshots, and sales or revenue sheets: PDF, CSV/TSV, Markdown or text, PNG, JPEG or WEBP, up to 10 files at a time, 4 MB each. Every hand-logged number can be filled: Instagram, YouTube, TikTok, LinkedIn and Reddit, sales and revenue (`entry_mode = 'manual'`, units count, hours or money). Nothing is saved until the owner reviews the rows and presses Save.

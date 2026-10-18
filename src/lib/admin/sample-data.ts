@@ -81,6 +81,14 @@ export const SAMPLE_DEFINITIONS: MetricDefinition[] = [
   definition("reddit.dm_replies", "outreach", "Reddit DM replies", "People who replied to a Reddit outreach message, on the day they replied.", "count", "sum", "manual"),
   definition("reddit.dm_reply_rate", "outreach", "Reddit DM reply rate", "Replies ÷ DMs sent. Replies come in after the DM, so a short range can read high or low.", "ratio", "ratio", "derived", { numeratorKey: "reddit.dm_replies", denominatorKey: "reddit.dms_sent" }),
   definition("reddit.dms_sent", "outreach", "Reddit DMs sent", "People messaged on Reddit for outreach. Count each person once, on the day of the first message.", "count", "sum", "manual"),
+  definition("cold_calls.dials", "outreach", "Cold calls made", "Cold calls dialled, whether or not anyone answered, on the day you made them.", "count", "sum", "manual"),
+  definition("cold_calls.positive_replies", "outreach", "Cold call positive replies", "People who picked up and were interested: wanted to hear more, asked for details or agreed to a next step.", "count", "sum", "manual"),
+  definition("cold_calls.neutral_replies", "outreach", "Cold call neutral replies", "People who picked up and were neither interested nor against: unsure, busy, or asked you to send something.", "count", "sum", "manual"),
+  definition("cold_calls.negative_replies", "outreach", "Cold call negative replies", "People who picked up and said no, or asked not to be called again.", "count", "sum", "manual", { higherIsBetter: false }),
+  definition("cold_calls.follow_ups", "outreach", "Cold call follow-ups", "People who asked you to call or message them back later. Also count their reply above.", "count", "sum", "manual"),
+  definition("cold_calls.meetings_booked", "outreach", "Cold call meetings booked", "Sales calls or meetings set up from a cold call. Count one only once Calendly confirms the booking.", "count", "sum", "manual"),
+  definition("cold_calls.positive_rate", "outreach", "Cold call positive reply rate", "Positive replies ÷ cold calls made.", "ratio", "ratio", "derived", { numeratorKey: "cold_calls.positive_replies", denominatorKey: "cold_calls.dials" }),
+  definition("cold_calls.meeting_rate", "outreach", "Cold call meeting rate", "Meetings booked ÷ cold calls made. A meeting can be booked days after the call, so a short range can read high or low.", "ratio", "ratio", "derived", { numeratorKey: "cold_calls.meetings_booked", denominatorKey: "cold_calls.dials" }),
   definition("dripify.new_accepted", "outreach", "Dripify connections accepted (new)", "Leads who accepted a Dripify connection request since the previous sync, recorded on the sync day.", "count", "sum", "connector"),
   definition("dripify.new_contacted", "outreach", "Dripify leads contacted (new)", "Leads Dripify contacted for the first time since the previous sync, recorded on the sync day.", "count", "sum", "connector"),
   definition("dripify.new_replies", "outreach", "Dripify replies (new)", "Leads who replied to a Dripify campaign for the first time since the previous sync, recorded on the sync day.", "count", "sum", "connector"),
@@ -833,13 +841,56 @@ function buildGeneric(item: MetricDefinition, line: Timeline): SampleRow[] {
   return rows;
 }
 
+/**
+ * Cold calls: call blocks on most workdays (more on Tuesdays to Thursdays).
+ * About one dial in nine is answered; of those, about a fifth are positive,
+ * a third neutral and the rest negative. Most neutral and some positive
+ * replies ask for a follow-up. About two positive replies in five become a
+ * meeting, booked on the call or within the next two workdays.
+ */
+function buildColdCalls(line: Timeline): RowMap {
+  const rows: RowMap = new Map();
+  const days = line.dates.map((date, index) => {
+    if (!isWeekday(line.dow[index]) || rand("cold_calls.block", date) > 0.85) return { dials: 0, positive: 0, neutral: 0, negative: 0, followUps: 0 };
+    const busy = line.dow[index] >= 2 && line.dow[index] <= 4 ? 1.25 : 0.9;
+    const dials = Math.round(intBetween(22, 48, rand("cold_calls.dials", date)) * busy);
+    const answered = Math.min(dials, countEvents(dials * between(0.08, 0.14, rand("cold_calls.answer", date)), "cold_calls.answered", date));
+    let positive = 0, neutral = 0, followUps = 0;
+    for (let call = 0; call < answered; call += 1) {
+      const mood = rand("cold_calls.mood", date, call);
+      if (mood < 0.2) { positive += 1; if (rand("cold_calls.follow", date, call) < 0.3) followUps += 1; }
+      else if (mood < 0.55) { neutral += 1; if (rand("cold_calls.follow", date, call) < 0.6) followUps += 1; }
+    }
+    return { dials, positive, neutral, negative: answered - positive - neutral, followUps };
+  });
+  for (let index = 0; index <= YESTERDAY_INDEX; index += 1) {
+    const date = line.dates[index];
+    if (!isWeekday(line.dow[index])) continue;
+    let meetings = 0;
+    for (let back = 0; back <= 2 && back <= index; back += 1) {
+      for (let reply = 0; reply < days[index - back].positive; reply += 1) {
+        const from = line.dates[index - back];
+        if (rand("cold_calls.meeting", from, reply) < 0.4 && intBetween(0, 2, rand("cold_calls.meeting_day", from, reply)) === back) meetings += 1;
+      }
+    }
+    const day = days[index];
+    addRow(rows, "cold_calls.dials", date, "", day.dials);
+    addRow(rows, "cold_calls.positive_replies", date, "", day.positive);
+    addRow(rows, "cold_calls.neutral_replies", date, "", day.neutral);
+    addRow(rows, "cold_calls.negative_replies", date, "", day.negative);
+    addRow(rows, "cold_calls.follow_ups", date, "", day.followUps);
+    addRow(rows, "cold_calls.meetings_booked", date, "", meetings);
+  }
+  return rows;
+}
+
 // ---------------------------------------------------------------------------
 // Row cache, keyed by today: groups are generated once and only read after.
 // ---------------------------------------------------------------------------
 
-type GroupId = "linkedin" | "youtube" | "instagram" | "tiktok" | "reddit" | "outreach" | "ajani" | "dripify" | "business";
+type GroupId = "linkedin" | "youtube" | "instagram" | "tiktok" | "reddit" | "cold_calls" | "outreach" | "ajani" | "dripify" | "business";
 const GROUP_BY_SOURCE: Record<string, GroupId> = {
-  linkedin: "linkedin", youtube: "youtube", instagram: "instagram", tiktok: "tiktok", reddit: "reddit",
+  linkedin: "linkedin", youtube: "youtube", instagram: "instagram", tiktok: "tiktok", reddit: "reddit", cold_calls: "cold_calls",
   outreach: "outreach", ajani: "ajani", dripify: "dripify", sales: "business", revenue: "business",
 };
 const rowCache = new Map<string, { line: Timeline; groups: Map<GroupId, RowMap>; generic: Map<string, SampleRow[]> }>();
@@ -864,6 +915,7 @@ function groupRows(group: GroupId, today: string): RowMap {
         : group === "instagram" ? buildInstagram(line)
           : group === "tiktok" ? buildTikTok(line)
             : group === "reddit" ? buildReddit(line)
+              : group === "cold_calls" ? buildColdCalls(line)
               : group === "outreach" ? buildOutreach(line)
                 : group === "ajani" ? buildAjani(line)
                   : group === "dripify" ? buildDripify(line)

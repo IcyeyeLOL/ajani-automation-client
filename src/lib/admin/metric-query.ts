@@ -129,7 +129,7 @@ export function trendRange(period: TrendPeriod, grain: MetricGrain, today: strin
   return { grain: shown, ...rangeForPreset(shown, trendPeriod(period).counts[shown] ?? 1, today) };
 }
 
-export type TrendViewId = "key" | "sales" | "outreach" | "dripify" | "linkedin" | "instagram" | "youtube" | "tiktok" | "reddit" | "website";
+export type TrendViewId = "key" | "sales" | "outreach" | "cold_calls" | "dripify" | "linkedin" | "instagram" | "youtube" | "tiktok" | "reddit" | "website";
 export type TrendView = {
   id: TrendViewId;
   label: string;
@@ -146,6 +146,7 @@ export const trendViews: TrendView[] = [
   { id: "key", label: "Key numbers", sources: null, suggested: DEFAULT_TREND_METRICS, account: null },
   { id: "sales", label: "Sales & revenue", sources: ["sales", "revenue"], suggested: ["sales.deals_won", "revenue.cash_collected", "revenue.mrr", "revenue.active_clients", "sales.content_leads", "sales.close_rate"], account: null },
   { id: "outreach", label: "Outreach", sources: ["outreach"], suggested: ["outreach.touches", "outreach.replies", "outreach.reply_rate", "outreach.calls_booked"], account: { label: "Channel", all: "All channels", noun: "channel" } },
+  { id: "cold_calls", label: "Cold calls", sources: ["cold_calls"], suggested: ["cold_calls.dials", "cold_calls.positive_replies", "cold_calls.neutral_replies", "cold_calls.negative_replies", "cold_calls.follow_ups", "cold_calls.meetings_booked", "cold_calls.positive_rate", "cold_calls.meeting_rate"], account: null },
   { id: "dripify", label: "Dripify", sources: ["dripify"], suggested: ["dripify.new_contacted", "dripify.new_replies", "dripify.reply_rate", "dripify.acceptance_rate", "dripify.leads_remaining", "dripify.unread_messages"], account: { label: "Campaign", all: "All campaigns", noun: "campaign" } },
   { id: "linkedin", label: "LinkedIn", sources: ["linkedin"], suggested: ["linkedin.followers", "linkedin.impressions", "linkedin.engagements", "linkedin.posts_published"], account: byAccount },
   { id: "instagram", label: "Instagram", sources: ["instagram"], suggested: ["instagram.followers", "instagram.reach", "instagram.views", "instagram.interactions"], account: byAccount },
@@ -212,7 +213,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // Trends page: labels, changes and axes.
 // ---------------------------------------------------------------------------
 
-const labelPrefix = /^(YouTube|TikTok|Instagram|LinkedIn|Reddit|Dripify|Outreach|X) /;
+const labelPrefix = /^(YouTube|TikTok|Instagram|LinkedIn|Reddit|Dripify|Outreach|Cold call|X) /;
 
 /** "LinkedIn followers" → "Followers": the view or the card's eyebrow already names the platform. */
 export function shortMetricLabel(label: string) {

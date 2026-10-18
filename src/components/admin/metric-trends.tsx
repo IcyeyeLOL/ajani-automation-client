@@ -251,6 +251,10 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
     </section>
 
     {view.id === "dripify" ? <DripifyNote catalog={catalog} onNavigate={onNavigate} /> : null}
+    {view.id === "cold_calls" ? <p className="admin-trend-note admin-trend-calls">
+      <span>After a calling session, log the calls you made and how people replied: positive, neutral or negative, follow-ups and meetings booked.</span>
+      <button className="admin-trend-button primary" onClick={() => requestLog(["cold_calls"])} type="button">Log today&apos;s calls</button>
+    </p> : null}
 
     {error ? <div className="admin-trend-notice" role="alert">
       <p>{error.message}</p>
