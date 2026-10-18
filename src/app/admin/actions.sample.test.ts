@@ -34,6 +34,7 @@ vi.mock("@/lib/admin/clerk", () => ({ requireAdminClerkUser: mocks.requireAdminC
 vi.mock("@/lib/admin/login-throttle", () => ({ consumeAdminLoginAllowance: mocks.consumeAdminLoginAllowance }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createClient }));
 vi.mock("@/lib/admin/metrics", () => ({ loadMetricCatalog: mocks.loadMetricCatalog }));
+vi.mock("@/lib/admin/report-saved", () => ({ loadSavedValues: vi.fn(async () => []) }));
 vi.mock("@/lib/connectors/dripify", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/connectors/dripify")>(),
   syncDripifyMetrics: mocks.syncDripifyMetrics,

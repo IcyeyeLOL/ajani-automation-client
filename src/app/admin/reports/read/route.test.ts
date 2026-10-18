@@ -28,9 +28,9 @@ describe("report read route", () => {
     mocks.sample.mockResolvedValue(false);
     mocks.catalog.mockResolvedValue({ status: "available", today: "2026-10-17", metrics: [followers], recentEntries: [], dimensionLabels: {}, connectors: { dripify: false } });
     mocks.extract.mockResolvedValue({
-      status: "ok", method: "ai", note: "Mostly 30-day totals; I took today's followers.", reportDate: "2026-10-17", provider: "anthropic", model: "claude-opus-5-5",
-      rows: [{ metricKey: "instagram.followers", date: "2026-10-17", value: 73, evidence: "73 followers" }],
-      notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
+      status: "ok", method: "ai", agent: "used", note: "Read 1 number (Instagram 1 across 1 day).", reportDate: "2026-10-17", provider: "anthropic", model: "claude-opus-5-5",
+      rows: [{ metricKey: "instagram.followers", label: "Instagram followers", unit: "count", aggregation: "last", date: "2026-10-17", value: 73, evidence: "73 followers", doubt: null }],
+      questions: [], groups: [], notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
     });
   });
 
@@ -52,17 +52,17 @@ describe("report read route", () => {
     expect(mocks.extract).not.toHaveBeenCalled();
   });
 
-  it("returns the rows for review, labelled with their unit, with the reader's note, uncached and unsaved", async () => {
+  it("returns the rows, questions and breakdown for review, with the reader's note, uncached and unsaved, never the model's name", async () => {
     const response = await POST(upload());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toEqual({
-      today: "2026-10-17", method: "ai", note: "Mostly 30-day totals; I took today's followers.", reportDate: "2026-10-17",
-      rows: [{ metricKey: "instagram.followers", label: "Instagram followers", unit: "count", date: "2026-10-17", value: 73, evidence: "73 followers" }],
-      notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
+      today: "2026-10-17", method: "ai", agent: "used", note: "Read 1 number (Instagram 1 across 1 day).", reportDate: "2026-10-17",
+      rows: [{ metricKey: "instagram.followers", label: "Instagram followers", unit: "count", aggregation: "last", date: "2026-10-17", value: 73, evidence: "73 followers", doubt: null }],
+      questions: [], groups: [], notUsed: [{ item: "Views, last 30 days", reason: "A 30-day total" }], dropped: [],
     });
     const [input] = mocks.extract.mock.calls[0];
-    expect(input).toMatchObject({ fileName: "report.pdf", today: "2026-10-17" });
+    expect(input).toMatchObject({ fileName: "report.pdf", today: "2026-10-17", startedAt: expect.any(Number) });
     expect(Array.from(input.bytes)).toEqual(Array.from(PDF));
   });
 

@@ -1,0 +1,67 @@
+/**
+ * The owner's upload of 2026-10-18: Instagram and LinkedIn in one table with a
+ * platform column. The old reader decided the whole table was Instagram and
+ * saved LinkedIn's followers as Instagram's. Kept verbatim as the regression case.
+ */
+export const SOCIAL_COMBINED_CSV = `platform,day_timezone,date,followers,reach,views,interactions,likes,comments,shares,saves,profile_visits,link_taps,contact_taps,posts_published,new_followers
+instagram,America/Chicago,2026-09-18,,84,635,102,24,0,37,0,9,0,0,0,
+instagram,America/Chicago,2026-09-19,,21,188,4,2,0,1,0,3,0,0,0,
+instagram,America/Chicago,2026-09-20,,4,37,0,0,0,0,0,5,0,0,0,
+instagram,America/Chicago,2026-09-21,,3,13,0,0,0,0,0,0,0,0,0,
+instagram,America/Chicago,2026-09-22,,2,6,1,1,0,0,0,1,0,0,0,
+instagram,America/Chicago,2026-09-23,,20,9,0,0,0,0,0,5,0,0,0,
+instagram,America/Chicago,2026-09-24,,28,41,2,1,0,0,0,8,0,0,1,
+instagram,America/Chicago,2026-09-25,,34,86,11,7,0,1,0,7,0,0,0,
+instagram,America/Chicago,2026-09-26,,7,61,1,1,0,0,0,10,0,0,0,
+instagram,America/Chicago,2026-09-27,,98,21,1,0,1,0,0,5,0,0,1,
+instagram,America/Chicago,2026-09-28,,16,145,9,8,0,0,0,4,0,0,0,
+instagram,America/Chicago,2026-09-29,,0,33,0,0,0,0,0,3,0,0,0,
+instagram,America/Chicago,2026-09-30,,181,0,0,0,0,0,0,19,0,0,4,
+instagram,America/Chicago,2026-10-01,,206,328,16,5,0,3,0,18,0,0,0,
+instagram,America/Chicago,2026-10-02,,21,483,21,19,1,0,0,14,0,0,0,
+instagram,America/Chicago,2026-10-03,,10,69,1,1,0,0,0,7,1,0,0,
+instagram,America/Chicago,2026-10-04,,16,26,0,0,0,0,0,16,4,0,0,
+instagram,America/Chicago,2026-10-05,,6,98,7,6,0,0,1,6,4,0,0,
+instagram,America/Chicago,2026-10-06,,4,28,0,0,0,0,0,5,1,0,0,
+instagram,America/Chicago,2026-10-07,,169,21,0,0,0,0,0,10,0,0,2,
+instagram,America/Chicago,2026-10-08,,2219,352,16,7,0,2,1,81,0,0,0,
+instagram,America/Chicago,2026-10-09,,1560,2907,162,76,4,37,5,79,3,0,3,
+instagram,America/Chicago,2026-10-10,,95,2153,78,47,4,10,3,17,2,0,0,
+instagram,America/Chicago,2026-10-11,,76,251,9,6,1,1,0,11,0,0,0,
+instagram,America/Chicago,2026-10-12,,212,147,7,4,0,0,2,15,0,0,1,
+instagram,America/Chicago,2026-10-13,,148,325,31,23,1,2,1,22,0,0,0,
+instagram,America/Chicago,2026-10-14,,86,248,22,4,0,9,0,16,1,0,0,
+instagram,America/Chicago,2026-10-15,,212,156,10,6,1,1,0,21,2,0,1,
+instagram,America/Chicago,2026-10-16,,64,369,23,13,1,4,0,9,1,0,0,
+instagram,America/Chicago,2026-10-17,,20,93,7,4,1,0,1,4,0,0,0,
+linkedin,UTC,2026-09-18,2362,,39,0,,,,,,,,0,1
+linkedin,UTC,2026-09-19,2364,,19,0,,,,,,,,0,2
+linkedin,UTC,2026-09-20,2365,,24,1,,,,,,,,0,1
+linkedin,UTC,2026-09-21,2368,,35,0,,,,,,,,0,3
+linkedin,UTC,2026-09-22,2369,,20,0,,,,,,,,0,1
+linkedin,UTC,2026-09-23,2374,,272,0,,,,,,,,0,5
+linkedin,UTC,2026-09-24,2380,,120,1,,,,,,,,0,6
+linkedin,UTC,2026-09-25,2381,,38,0,,,,,,,,0,1
+linkedin,UTC,2026-09-26,2384,,9,0,,,,,,,,0,3
+linkedin,UTC,2026-09-27,2384,,22,0,,,,,,,,1,0
+linkedin,UTC,2026-09-28,2388,,19,0,,,,,,,,0,4
+linkedin,UTC,2026-09-29,2391,,66,1,,,,,,,,0,3
+linkedin,UTC,2026-09-30,2393,,120,2,,,,,,,,0,2
+linkedin,UTC,2026-10-01,2401,,565,15,,,,,,,,0,8
+linkedin,UTC,2026-10-02,2418,,478,3,,,,,,,,0,17
+linkedin,UTC,2026-10-03,2427,,222,1,,,,,,,,0,9
+linkedin,UTC,2026-10-04,2429,,82,0,,,,,,,,3,2
+linkedin,UTC,2026-10-05,2442,,80,0,,,,,,,,0,13
+linkedin,UTC,2026-10-06,2463,,46,0,,,,,,,,0,21
+linkedin,UTC,2026-10-07,2471,,82,0,,,,,,,,0,8
+linkedin,UTC,2026-10-08,2475,,20,0,,,,,,,,0,4
+linkedin,UTC,2026-10-09,2480,,56,1,,,,,,,,0,5
+linkedin,UTC,2026-10-10,2482,,65,0,,,,,,,,0,2
+linkedin,UTC,2026-10-11,2484,,21,0,,,,,,,,2,2
+linkedin,UTC,2026-10-12,2490,,73,1,,,,,,,,0,6
+linkedin,UTC,2026-10-13,2503,,115,1,,,,,,,,1,13
+linkedin,UTC,2026-10-14,2508,,107,1,,,,,,,,0,5
+linkedin,UTC,2026-10-15,2525,,13,0,,,,,,,,0,17
+linkedin,UTC,2026-10-16,2531,,19,0,,,,,,,,0,6
+linkedin,UTC,2026-10-17,2533,,4,0,,,,,,,,0,2
+`;

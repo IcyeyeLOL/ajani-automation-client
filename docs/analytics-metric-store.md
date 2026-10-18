@@ -136,7 +136,7 @@ Trends has a **Cold calls** view and a Cold calls tab in Log numbers, with no ac
 | `cold_calls.meeting_rate` | `ratio` | Meetings booked ÷ calls made |
 
 - **Rates are per call made.** Picked-up calls are not logged separately, so the rates are measured against all dials.
-- **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match.
+- **Imports.** A cold-call spreadsheet imports through Import numbers. The headers `dials`, `positive`, `neutral`, `negative`, `follow-ups`/`callbacks` and `meetings booked` all match. A sheet with one row per caller per day is added up per day, and a "Total" row is checked against that sum. A dialer export with one row per call is counted with the AI agent's rules, which pick the outcome values that count. Prospects' names and numbers are never read.
 - **Part of Outreach.** Since `20261018010000`, cold calls count toward the Outreach totals as the channel `phone/cold_call` (see "Outreach totals").
 
 The migration is additive (definitions only). It was applied to the live database on 2026-10-18.
@@ -171,32 +171,161 @@ The owner asked on 2026-10-18 for Outreach to be the total of all outreach. `out
 
 ## Import numbers (any platform)
 
-Code: `src/lib/admin/report-table.ts` (spreadsheets), `src/lib/admin/report-import.ts` (agent and rules), `src/lib/admin/report-merge.ts` (several files), `src/app/admin/reports/read/route.ts`, `saveReportValuesAction` in `src/app/admin/actions.ts`, `src/components/admin/report-import.tsx`. **Import numbers** sits at the top of Trends. It takes Muse reports, platform exports, screenshots, and sales or revenue sheets: PDF, CSV/TSV, Markdown or text, PNG, JPEG or WEBP, up to 10 files at a time, 4 MB each. Every hand-logged number can be filled: Instagram, YouTube, LinkedIn and Reddit, cold calls, sales and revenue (`entry_mode = 'manual'`, units count, hours or money). Nothing is saved until the owner reviews the rows and presses Save.
+Code: `src/lib/admin/report-table.ts` (the reader), `report-import.ts` (the agent, checks and save rules), `report-merge.ts` (several files and the owner's answers), `report-diff.ts` (what a save changes), `report-summary.ts` (the breakdown and conclusion), `report-saved.ts` (saved numbers), the routes in `src/app/admin/reports/` (`read`, `saved`, `conclude`), `saveReportValuesAction` in `src/app/admin/actions.ts`, and `src/components/admin/report-import.tsx`.
 
-- **Spreadsheets are read without AI.** A text file with a header row that has a date column and known number columns is read column by column. That read is exact, instant and free, and it works without an Anthropic key.
-  - **Matching columns to metrics.** Headers match a metric's key, its label without the platform name, or a short alias list (`EXTRA_ALIASES`). A prefix such as `instagram_reach` or "LinkedIn followers" is exact. An unprefixed header that several platforms share (`followers`, `views`, `comments`) takes its platform from a title row above the table or the file name. Failing that, it takes it from columns only one platform has (`saves`, `link_taps`, `interactions` mean Instagram). If none of these settles it, the column is not guessed.
-  - **Cells and dates.** Blank cells stay unknown. Thousands separators and `$` are accepted. Dates can be ISO or use month names. Slashed dates are read only when the column itself shows whether the month or the day comes first.
-  - **Totals tables.** A table keyed by a window column (`window`, `period`…) is reported as totals and never charted. Muse's totals CSV of 2026-10-17 was exactly this.
-  - **Two exact rules.** Instagram `link_taps` + `contact_taps` are added together, and a blank contact cell leaves that day unknown. YouTube Studio's bare "Subscribers" column is the day's net change, so it never maps to the subscriber total.
-- **Everything else goes to the agent.** PDFs, images, prose, and spreadsheets with an unsettled column are sent to Claude. The agent has a fixed character, a meticulous, sceptical analytics clerk who would rather leave a number out than chart a wrong one. Its rules:
-  - Exact single-day numbers only. Never split 7, 30 or 90-day totals, never read bar heights, and never treat a post's lifetime likes as daily activity.
-  - Posts per day only from a complete post list.
-  - Money in dollars, converted to cents in code.
-  - No names of other people.
-  - It writes a short plain-words note to the owner per file, shown above the table. A spreadsheet read gets a note too.
-  - If the agent is unavailable, a spreadsheet still yields its certain columns, and the unsettled ones are listed.
-- **Checks in code, twice.** Rows from either path go through `checkExtractedRows`, which drops:
-  - metrics the charts don't track
-  - unreadable, future or more-than-100-day-old dates
-  - invalid values for the unit (whole counts, hours and dollars to the hundredth)
-  - a day the file gives two different numbers for
+**Import numbers** sits at the top of Trends. It takes Muse reports, platform exports, cold-call logs, screenshots, and sales or revenue sheets: PDF, CSV/TSV, Markdown or text, PNG, JPEG or WEBP, up to 10 files at a time, 4 MB each. Every hand-logged number can be filled: Instagram, YouTube, LinkedIn and Reddit, cold calls, sales and revenue (`entry_mode = 'manual'`, units count, hours or money). Nothing is saved until the owner reviews the rows and presses Save.
 
-  The save re-checks with `reportSaveSchema` (strict fields, unit-valid values, one row per metric and day, at most 5,000 rows). It then writes batches of 500 through `upsert_analytics_metric_values(..., 'manual', <admin user>)` for the main accounts. When a later batch fails, the message says how far it got.
-- **Several files.** Each file is its own request, three at a time, so every request stays under Vercel's 4.5 MB body limit and 60-second budget. Files over 4 MB are not sent. Results are combined into one review table that names each number's file. Files that agree on a metric and day count once. Files that disagree drop that day, listed under "Not imported".
-- **The file is data, not instructions.** It is sent as a file part (text inside a `<report>` block) under instructions to ignore any instructions it contains, and the answer must match a zod schema. Files are never stored. Logs record counts only.
-- **Model.** Same provider order as the rest of the site: direct Anthropic first when `AI_PRIMARY_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` is set (`REPORT_IMPORT_ANTHROPIC_MODEL`, default `claude-opus-5-5`). Otherwise the AI Gateway (`REPORT_IMPORT_MODEL`, default `anthropic/claude-sonnet-5`, Anthropic only, prompt training disallowed). The Gateway's free tier cannot call Claude models.
-- **Known overlap.** YouTube's hand-logged metrics are also written by the YouTube connector. An imported YouTube day replaces a synced one until the next sync re-reads it (the last 7 days). Imports are most useful for older history.
-- **What to ask Muse.** Muse has no API, so the panel carries a copyable prompt (`MUSE_PROMPT`). It asks for a 30-day daily CSV named `instagram-daily.csv` with fixed columns, blanks instead of estimates, the time zone, and totals in a separate file. Muse's Oct 17, 2026 summary PDF gave only today's followers, posts per day and two printed daily reach values. Muse also reported no daily follower history, so follower trends start from the counts logged from now on.
+**Why it was rebuilt (2026-10-18).** The owner's `social-analytics-combined-2026-09-18_to_2026-10-17.csv` holds Instagram and LinkedIn rows in one table with a `platform` column. The old reader picked one platform per table, using columns only Instagram has, and ignored the `platform` column. As a result:
+
+- LinkedIn's follower counts were saved as `instagram.followers` (2,362–2,533, Sep 18 – Oct 17).
+- Days where the two platforms' numbers differed were dropped.
+
+That file is now the regression fixture (`src/lib/admin/testing/social-combined.ts`).
+
+**The AI understands, code copies.** Code reads every cell and does every count and sum. The AI agent is asked only what code can't settle, and it never sees a spreadsheet's file, only a short description of what is unclear. Every number that reaches the review comes from a cell, or from a count code made with the agent's rule.
+
+### The reader (no AI)
+
+Reading is exact, instant and free, and works without an Anthropic key.
+
+**What it finds:**
+
+- tables with a header row and a date column;
+- long tables (date, metric, value);
+- sections under a platform heading;
+- totals tables keyed by a window column (reported, never charted).
+
+**Which platform each row belongs to.** In order:
+
+1. the row's own platform cell (`platform`, `network`…, or a `channel`/`source` column whose values all name platforms);
+2. a heading above the table;
+3. the file name;
+4. for a single series only, columns only one platform has. This also adds a check telling the owner to untick the rows if the guess is wrong.
+
+**Rows left out, with a reason:** TikTok, Facebook, X, "Total" and unknown labels. Dripify rows too, because its sync fills those numbers.
+
+**Columns.** Each platform's columns are resolved separately.
+
+- A number named for one platform (`instagram_reach`) is never put on another platform's rows.
+- LinkedIn's own words (`impressions`, `engagements`) are exact.
+- `views` and `interactions` on LinkedIn rows become questions for the owner.
+- `members_reached`, `unique_views`, `reposts` and `clicks` aren't tracked.
+- Instagram has no impressions on the charts.
+- YouTube's daily "Subscribers" is a net change.
+
+**Guards:**
+
+- **Repeated days.** A day listed twice for one platform, with no caller, rep or session column, is never read as daily numbers. Those rows become a list for counting.
+- **Conflicting column.** A column that gives two different numbers for the same day on two or more days is dropped whole. A single such day drops just that day.
+- **Day's change.** Columns like `new_followers` are never read as running totals. They check them instead ("LinkedIn followers rise by exactly the new_followers column on all 29 days").
+- **Callers.** In a cold-call log with one row per caller per day, the callers are added up. A "Total" row is checked against that sum, never added to it.
+- **Rates and percentages** are left out.
+- **Time zones** are reported per platform.
+- **Blank cells** are unknown, never zero.
+- **People.** Columns with names, emails or phones, and cells with contact details, are never read. A column of one-off values (names, companies) is never handed on.
+
+### Questions for the owner
+
+A column with a few possible meanings becomes a question, with its cells attached. The owner picks the metric or "Don't use them". Code copies the cells (`answeredRows`) and checks them like any other row.
+
+### The agent
+
+**When it runs.** Only for a spreadsheet with an unfamiliar number column or a list to count, and for PDFs, screenshots and prose.
+
+**Spreadsheet task.** The agent sees column headers, how many days each covers, the smallest, largest and total value, five sample days, and short text columns with their values and counts. It never sees the file or anyone's details.
+
+- It answers questions. Its pick is a suggestion; only a "certain" pick starts selected.
+- It gives counting rules for lists, and `countLog` counts them exactly.
+- Rules it marks "likely" give rows that start unticked.
+- A rule for another platform's numbers is refused.
+
+**Document task.** For PDFs, images and prose, the agent extracts exact single-day numbers with evidence and a confidence.
+
+- "Likely" rows start unticked; "unsure" ones are dropped.
+- It never splits 7-, 30- or 90-day totals, never reads bar heights, and never treats a post's lifetime likes as daily activity.
+- It counts posts per day only from a complete post list.
+- Money is given in dollars and converted to cents in code.
+- It never names other people.
+
+**Its one-line summary** of a file is shown only when it types no numbers of its own (dates are fine).
+
+**Model and limits:**
+
+- Direct Anthropic first when `AI_PRIMARY_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` is set (`REPORT_IMPORT_ANTHROPIC_MODEL`, default `claude-opus-5-5`). Otherwise the AI Gateway (`REPORT_IMPORT_MODEL`, default `anthropic/claude-opus-5-5`, Anthropic only, prompt training disallowed). The Gateway's free tier can't call Claude models.
+- Effort `medium` (`low` for conclusions), `maxRetries: 0`.
+- One deadline per request: 55 s of the route's 60 s. A second provider is tried only with 15 s or more left.
+- Prompt versions are `report-import-v3` and `report-conclusion-v1`. Logs record the task, timings and token counts, never values.
+
+**Without a working key:**
+
+- Spreadsheets are still read in full, and questions still go to the owner.
+- Lists are listed as needing the agent.
+- PDFs and screenshots fail with a clear message.
+
+### The review
+
+After reading, the browser asks `/admin/reports/saved` for the saved main-account numbers for the import's metrics, plus same-named metrics on other platforms, within 35 days either side. It never receives who saved a number, only whether a sync wrote it.
+
+**What each row will do** (`planImport`): new, same as saved, or replaces. A replaced number shows the saved value, and whether a nightly sync wrote it. Rows that are the same as saved are folded away under "Already saved".
+
+**Flags.** Flagged rows start unticked, and "Tick all" ticks them together. A row is flagged when:
+
+- a running total is at least 3× and at least 50 ($50) away from the nearest saved value within 35 days;
+- it replaces a saved number at least 3× different;
+- the same number appears under one name on two platforms on 3 or more days (values of 10 or more);
+- the agent was unsure.
+
+**Removal proposals.** A saved number is proposed for removal only when every one of these holds:
+
+- it was not written by a sync;
+- the import covers that platform that day, but leaves this number blank;
+- it equals another platform's same-named number in the import;
+- that happens on 3 or more days, with values of 10 or more.
+
+For the incident this is exactly the 30 wrong Instagram follower counts. Proposals start ticked, and the owner can untick them. The AI never proposes a removal.
+
+**What the files show** (`digestRows`). Per platform, worked out by code:
+
+- totals;
+- first half against second half;
+- best day;
+- posts published;
+- start and end of each running total.
+
+Next to that: how the platform was decided, time zones, blank columns and checks. The agent's take (`/admin/reports/conclude`) arrives a few seconds later. It may use numbers only as fact ids `{fN}`, which code fills in, and `renderNote` throws away any take that types a digit.
+
+### Save
+
+`saveReportValuesAction` takes three things:
+
+- the rows;
+- the flagged rows the owner ticked (`confirmed`);
+- the removals, each with the value the owner saw.
+
+**Checks, against the store, not the browser:**
+
+- every field (`reportSaveSchema`, `reportRemovalSchema`);
+- each removal still holds the reviewed value and wasn't synced;
+- each row the saved numbers flag (recomputed with `savedFlags`) was ticked on purpose;
+- no number is both saved and removed.
+
+**Writes:** batches of 500 through `upsert_analytics_metric_values(..., 'manual', <admin user>)`, then each removal through `delete_analytics_metric_value`, which logs the removed value in `admin_activity_log`. A partial failure says how far it got.
+
+**No undo yet.** The proposed `analytics_import_runs` migration, with `save_analytics_import` and `undo_analytics_import`, would add one-transaction saves and a 90-day undo. It needs the owner's approval before it is written and applied.
+
+### Several files, safety, overlap and Muse
+
+- **Several files.** Each file is its own request, three at a time, so every request stays under Vercel's 4.5 MB body limit and 60-second budget. Files over 4 MB are not sent. Results are combined into one review that names each number's file. Files that agree on a metric and day count once. Files that disagree drop that day, listed under "Not imported".
+- **The file is data, not instructions.** A PDF or image is sent as a file part, and prose inside a `<report>` block, under instructions to ignore any instructions it contains. The answer must match a zod schema. Files are never stored.
+- **Known overlap.** YouTube's hand-logged metrics are also written by the YouTube connector. An imported YouTube day replaces a synced one until the next sync re-reads it (the last 7 days). The review marks such replacements.
+- **What to ask Muse.** Muse has no API, so the panel carries a copyable prompt (`MUSE_PROMPT`). It asks for:
+  - a 30-day daily CSV named `instagram-daily.csv`, with fixed columns;
+  - blank cells instead of estimates;
+  - the time zone;
+  - totals in a separate file;
+  - a `platform` column on every row when LinkedIn numbers are included.
+
+  Muse's Oct 17, 2026 summary PDF gave only today's followers, posts per day and two printed daily reach values. Muse also reported no daily follower history, so follower trends start from the counts logged from now on.
 
 ## Growth goals
 

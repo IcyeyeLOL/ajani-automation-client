@@ -23,7 +23,11 @@ import {
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
 import { loadMetricCatalog } from "@/lib/admin/metrics";
-import { importableMetrics, REPORT_MAX_VALUES, reportSaveSchema } from "@/lib/admin/report-import";
+import { z } from "zod";
+import { indexSaved, savedFlags, type SavedValue } from "@/lib/admin/report-diff";
+import { importableMetrics, REPORT_MAX_SAVE_VALUES, REPORT_MAX_VALUES, reportRemovalSchema, reportSaveSchema } from "@/lib/admin/report-import";
+import { REPORT_COMPARE_DAYS, shiftDay } from "@/lib/admin/report-merge";
+import { loadSavedValues } from "@/lib/admin/report-saved";
 import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify";
 import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
 import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/admin/sample-mode";
@@ -276,33 +280,79 @@ export async function recordMetricValuesAction(_state: AdminActionState, formDat
 }
 
 /**
- * Saves the rows the owner kept after an imported report was read. The rows are
- * checked again here (never trusted from the browser) and go through the same
- * store rules as typed numbers; saving a day again replaces it.
+ * Saves the rows the owner kept after files were read, and removes the saved
+ * numbers they agreed were wrong. Everything is checked again here, never
+ * trusted from the browser: rows go through the same store rules as typed
+ * numbers, a row that looks wrong next to the saved numbers must have been
+ * ticked on purpose, and a saved number is removed only while it still holds
+ * the value the owner saw. Saving a day again replaces it.
  */
 export async function saveReportValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminSession();
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   let rows: unknown;
+  let removals: unknown;
+  let confirmed: unknown;
   try {
     rows = JSON.parse(String(formData.get("rows") || "[]"));
+    removals = JSON.parse(String(formData.get("removals") || "[]"));
+    confirmed = JSON.parse(String(formData.get("confirmed") || "[]"));
   } catch {
     return { status: "error", message: "The numbers could not be read. Read the report again." };
   }
   const catalog = await loadMetricCatalog();
   if (catalog.status !== "available") return { status: "error", message: "Trends are unavailable right now, so nothing was saved. Retry in a moment." };
-  const allowed = new Map(importableMetrics(catalog.metrics).map((metric) => [metric.key, metric.unit]));
+  const importable = new Map(importableMetrics(catalog.metrics).map((metric) => [metric.key, metric]));
+  const allowed = new Map([...importable.values()].map((metric) => [metric.key, metric.unit]));
   const parsed = reportSaveSchema(catalog.today, allowed).safeParse(rows);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the numbers and retry." };
+  const parsedRemovals = reportRemovalSchema(catalog.today, allowed).safeParse(removals);
+  if (!parsedRemovals.success) return { status: "error", message: parsedRemovals.error.issues[0]?.message || "Check the numbers to remove and retry." };
+  const parsedConfirmed = z.array(z.string().max(200)).max(REPORT_MAX_SAVE_VALUES).safeParse(confirmed);
+  if (!parsedConfirmed.success) return { status: "error", message: "The review could not be read. Read the report again." };
+  const values = parsed.data;
+  const removing = parsedRemovals.data;
+  if (!values.length && !removing.length) return { status: "error", message: "Pick at least one number to save" };
+  const removed = new Set(removing.map((row) => `${row.metricKey}|${row.date}`));
+  if (values.some((row) => removed.has(`${row.metricKey}|${row.date}`))) return { status: "error", message: "A number can't be saved and removed at once. Read the report again." };
+
+  // The store as it is now: a removal must still hold the value the owner saw,
+  // and a row that looks wrong next to the saved numbers must have been ticked on purpose.
+  let saved: SavedValue[];
+  try {
+    const dates = [...values, ...removing].map((row) => row.date).sort();
+    saved = await loadSavedValues(
+      [...new Set([...values, ...removing].map((row) => row.metricKey))],
+      shiftDay(dates[0], -REPORT_COMPARE_DAYS), shiftDay(dates[dates.length - 1], REPORT_COMPARE_DAYS),
+    );
+  } catch {
+    return { status: "error", message: "The saved numbers couldn't be checked, so nothing was saved. Retry in a moment." };
+  }
+  const current = new Map(saved.map((item) => [`${item.metricKey}|${item.date}`, item]));
+  for (const removal of removing) {
+    const item = current.get(`${removal.metricKey}|${removal.date}`);
+    if (!item || item.synced || Math.abs(item.value - removal.value) > 1e-6) {
+      return { status: "error", message: "A saved number changed after you reviewed it, so nothing was saved. Read the file again." };
+    }
+  }
+  const index = indexSaved(saved, removed);
+  const ticked = new Set(parsedConfirmed.data);
+  for (const row of values) {
+    const metric = importable.get(row.metricKey)!;
+    const [flag] = savedFlags({ ...row, unit: metric.unit, aggregation: metric.aggregation }, index);
+    if (flag && !ticked.has(`${row.metricKey}|${row.date}`)) {
+      return { status: "error", message: `Nothing was saved: ${metric.label} on ${row.date} needs a second look. ${flag} Read the file again and tick it if it's right.` };
+    }
+  }
 
   // The store takes 500 values per call; a save that combines several files goes in batches.
+  const admin = createSupabaseAdminClient();
   let written = 0;
   let stored = 0;
   try {
-    const admin = createSupabaseAdminClient();
-    for (let start = 0; start < parsed.data.length; start += REPORT_MAX_VALUES) {
-      const batch = parsed.data.slice(start, start + REPORT_MAX_VALUES);
+    for (let start = 0; start < values.length; start += REPORT_MAX_VALUES) {
+      const batch = values.slice(start, start + REPORT_MAX_VALUES);
       const { data, error } = await admin.rpc("upsert_analytics_metric_values", {
         // Imports are about the owner's main accounts, which have no account name.
         p_values: batch.map((row) => ({ ...row, dimension: "" })),
@@ -317,15 +367,31 @@ export async function saveReportValuesAction(_state: AdminActionState, formData:
     const reason = error && typeof error === "object" && "code" in error && error.code === "P0001" && "message" in error ? String(error.message) : null;
     if (!stored) return { status: "error", message: reason ?? "These numbers could not be saved. Retry in a moment." };
     revalidatePath("/admin");
-    return { status: "error", message: `Saved ${stored} of ${parsed.data.length} numbers, then the rest failed${reason ? `: ${reason}` : ""}. Save again to finish; numbers already saved are simply replaced.` };
+    return { status: "error", message: `Saved ${stored} of ${values.length} numbers, then the rest failed${reason ? `: ${reason}` : ""}. Save again to finish; numbers already saved are simply replaced.` };
+  }
+  // Each removal is logged with the value it removed, so it can be typed back in.
+  let cleared = 0;
+  try {
+    for (const removal of removing) {
+      const { data, error } = await admin.rpc("delete_analytics_metric_value", {
+        p_metric_key: removal.metricKey, p_metric_date: removal.date, p_dimension_key: "", p_actor: actor,
+      });
+      if (error) throw error;
+      if (data) cleared += 1;
+    }
+  } catch {
+    revalidatePath("/admin");
+    return { status: "error", message: `${values.length ? `Saved ${values.length} ${values.length === 1 ? "number" : "numbers"}, but removing` : "Removing"} the wrong numbers stopped after ${cleared} of ${removing.length}. Read the file again to finish.` };
   }
   revalidatePath("/admin");
-  const days = new Set(parsed.data.map((row) => row.date)).size;
+  const days = new Set(values.map((row) => row.date)).size;
+  const done = [
+    written ? `saved ${written} ${written === 1 ? "number" : "numbers"} across ${days} ${days === 1 ? "day" : "days"}` : "",
+    cleared ? `removed ${cleared} wrong ${cleared === 1 ? "number" : "numbers"}` : "",
+  ].filter(Boolean).join(" and ");
   return {
     status: "success",
-    message: written
-      ? `Saved ${written} ${written === 1 ? "number" : "numbers"} across ${days} ${days === 1 ? "day" : "days"}. Trends are updated.`
-      : "Those numbers were already recorded. Nothing changed.",
+    message: done ? `${done.charAt(0).toUpperCase()}${done.slice(1)}. Trends are updated.` : "Those numbers were already recorded. Nothing changed.",
     entityId: `report:${Date.now()}`,
   };
 }

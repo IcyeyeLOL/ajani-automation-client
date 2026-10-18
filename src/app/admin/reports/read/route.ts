@@ -1,5 +1,5 @@
 import { loadMetricCatalog } from "@/lib/admin/metrics";
-import { extractReportValues, importableMetrics, REPORT_MAX_BYTES, reportFileKind } from "@/lib/admin/report-import";
+import { extractReportValues, REPORT_MAX_BYTES, reportFileKind } from "@/lib/admin/report-import";
 import { isSampleMode } from "@/lib/admin/sample-mode";
 import { resolveAdminSession } from "@/lib/admin/session";
 
@@ -14,12 +14,15 @@ const ERRORS: Record<string, [string, number]> = {
 
 /**
  * POST multipart: file (a report, export, screenshot or spreadsheet about any
- * platform, sales or revenue). A day-by-day spreadsheet is read column by column;
- * anything else goes to the import agent. Returns the rows found for review. Saves nothing:
- * the owner saves the reviewed rows with saveReportValuesAction.
+ * platform, cold calls, sales or revenue). A spreadsheet is read column by
+ * column, each row on its own platform; the AI agent is asked only about what
+ * code can't place, and reads PDFs and screenshots. Returns the rows, the
+ * questions for the owner and the per-platform breakdown for review. Saves
+ * nothing: the owner saves the reviewed rows with saveReportValuesAction.
  * Lives under /admin so the path-scoped admin session cookie is sent.
  */
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const session = await resolveAdminSession();
   if (session.status === "forbidden") return json({ error: "Not found" }, 404);
   if (session.status !== "allowed") return json({ error: "Admin session required" }, 401);
@@ -42,21 +45,15 @@ export async function POST(request: Request) {
 
   const catalog = await loadMetricCatalog();
   if (catalog.status !== "available") return json({ error: "Trends are unavailable, so nothing can be imported right now." }, 503);
-  const metrics = new Map(importableMetrics(catalog.metrics).map((metric) => [metric.key, metric]));
 
-  const result = await extractReportValues({ bytes, fileName: file.name, metrics: catalog.metrics, today: catalog.today });
+  const result = await extractReportValues({ bytes, fileName: file.name, metrics: catalog.metrics, today: catalog.today, startedAt });
   if (result.status !== "ok") {
     const [message, status] = ERRORS[result.code] ?? ERRORS.ai_unavailable;
     return json({ error: message }, status);
   }
   return json({
-    today: catalog.today,
-    method: result.method,
-    note: result.note,
-    reportDate: result.reportDate,
-    rows: result.rows.map((row) => ({ ...row, label: metrics.get(row.metricKey)?.label ?? row.metricKey, unit: metrics.get(row.metricKey)?.unit ?? "count" })),
-    notUsed: result.notUsed,
-    dropped: result.dropped,
+    today: catalog.today, method: result.method, agent: result.agent, note: result.note, reportDate: result.reportDate,
+    rows: result.rows, questions: result.questions, groups: result.groups, notUsed: result.notUsed, dropped: result.dropped,
   }, 200);
 }
 
