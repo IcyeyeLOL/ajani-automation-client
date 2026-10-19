@@ -1,10 +1,10 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useState, type FormEvent, type SyntheticEvent } from "react";
+import { startTransition, useActionState, useEffect, useState, useSyncExternalStore, type FormEvent, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import { deleteMetricValueAction, recordMetricValuesAction } from "@/app/admin/actions";
 import { initialAdminActionState } from "@/app/admin/action-state";
-import { bucketLabel, formatMetricValue, shortMetricLabel } from "@/lib/admin/metric-query";
+import { bucketLabel, coldCallAnswersProblem, entryDayLabel, formatMetricValue, localDay, shortMetricLabel } from "@/lib/admin/metric-query";
 import type { TrendViewId } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricDefinition } from "@/lib/admin/metric-types";
 import { withRenewedSignIn } from "@/lib/admin/fresh-session";
@@ -15,6 +15,7 @@ const deleteValue = withRenewedSignIn(deleteMetricValueAction);
 
 const NEW_ACCOUNT = "__new_account__";
 const SAMPLE_NOTE = "Sample data is on, so nothing can be saved. Switch to real data to log numbers.";
+const UNSAVED_NOTE = "Your last save wasn't made, because that day already had some of those numbers. Type them again, then choose to add to them or replace them.";
 
 // Goal numbers first, then platforms in the order the owner uses them. A tab
 // shows only while the catalog has active manual metrics for it.
@@ -42,6 +43,24 @@ const groupNotes: Record<string, string> = {
   reddit: "Log every Reddit DM here; Outreach adds them up with Dripify and cold calls.",
   dripify: "Dripify syncs its sends, acceptances and replies every night. Log the positive replies and calls booked from Dripify conversations here.",
 };
+
+/**
+ * The browser's calendar day, or null on the server and while hydrating, so
+ * both render the same HTML. Read again when the tab comes back into view, so
+ * a desk left open overnight moves on to the new day.
+ */
+export function useLocalDay() {
+  return useSyncExternalStore(subscribeToDayChanges, localDay, noDay);
+}
+function subscribeToDayChanges(onChange: () => void) {
+  window.addEventListener("focus", onChange);
+  document.addEventListener("visibilitychange", onChange);
+  return () => {
+    window.removeEventListener("focus", onChange);
+    document.removeEventListener("visibilitychange", onChange);
+  };
+}
+const noDay = () => null;
 
 /** A request to open the panel (and scroll to it) on the tab for these sources; null means the current view's. */
 export type LogRequest = { token: number; sources: string[] | null };
@@ -71,6 +90,10 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
   }
   const [state, action, pending] = useActionState(recordValues, initialAdminActionState);
   const group = groups.find((item) => item.id === groupId) ?? groups[0];
+  // A save's answer belongs to the tab that sent it. Switching tabs while it
+  // is on its way must not put its question, or its clearing, on another tab.
+  const [sentFrom, setSentFrom] = useState<string | null>(null);
+  const reply = group && sentFrom === group.id ? state : initialAdminActionState;
   const fields = group ? catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source)) : [];
   // Sales, revenue, cold calls and Dripify's logged outcomes belong to the business, not to a platform account.
   const accounts = !group || businessGroups.has(group.id) ? null : [...new Set(fields.flatMap((field) => field.dimensions))].sort();
@@ -96,13 +119,13 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
         {groups.map((item) => <button aria-pressed={item.id === group?.id} key={item.id} onClick={() => setGroupId(item.id)} type="button">{item.label}</button>)}
       </div>
       {group && groupNotes[group.id] ? <p className="admin-trend-log-pointer">{groupNotes[group.id]}</p> : null}
-      {group ? <EntryForm accounts={accounts} action={action} entityId={state.entityId} fields={fields} key={group.id} message={state.message} pending={pending} sampleMode={sampleMode} status={state.status} today={catalog.today} /> : null}
-      <RecentEntries definitions={definitions} entries={catalog.recentEntries} sampleMode={sampleMode} />
+      {group ? <EntryForm accounts={accounts} action={(formData) => { setSentFrom(group.id); action(formData); }} code={reply.code} entityId={reply.entityId} fields={fields} key={group.id} message={reply.message} pending={pending} sampleMode={sampleMode} status={reply.status} today={catalog.today} /> : null}
+      <RecentEntries definitions={definitions} entries={catalog.recentEntries} sampleMode={sampleMode} today={catalog.today} />
     </div>
   </details>;
 }
 
-function EntryForm({ accounts, action, entityId, fields, today, pending, status, message, sampleMode }: { accounts: string[] | null; action: (formData: FormData) => void; entityId?: string; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string; sampleMode: boolean }) {
+function EntryForm({ accounts, action, code, entityId, fields, today, pending, status, message, sampleMode }: { accounts: string[] | null; action: (formData: FormData) => void; code?: string; entityId?: string; fields: MetricDefinition[]; today: string; pending: boolean; status: string; message: string; sampleMode: boolean }) {
   const [values, setValues] = useState<Record<string, string>>({});
   // A pick-list, not free text: the same account typed two ways would be two
   // accounts, and their followers would be added together forever.
@@ -114,14 +137,31 @@ function EntryForm({ accounts, action, entityId, fields, today, pending, status,
     setClearedFor(entityId);
     setValues({});
   }
+  // The owner's own day until they pick one; the server's is UTC, already tomorrow on a US evening.
+  const localToday = useLocalDay();
+  const [picked, setPicked] = useState<string | null>(null);
+  const date = picked ?? localToday ?? today;
+  // "Add to them, or replace them?" only for numbers this form sent and still
+  // holds: a question about numbers since changed is dropped, and one for a
+  // save sent before the tab was reopened (its boxes are empty now) becomes a note.
+  const [dismissed, setDismissed] = useState(entityId);
+  const [sentHere, setSentHere] = useState(false);
+  const asking = code === "existing" && sentHere && entityId !== dismissed;
+  const [answer, setAnswer] = useState<"add" | "replace" | null>(null);
   // Submitting through onSubmit (not the form action prop) stops React from
   // resetting the date and account after a rejected save; a corrected retry
   // must never land on today's date or the main account by accident.
+  const send = (form: HTMLFormElement | null, choice: "add" | "replace" | null) => {
+    if (!form || sampleMode || !form.reportValidity()) return;
+    const formData = new FormData(form);
+    if (choice) formData.set("onExisting", choice);
+    setAnswer(choice);
+    setSentHere(true);
+    startTransition(() => action(formData));
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sampleMode) return;
-    const formData = new FormData(event.currentTarget);
-    startTransition(() => action(formData));
+    send(event.currentTarget, null);
   };
   const payload = fields.flatMap((field) => {
     const raw = values[field.key]?.trim().replaceAll(",", "");
@@ -136,11 +176,14 @@ function EntryForm({ accounts, action, entityId, fields, today, pending, status,
   </label>;
   const totals = fields.filter((field) => field.aggregation === "last");
   const activity = fields.filter((field) => field.aggregation !== "last");
-  return <form onSubmit={submit}>
+  // The server checks the day's totals; this catches a slip in what was just typed.
+  const callsWarning = coldCallAnswersProblem(new Map(payload.map((item) => [item.metricKey, item.value])), date || today, localToday ?? today);
+  const shown = code !== "existing" || asking ? message : sentHere ? "" : UNSAVED_NOTE;
+  return <form onChange={() => { if (asking) setDismissed(entityId); }} onSubmit={submit}>
     <input name="values" type="hidden" value={JSON.stringify(payload)} />
     {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
     <div className="admin-trend-log-context">
-      <label className="admin-field"><span>Date</span><input defaultValue={today} max={today} name="date" required type="date" /></label>
+      <label className="admin-field"><span>Date</span><input max={localToday && localToday > today ? localToday : today} name="date" onChange={(event) => setPicked(event.target.value)} required type="date" value={date} /></label>
       {accounts ? <label className="admin-field"><span>Account</span>
         <select name={account === NEW_ACCOUNT ? undefined : "dimension"} onChange={(event) => setAccount(event.target.value)} value={account}>
           <option value="">Main account</option>
@@ -156,16 +199,21 @@ function EntryForm({ accounts, action, entityId, fields, today, pending, status,
     {activity.length ? <fieldset className="admin-trend-log-group"><legend>Activity</legend><p>For this day, or the days since you last logged it.</p><div>{activity.map(input)}</div></fieldset> : null}
     <div className="admin-form-footer admin-trend-log-foot">
       <div>
-        {message ? <p className={`admin-form-message ${status}`} role="status">{message}</p> : null}
-        {sampleMode ? <p className="admin-trend-sample-note">{SAMPLE_NOTE}</p> : <p>Leave a box blank to skip it. Logging the same day again replaces it.</p>}
+        {shown ? <p className={`admin-form-message ${asking ? "question" : status}`} role="status">{shown}</p> : null}
+        {callsWarning && !sampleMode ? <p className="admin-form-message warning" role="status">{callsWarning}</p> : null}
+        {sampleMode ? <p className="admin-trend-sample-note">{SAMPLE_NOTE}</p> : asking ? <p>Or change the numbers and save again.</p> : <p>Leave a box blank to skip it. If the day already has numbers, you choose to add to them or replace them.</p>}
         {!sampleMode && !payload.length ? <p id="log-save-hint">Type at least one number to save.</p> : null}
       </div>
-      <button aria-describedby={!sampleMode && !payload.length ? "log-save-hint" : undefined} disabled={sampleMode || pending || !payload.length} type="submit">{pending ? "Saving…" : "Save numbers"}<b aria-hidden="true">→</b></button>
+      {/* Plain buttons, not submit buttons: pressing Enter in a box must never pick add or replace. */}
+      {asking ? <div className="admin-trend-log-choice">
+        <button className="primary" disabled={sampleMode || pending} onClick={(event) => send(event.currentTarget.form, "add")} type="button">{pending && answer === "add" ? "Adding…" : "Add to them"}</button>
+        <button disabled={sampleMode || pending} onClick={(event) => send(event.currentTarget.form, "replace")} type="button">{pending && answer === "replace" ? "Replacing…" : "Replace them"}</button>
+      </div> : <button aria-describedby={!sampleMode && !payload.length ? "log-save-hint" : undefined} disabled={sampleMode || pending || !payload.length} type="submit">{pending ? "Saving…" : "Save numbers"}<b aria-hidden="true">→</b></button>}
     </div>
   </form>;
 }
 
-function RecentEntries({ entries, definitions, sampleMode }: { entries: MetricCatalog["recentEntries"]; definitions: Map<string, MetricDefinition>; sampleMode: boolean }) {
+function RecentEntries({ entries, definitions, sampleMode, today }: { entries: MetricCatalog["recentEntries"]; definitions: Map<string, MetricDefinition>; sampleMode: boolean; today: string }) {
   if (!entries.length) return null;
   const shown = entries.slice(0, 12);
   return <details className="admin-trend-recent">
@@ -175,7 +223,7 @@ function RecentEntries({ entries, definitions, sampleMode }: { entries: MetricCa
       const label = definition?.label ?? entry.metricKey;
       const account = entry.dimension || "Main account";
       return <li key={`${entry.metricKey}:${entry.date}:${entry.dimension}`}>
-        <time dateTime={entry.date}>{bucketLabel(entry.date, "day", "axis")}</time>
+        <time dateTime={entry.date}>{entryDayLabel(entry.date, today)}</time>
         <p><b>{label}</b><span>{account}</span></p>
         <strong>{formatMetricValue(entry.value, definition?.unit ?? "count")}</strong>
         <RemoveEntry date={entry.date} description={`${label}, ${account}, ${bucketLabel(entry.date, "day")}`} dimension={entry.dimension} metricKey={entry.metricKey} sampleMode={sampleMode} />

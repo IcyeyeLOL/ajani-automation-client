@@ -21,8 +21,12 @@ import {
   keysMatch,
   setAdminSessionCookie,
 } from "@/lib/admin/session";
-import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
+import {
+  COLD_CALL_ANSWERS, COLD_CALL_DIALS, coldCallAnswersProblem, entryDayLabel, formatMetricValue, metricDeletionSchema, metricEntrySchema, outreachVoidSchema, shortMetricLabel,
+} from "@/lib/admin/metric-query";
+import type { MetricAggregation, MetricUnit } from "@/lib/admin/metric-types";
 import { loadMetricCatalog } from "@/lib/admin/metrics";
+import { withinDeadline } from "@/lib/operations/deadline";
 import { z } from "zod";
 import { indexSaved, savedFlags, type SavedValue } from "@/lib/admin/report-diff";
 import { importableMetrics, REPORT_MAX_SAVE_VALUES, REPORT_MAX_VALUES, reportRemovalSchema, reportSaveSchema } from "@/lib/admin/report-import";
@@ -254,7 +258,13 @@ export async function voidOutreachBatchAction(_state: AdminActionState, formData
   }
 }
 
-/** Upserts: re-entering a day replaces its value instead of adding to it. */
+/**
+ * The store keeps one number per metric, day and account, and a save replaces
+ * it. Calls, DMs and replies are logged per session, so when the day already
+ * has one of those flows, nothing is saved until the form says to add these to
+ * it or replace it (onExisting). A total shown today, like followers, is
+ * always replaced: the newest one is the right one.
+ */
 export async function recordMetricValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const access = await authorizeAdminAction();
   if (access.status === "refused") return access.state;
@@ -269,20 +279,64 @@ export async function recordMetricValuesAction(_state: AdminActionState, formDat
   }
   const parsed = metricEntrySchema.safeParse({ date: formData.get("date"), dimension: formData.get("dimension") ?? "", values });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message || "Check the numbers and retry." };
+  const { date, dimension } = parsed.data;
+  const onExisting = formData.get("onExisting");
+  const choice = onExisting === "add" || onExisting === "replace" ? onExisting : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const day = `${entryDayLabel(date, today)}${dimension ? ` on ${dimension}` : ""}`;
+
+  // Read on every save, not only when asking: someone else may have logged since the question.
+  const checksCalls = parsed.data.values.some((item) => COLD_CALL_KEYS.includes(item.metricKey));
+  let logged: Awaited<ReturnType<typeof loadLoggedDay>>;
+  try {
+    logged = await loadLoggedDay(date, dimension, [...new Set([...parsed.data.values.map((item) => item.metricKey), ...(checksCalls ? COLD_CALL_KEYS : [])])]);
+  } catch {
+    return { status: "error", message: "The saved numbers couldn't be checked, so nothing was saved. Retry in a moment." };
+  }
+  const { saved, definitions } = logged;
+  // A saved zero needs no question: adding to it and replacing it are the same.
+  const existing = parsed.data.values.filter((item) => definitions.get(item.metricKey)?.aggregation === "sum" && (saved.get(item.metricKey) ?? 0) > 0);
+  if (existing.length && !choice) {
+    return {
+      status: "error",
+      code: "existing",
+      message: `${day} already has ${listed(existing.map((item) => amount(saved.get(item.metricKey)!, definitions.get(item.metricKey)!)))}. Add these to them, or replace them?`,
+      entityId: `existing:${Date.now()}`,
+    };
+  }
+  const adding = new Set(choice === "add" ? existing.map((item) => item.metricKey) : []);
+  // numeric(20, 4) in the store: four decimals keep 0.1 + 0.2 from saving as 0.30000000000000004.
+  const final = parsed.data.values.map((item) => adding.has(item.metricKey) ? { ...item, value: Number((saved.get(item.metricKey)! + item.value).toFixed(4)) } : item);
+  const problem = coldCallAnswersProblem(new Map([...saved, ...final.map((item) => [item.metricKey, item.value] as const)]), date, today);
+  if (problem) {
+    // Say when saved numbers are part of it: "5 calls made" on a day with 17
+    // saved answers would otherwise read as if the answers had just been typed.
+    const countsSaved = COLD_CALL_KEYS.some((key) => adding.has(key) || (saved.has(key) && !final.some((item) => item.metricKey === key)));
+    return { status: "error", message: countsSaved ? `${problem} That counts what's already saved for that day. If a saved number is wrong, log only the right number for it and choose Replace them.` : problem };
+  }
 
   try {
     const { data, error } = await createSupabaseAdminClient().rpc("upsert_analytics_metric_values", {
-      p_values: parsed.data.values.map((item) => ({ ...item, date: parsed.data.date, dimension: parsed.data.dimension })),
+      p_values: final.map((item) => ({ ...item, date, dimension })),
       p_origin: "manual",
       p_actor: actor,
     });
     if (error) throw error;
     revalidatePath("/admin");
     const written = Number(data) || 0;
+    const added = final.filter((item) => adding.has(item.metricKey));
+    const others = final.filter((item) => !adding.has(item.metricKey));
+    // The numbers saved alongside, so the message accounts for the whole save.
+    const alsoSaved = !others.length ? ""
+      : others.length <= 3 && others.every((item) => definitions.has(item.metricKey))
+        ? ` Also saved ${listed(others.map((item) => amount(item.value, definitions.get(item.metricKey)!)))}.`
+        : ` Also saved ${others.length} other ${others.length === 1 ? "number" : "numbers"}.`;
     return {
       status: "success",
-      message: written ? `Saved ${written} ${written === 1 ? "number" : "numbers"} for ${parsed.data.date}. Trends are updated.` : "Those numbers were already recorded. Nothing changed.",
-      entityId: `${parsed.data.date}:${Date.now()}`,
+      message: added.length ? `Added to ${day}: now ${listed(added.map((item) => amount(item.value, definitions.get(item.metricKey)!)))}.${alsoSaved} Trends are updated.`
+        : written ? `Saved ${written} ${written === 1 ? "number" : "numbers"} for ${day}${existing.length ? ", replacing what was there" : ""}. Trends are updated.`
+          : "Those numbers were already recorded. Nothing changed.",
+      entityId: `${date}:${Date.now()}`,
     };
   } catch (error) {
     const message = error && typeof error === "object" && "code" in error && error.code === "P0001" && "message" in error ? String(error.message) : null;
@@ -471,6 +525,42 @@ export async function syncConnectorAction(_state: AdminActionState, formData: Fo
     console.error("Manual platform sync failed", { connector });
     return { status: "error", message: "The sync could not run. Apply the latest database migration, then retry in a few minutes." };
   }
+}
+
+/** Calls made and the three answers: a save touching any of them is checked against all four. */
+const COLD_CALL_KEYS = [COLD_CALL_DIALS, ...COLD_CALL_ANSWERS];
+
+type LoggedMetric = { label: string; unit: MetricUnit; aggregation: MetricAggregation };
+
+/** A day's saved numbers on one account for these metrics, and how each metric adds up. */
+async function loadLoggedDay(date: string, dimension: string, keys: string[]) {
+  const admin = createSupabaseAdminClient();
+  const deadlineAt = Date.now() + 8_000;
+  const [saved, defined] = await Promise.all([
+    withinDeadline(admin.from("analytics_metric_daily").select("metric_key, value").eq("metric_date", date).eq("dimension_key", dimension).in("metric_key", keys), deadlineAt),
+    withinDeadline(admin.from("analytics_metric_definitions").select("metric_key, label, unit, aggregation").in("metric_key", keys), deadlineAt),
+  ]);
+  if (saved.error) throw saved.error;
+  if (defined.error) throw defined.error;
+  const savedRows = (saved.data ?? []) as Array<{ metric_key: string; value: number | string }>;
+  const definitionRows = (defined.data ?? []) as Array<{ metric_key: string; label: string; unit: MetricUnit; aggregation: MetricAggregation }>;
+  return {
+    // Postgres numerics may arrive as numeric strings.
+    saved: new Map(savedRows.map((row) => [row.metric_key, Number(row.value)] as const).filter(([, value]) => Number.isFinite(value))),
+    definitions: new Map<string, LoggedMetric>(definitionRows.map((row) => [row.metric_key, { label: row.label, unit: row.unit, aggregation: row.aggregation }])),
+  };
+}
+
+/** "30 cold calls made", "$3,950 cash collected", "12 DMs sent". */
+function amount(value: number, metric: LoggedMetric) {
+  const label = shortMetricLabel(metric.label);
+  const words = /^[A-Z]{2}/.test(label) ? label : `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  return `${formatMetricValue(value, metric.unit).replace(/ h$/, "")} ${words}`;
+}
+
+/** "a", "a and b", "a, b and c". */
+function listed(items: string[]) {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 function hasActivity(metric: OutreachMetricInput) {

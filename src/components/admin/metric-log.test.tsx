@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock("@/app/admin/actions", () => ({ deleteMetricValueAction: vi.fn(), recordMetricValuesAction: vi.fn() }));
 
-import { MetricLog, entryGroups } from "@/components/admin/metric-log";
+import { MetricLog, entryGroups, useLocalDay } from "@/components/admin/metric-log";
 import type { MetricCatalog, MetricDefinition } from "@/lib/admin/metric-types";
 
 const definition = (key: string, label: string, entryMode: MetricDefinition["entryMode"], dimensions: string[] = []): MetricDefinition => ({
@@ -79,5 +79,34 @@ describe("Log numbers", () => {
 
   it("opens the Dripify view on the Dripify tab", () => {
     expect(render({ viewId: "dripify", viewSources: ["dripify"] })).toContain('aria-pressed="true" type="button">Dripify</button>');
+  });
+
+  it("renders the store's day until the browser's own is known, so server and browser HTML match", () => {
+    const date = render({ sources: ["cold_calls"] }).match(/<input[^>]*name="date"[^>]*>/)?.[0] ?? "";
+    expect(date).toContain('value="2026-10-18"');
+    expect(date).toContain('max="2026-10-18"');
+    // The browser's calendar day is only read after hydration.
+    function Probe() { return <>{useLocalDay() ?? "not yet"}</>; }
+    expect(renderToStaticMarkup(<Probe />)).toBe("not yet");
+  });
+
+  it("says a day that already has numbers is never silently replaced", () => {
+    const html = render({ sources: ["cold_calls"] });
+    expect(html).toContain("If the day already has numbers, you choose to add to them or replace them.");
+    expect(html).not.toContain("Logging the same day again replaces it.");
+  });
+
+  it("shows the year of a recent entry outside the current year, so a mistyped year stands out", () => {
+    const entry = (date: string) => ({ metricKey: "cold_calls.dials", date, dimension: "", value: 30, recordedAt: `${date}T20:00:00Z` });
+    const html = renderToStaticMarkup(<MetricLog
+      catalog={{ ...catalog, recentEntries: [entry("2026-10-17"), entry("2025-10-18")] }}
+      definitions={definitions}
+      request={{ token: 1, sources: ["cold_calls"] }}
+      sampleMode={false}
+      viewId="key"
+      viewSources={null}
+    />);
+    expect(html).toMatch(/<time [^>]*>Oct 17<\/time>/);
+    expect(html).toMatch(/<time [^>]*>Oct 18, 2025<\/time>/);
   });
 });

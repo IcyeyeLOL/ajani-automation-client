@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
   voidOutreachBatchAction,
 } from "@/app/admin/actions";
 import { MetricTrends } from "@/components/admin/metric-trends";
+import { useLocalDay } from "@/components/admin/metric-log";
 import { Connections } from "@/components/admin/connections-panel";
 import { LogOutreachPanel, OutreachChannels } from "@/components/admin/outreach-channels-panel";
 import { DemandBars, SystemHealth, VariantChart } from "@/components/admin/section-charts";
@@ -375,7 +376,7 @@ function VoidBatchControl({ batchId, sampleMode }: { batchId: string; sampleMode
   const [state, action, pending] = useActionState(voidBatch, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   if (!open) return <button className="admin-void-toggle" onClick={() => setOpen(true)} type="button">VOID</button>;
-  return <form action={action} className="admin-void-form">
+  return <form className="admin-void-form" onSubmit={keepFieldsOnError(action, sampleMode)}>
     <input name="batchId" type="hidden" value={batchId} />
     {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
     <label><span className="sr-only">Reason for voiding</span><input autoFocus maxLength={300} minLength={3} name="reason" placeholder="Why? e.g. logged twice" required /></label>
@@ -432,8 +433,12 @@ function AdminPagination({ data, kind }: { data: AdminDashboardData; kind: "expe
 function ExperimentForm({ enabled, sampleMode }: { enabled: boolean; sampleMode: boolean }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(createExperiment, initialAdminActionState);
-  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.status]);
-  return <article className="admin-panel admin-experiment-form"><header className="admin-panel-head"><div><p>NEW EXPERIMENT</p><h2>Create a flexible comparison.</h2></div><span>A / B / CUSTOM</span></header><form action={action} key={state.entityId ?? "new-experiment"}>
+  useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
+  // A new key after each save empties the form. Keyed on the last save, not the
+  // latest state: a refusal carries no id and must keep what was typed.
+  const [savedId, setSavedId] = useState(state.entityId);
+  if (state.status === "success" && state.entityId !== savedId) setSavedId(state.entityId);
+  return <article className="admin-panel admin-experiment-form"><header className="admin-panel-head"><div><p>NEW EXPERIMENT</p><h2>Create a flexible comparison.</h2></div><span>A / B / CUSTOM</span></header><form key={savedId ?? "new-experiment"} onSubmit={keepFieldsOnError(action, sampleMode)}>
     {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
     <Field label="Experiment title"><input maxLength={120} name="title" placeholder="TCPA angle vs speed-to-lead" required /></Field>
     <Field label="Audience"><input maxLength={120} name="audience" placeholder="Insurance agency owners" required /></Field>
@@ -458,6 +463,18 @@ function ExperimentMetricEntry({ experiment, enabled, sampleMode }: { experiment
   const router = useRouter();
   const [state, action, pending] = useActionState(logExperimentMetrics, initialAdminActionState);
   const [rows, setRows] = useState<ExperimentMetricRow[]>(() => experimentRows(experiment));
+  const [notes, setNotes] = useState("");
+  const [clearedFor, setClearedFor] = useState(state.entityId);
+  // Each save adds to the totals, so a saved entry's counts must not stay in
+  // the boxes to be saved twice. The date and team member stay for the next one.
+  if (state.status === "success" && state.entityId !== clearedFor) {
+    setClearedFor(state.entityId);
+    setRows(experimentRows(experiment));
+    setNotes("");
+  }
+  // The owner's own day until they pick one, not the UTC day (already tomorrow on a US evening).
+  const localToday = useLocalDay();
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
   const isConnectionTest = experiment?.messageStep === "connection_request";
   const sentLabel = isConnectionTest ? "Requests sent" : `${messageStepLabel(experiment?.messageStep)} sent`;
 
@@ -473,15 +490,15 @@ function ExperimentMetricEntry({ experiment, enabled, sampleMode }: { experiment
 
   return <article className="admin-panel admin-experiment-metrics">
     <header className="admin-panel-head"><div><p>ENTER PERFORMANCE</p><h2>Log new results for every variant.</h2></div><span>{experiment ? optionText(experiment.primaryMetric) : "SELECT A TEST"}</span></header>
-    {experiment ? <form action={action}>
+    {experiment ? <form onSubmit={keepFieldsOnError(action, sampleMode)}>
       <input name="experimentId" type="hidden" value={experiment.id} />
       {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
       <input name="messageStep" type="hidden" value={experiment.messageStep} />
       <input name="metrics" type="hidden" value={JSON.stringify(rows)} />
       <div className="admin-experiment-entry-context">
-        <Field label="Activity date"><input defaultValue={new Date().toISOString().slice(0, 10)} name="activityDate" required type="date" /></Field>
+        <Field label="Activity date"><input name="activityDate" onChange={(event) => setPickedDate(event.target.value)} required type="date" value={pickedDate ?? localToday ?? ""} /></Field>
         <Field label="Team member"><input defaultValue="Ajani team" maxLength={100} name="teamMember" required /></Field>
-        <Field hint="Optional context for this update." label="Notes"><input maxLength={1000} name="notes" placeholder="Campaign or reporting period" /></Field>
+        <Field hint="Optional context for this update." label="Notes"><input maxLength={1000} name="notes" onChange={(event) => setNotes(event.target.value)} placeholder="Campaign or reporting period" value={notes} /></Field>
       </div>
       <div className="admin-experiment-entry-grid">{rows.map((row, index) => <section key={row.variantId}>
         <header><b>{row.variantLabel}</b><div><strong>{experiment.variants[index]?.title}</strong><span>Tested at {optionText(experiment.messageStep)}</span></div></header>
@@ -497,6 +514,20 @@ function ExperimentMetricEntry({ experiment, enabled, sampleMode }: { experiment
       <div className="admin-form-footer"><div>{sampleMode ? <SampleFormNote /> : state.message ? <p className={`admin-form-message ${state.status}`} role="status">{state.message}</p> : <p>Each save adds to the totals, so log only activity since your last entry. Void a mistaken entry under Recent entries below.</p>}</div><button disabled={sampleMode || !enabled || pending} type="submit">{pending ? "SAVING COUNTS" : enabled ? "SAVE PERFORMANCE" : "STORAGE NOT READY"}<b>→</b></button></div>
     </form> : <EmptyState title="Select or create an experiment" copy="Once a comparison exists, its variants and performance fields will appear here automatically." />}
   </article>;
+}
+
+/**
+ * Submits through onSubmit, not the form action prop: React empties a form
+ * after every action, even a refused one, and the retry would then save to
+ * today, as "Ajani team", without the notes or reason typed.
+ */
+function keepFieldsOnError(action: (formData: FormData) => void, sampleMode: boolean) {
+  return (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (sampleMode) return;
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => action(formData));
+  };
 }
 
 function ExperimentCountInput({ label, value, onChange }: { label: string; value: number; onChange: (value: string) => void }) {

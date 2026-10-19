@@ -512,6 +512,35 @@ export function dayCount(from: string, to: string) {
   return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / 86_400_000) + 1;
 }
 
+/** "Oct 18", or "Oct 18, 2025" outside today's year, so a mistyped year shows. */
+export function entryDayLabel(date: string, today: string) {
+  return bucketLabel(date, "day", date.slice(0, 4) === today.slice(0, 4) ? "axis" : "full");
+}
+
+/**
+ * The browser's own calendar day. Entry forms default to it: the store's
+ * days are UTC, so after about 8pm in the US the UTC day is already tomorrow.
+ */
+export function localDay(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+export const COLD_CALL_DIALS = "cold_calls.dials";
+/** Each answer is a call someone picked up; follow-ups are already counted in one of these. */
+export const COLD_CALL_ANSWERS = ["cold_calls.positive_replies", "cold_calls.neutral_replies", "cold_calls.negative_replies"];
+
+/**
+ * "Answers (17) can't be more than calls made (8) for Oct 18." when the known
+ * answers outnumber the calls; null when they fit or calls made is unknown.
+ */
+export function coldCallAnswersProblem(values: ReadonlyMap<string, number>, date: string, today: string) {
+  const dials = values.get(COLD_CALL_DIALS);
+  if (dials === undefined) return null;
+  const answers = COLD_CALL_ANSWERS.reduce((sum, key) => sum + (values.get(key) ?? 0), 0);
+  if (answers <= dials) return null;
+  return `Answers (${formatMetricValue(answers, "count")}) can't be more than calls made (${formatMetricValue(dials, "count")}) for ${entryDayLabel(date, today)}.`;
+}
+
 /** History the desk needs before its charts stop looking mostly empty. */
 export const EARLY_TRACKING_DAYS = 14;
 

@@ -98,7 +98,12 @@ describe("admin actions while sample data is on", () => {
     vi.clearAllMocks();
     extraFields = {};
     mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
-    mocks.createClient.mockReturnValue({ rpc: mocks.rpc });
+    // Reads (a day's saved numbers before logging) find nothing saved yet.
+    const emptyQuery = () => {
+      const builder = { select: () => builder, eq: () => builder, in: () => builder, then: (resolve: (result: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve) };
+      return builder;
+    };
+    mocks.createClient.mockReturnValue({ rpc: mocks.rpc, from: emptyQuery });
     mocks.rpc.mockResolvedValue({ data: "5210b79a-90eb-4218-82c2-32d7eea6f429", error: null });
     mocks.syncDripifyMetrics.mockResolvedValue({ status: "synced", reason: null, date: "2026-10-16", campaigns: 1, synced: 1, deferred: 0, failed: 0, valuesWritten: 4, labelsWritten: 1 });
     mocks.syncConnector.mockResolvedValue({ connector: "youtube", status: "synced", reason: null, date: "2026-10-16", valuesWritten: 3, details: {} });
