@@ -50,7 +50,7 @@ describe("request draft body parsing", () => {
       method: "POST",
       body: new ReadableStream({
         start(controller) {
-          controller.enqueue(new Uint8Array(100_001));
+          controller.enqueue(new Uint8Array(256_001));
           controller.close();
         },
       }),
@@ -59,6 +59,13 @@ describe("request draft body parsing", () => {
       duplex: "half",
     } as RequestInit & { duplex: "half" });
     await expect(readLimitedJson(request)).resolves.toEqual({ status: "too_large" });
+  });
+
+  it("reads a draft at the schema's limits in non-Latin text", async () => {
+    // 180,000 bytes as UTF-8 (3 bytes a character), a little over a full draft at the schema's limits.
+    const note = "क".repeat(60_000);
+    const request = new Request("https://ajani.test/api/request-drafts", { method: "POST", body: JSON.stringify({ draft: { note } }) });
+    await expect(readLimitedJson(request)).resolves.toEqual({ status: "ok", value: { draft: { note } } });
   });
 });
 

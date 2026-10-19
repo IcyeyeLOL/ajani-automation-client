@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SystemBlock } from "@/lib/domain/types";
+import { clipText } from "@/lib/text/clip";
 import { analyzeTypedNote, MAX_CLARIFICATION_QUESTIONS, type TypedNoteClarification } from "@/lib/record/typed-note-analysis";
 
 export const automationProblemSchema = z.object({
@@ -59,8 +60,8 @@ export function approvedAutomationEmailBrief(
   previous: AutomationEmailBrief | null,
 ): AutomationEmailBrief {
   return {
-    subject: `${blocks[0]?.title ?? "Automation request"} → ${blocks.at(-1)?.title ?? "human handoff"}`.slice(0, 120),
-    overview: problem.desiredOutcome.slice(0, 1_000),
+    subject: clipText(`${blocks[0]?.title ?? "Automation request"} → ${blocks.at(-1)?.title ?? "human handoff"}`, 120),
+    overview: clipText(problem.desiredOutcome, 1_000),
     // The complete approved blocks travel as systemBlocks. Do not maintain a
     // second, potentially stale or truncated route inside summary metadata.
     implementationNotes: [],
@@ -90,7 +91,7 @@ export function fallbackAutomationShape(
   const decisionContext = confirmed.length > 0 ? ` Confirmed decisions: ${confirmed.join("; ")}.` : "";
   const systemBlocks: SystemBlock[] = analysis.systemBlocks.map((block) => (
     block.kind === "qualify" || block.kind === "handoff"
-      ? { ...block, detail: `${block.detail}${decisionContext}`.slice(0, 1_000) }
+      ? { ...block, detail: clipText(`${block.detail}${decisionContext}`, 1_000) }
       : block
   ));
   const firstStep = systemBlocks[0]?.title ?? "New automation request";
@@ -101,11 +102,13 @@ export function fallbackAutomationShape(
     problem: problemFromAnalysis(analysis),
     protection: "Keep routine work moving automatically while sending exceptions, approvals, and judgment calls to a person with the full context attached.",
     systemBlocks,
+    // The browser checks this against automationEmailBriefSchema. One overlong
+    // note would reject the whole fallback route, so stay inside its limits.
     emailBrief: {
-      subject: `${firstStep} → ${lastStep}`.slice(0, 120),
-      overview: analysis.desiredOutcome,
-      implementationNotes: systemBlocks.map((block) => `${block.title}: ${block.detail}`),
-      assumptions: confirmed.length > 0 ? confirmed.map((answer) => `Customer confirmed: ${answer}`) : [],
+      subject: clipText(`${firstStep} → ${lastStep}`, 120),
+      overview: clipText(analysis.desiredOutcome, 1_000),
+      implementationNotes: systemBlocks.slice(0, 8).map((block) => clipText(`${block.title}: ${block.detail}`, 500)),
+      assumptions: confirmed.slice(0, 6).map((answer) => clipText(`Customer confirmed: ${answer}`, 500)),
     },
   };
 }

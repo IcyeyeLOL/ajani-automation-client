@@ -68,4 +68,21 @@ describe("automation brief route", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(mocks.intake).not.toHaveBeenCalled();
   });
+
+  it("accepts a full-length note written in a non-Latin script", async () => {
+    const longNote = "予約の依頼が営業時間外に届きます。".repeat(1_200).slice(0, 20_000);
+    const clarificationAnswers = Array.from({ length: 5 }, (_, index) => ({ question: `質問 ${index + 1}?`, answer: "回答".repeat(250) }));
+    const body = JSON.stringify({ action: "shape", transcript: longNote, clarificationAnswers, ...CURRENT_PROCESSING_NOTICE_ACKNOWLEDGMENT });
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(32_000);
+    mocks.shape.mockResolvedValue({ method: "ai", model: "test-model", problem: {}, systemBlocks: [] });
+
+    const response = await POST(new Request("https://ajani.test/api/automation-brief", {
+      method: "POST",
+      headers: { origin: "https://ajani.test", "content-type": "application/json" },
+      body,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.shape).toHaveBeenCalledWith(longNote, clarificationAnswers, { deadlineAt: expect.any(Number) });
+  });
 });

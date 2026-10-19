@@ -55,10 +55,17 @@ import {
 import { transcribeCapturedVoiceMemo } from "@/lib/transcription/client";
 import { getReducedMotionPreference } from "@/lib/motion/preference";
 import { readTabValue, removeTabValue, writeTabValue } from "@/lib/record/tab-storage";
+import { clipText } from "@/lib/text/clip";
+import {
+  clearRecordFlowProgress,
+  RECORD_FLOW_STORAGE_KEY,
+  restoredFlowPosition,
+  ROUTE_STEP_DETAIL_LIMIT,
+  routeStepsWithinLimits,
+} from "@/lib/record/flow-progress";
 import styles from "./record-flow.module.css";
 
 const stages = ["Tell us", "Clarify", "Shape", "Check", "Handoff"];
-const FLOW_STORAGE_KEY = "ajani_record_flow_v3";
 const LEGACY_FLOW_STORAGE_KEYS = ["ajani_record_flow_v1", "ajani_record_flow_v2"];
 
 const fallbackBlocks: SystemBlock[] = [
@@ -213,7 +220,7 @@ function reviewDraftError(draft: ReviewEditDraft | null) {
 
 function readStoredFlow(): StoredFlow | null {
   try {
-    const raw = readTabValue(FLOW_STORAGE_KEY);
+    const raw = readTabValue(RECORD_FLOW_STORAGE_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<Omit<StoredFlow, "version">> & {
       version?: number;
@@ -430,9 +437,11 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     && clarifications.length > 0
     && clarificationAnswers.every((item) => item.answer.length > 0);
   const hasHumanHandoff = blocks.some((block) => block.kind === "handoff");
+  const routeStepsComplete = blocks.every((block) => block.title.trim().length > 0 && block.detail.trim().length > 0);
   const routeReady = blocks.length >= 2
     && hasHumanHandoff
-    && blocks.every((block) => block.title.trim().length > 0 && block.detail.trim().length > 0);
+    && routeStepsComplete
+    && routeStepsWithinLimits(blocks);
   const questionsNeedRefresh = stage === 1 && writtenReady && automationMethod === null;
   const currentReviewDraftError = reviewDraftError(reviewDraft);
   const resolvedMobileActiveBlockId = blocks.some((block) => block.id === mobileActiveBlockId)
@@ -468,12 +477,13 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       const stored = readStoredFlow();
       if (stored) {
         const pendingDraft = getSavedWebsiteRequestDraft();
-        const restoredStage = stored.processingAcknowledged
-          && stored.written.trim().length >= MIN_TYPED_NOTE_CHARACTERS
-          ? stored.stage
-          : 0;
+        const { stage: restoredStage, reached: restoredReached } = restoredFlowPosition(stored, {
+          acknowledged: stored.processingAcknowledged,
+          noteReady: stored.written.trim().length >= MIN_TYPED_NOTE_CHARACTERS,
+          hasPendingDraft: Boolean(pendingDraft),
+        });
         setStage(restoredStage);
-        setReached(stored.processingAcknowledged ? Math.max(restoredStage, stored.reached) : 0);
+        setReached(restoredReached);
         setInputMode(stored.inputMode);
         setWritten(stored.written);
         setClarificationIndex(stored.clarificationIndex);
@@ -552,7 +562,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         processingAcknowledged,
         processingNoticeVersion: PROCESSING_NOTICE_VERSION,
       };
-      const saved = writeTabValue(FLOW_STORAGE_KEY, JSON.stringify(state));
+      const saved = writeTabValue(RECORD_FLOW_STORAGE_KEY, JSON.stringify(state));
       setSaveStatus(saved ? "Saved in this tab" : "Keep this tab open to keep your progress");
     }, 320);
     return () => window.clearTimeout(timer);
@@ -1274,11 +1284,11 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         setSubmissionStatus("saving");
         const firstStep = blocks[0]?.title ?? "Your request";
         const finalStep = blocks.at(-1)?.title ?? "human handoff";
-        const clarificationAnswer = clarificationAnswers.map((item) => item.answer).join("\n").slice(0, 2_000);
+        const clarificationAnswer = clipText(clarificationAnswers.map((item) => item.answer).join("\n"), 2_000);
         const draft = await saveWebsiteRequestDraft({
           legalAcceptanceAcknowledged: true,
           legalAcceptanceVersions: CURRENT_HANDOFF_POLICY_VERSION,
-          title: `${firstStep} → ${finalStep}`.slice(0, 120),
+          title: clipText(`${firstStep} → ${finalStep}`, 120),
           transcript: written.trim(),
           clarificationAnswer,
           clarificationAnswers,
@@ -1315,7 +1325,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
           throw new Error(result.error || "Your request was saved, but Ajani has not received it yet. Please retry.");
         }
         clearSavedWebsiteRequestCapability(draftId);
-        removeTabValue(FLOW_STORAGE_KEY);
+        clearRecordFlowProgress();
         setSubmittedBuildRequestId(result.buildRequest?.build_request_id ?? draftId);
         setSubmittedAt(result.buildRequest?.build_request_created_at ?? new Date().toISOString());
         setSubmissionStatus("submitted");
@@ -1340,7 +1350,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     setDeleteError(null);
     try {
       await deleteSavedWebsiteRequestDraft();
-      removeTabValue(FLOW_STORAGE_KEY);
+      clearRecordFlowProgress();
       setSavedDraftId(null);
       setSavedDraftPersistence(null);
       setSubmittedBuildRequestId(null);
@@ -1648,7 +1658,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
                     rows={3}
                     value={block.title}
                   />
-                  <textarea aria-label="What happens" onChange={(event) => updateBlock(block.id, "detail", event.target.value)} rows={3} value={block.detail} />
+                  <textarea aria-label="What happens" maxLength={ROUTE_STEP_DETAIL_LIMIT} onChange={(event) => updateBlock(block.id, "detail", event.target.value)} rows={3} value={block.detail} />
                   <footer>
                     <div className={styles.moveControls}>
                       {index > 0 ? <button aria-label={`Move ${block.title} left`} onClick={() => moveBlock(block.id, -1)} type="button">← Move left</button> : null}
@@ -1810,7 +1820,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
           <div className={styles.routeActions}>
             <Actions
-              hint={routeReady ? undefined : !hasHumanHandoff ? "Keep one human handoff in the route before review." : "Every step needs a name and a description before review."}
+              hint={routeReady ? undefined : !hasHumanHandoff ? "Keep one human handoff in the route before review." : !routeStepsComplete ? "Every step needs a name and a description before review." : "Keep each step name under 120 characters and each description under 1,000 before review."}
               onPrimary={() => go(3)}
               onSecondary={() => go(1)}
               primary="Check this route"

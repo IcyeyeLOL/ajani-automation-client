@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import Link from "next/link";
 import styles from "./error-state.module.css";
 
-export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+// retry() refreshes the page data before rendering again, so it can recover
+// from a server error; reset() would only re-render what already failed.
+export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error("Ajani route error", { digest: error.digest, message: error.message });
   }, [error]);
@@ -16,7 +18,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
         <h1 id="error-title">Your work is still safe.</h1>
         <p>Try loading this step again. If the problem continues, return to the homepage and retry in a moment.</p>
         <div className={styles.actions}>
-          <button type="button" onClick={reset}>Try again</button>
+          <button type="button" onClick={() => retry()}>Try again</button>
           <Link href="/">Return home</Link>
         </div>
       </section>

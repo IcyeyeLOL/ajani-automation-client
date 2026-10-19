@@ -71,7 +71,7 @@
 .ajani-auth-module-brand > span { color:#201e1d; font-size:19px; font-weight:760; letter-spacing:-.055em; }
 .ajani-auth-module-brand > span i { color:#790018; font-style:normal; }
 .ajani-auth-module-brand > small { color:#928983; font:9px "Consolas",monospace; letter-spacing:.08em; }
-.ajani-auth-module-header h2 { margin:24px 0 0; color:#201e1d; font-size:31px; line-height:1; letter-spacing:-.058em; }
+.ajani-auth-module-header h2 { margin:24px 0 0; color:#201e1d; font-family:var(--font-display),system-ui,sans-serif; font-size:31px; line-height:1; letter-spacing:-.058em; }
 .ajani-auth-module-header p { max-width:none; margin:11px 0 0; color:#756e69; font-size:13px; line-height:1.45; letter-spacing:-.012em; white-space:nowrap; }
 .ajani-auth-legal-notice { margin:0 0 17px; padding:11px 12px; border:1px solid #e0d6cd; border-radius:8px; background:#f7f2ed; color:#6f655f; font-size:11px; line-height:1.48; }
 .ajani-auth-legal-notice a { color:#790018; font-weight:650; text-decoration:underline; text-underline-offset:2px; }

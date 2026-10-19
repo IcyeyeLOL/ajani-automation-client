@@ -1,7 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
-import { shapePortalBuildDetail, shapePortalDashboard } from "@/lib/portal/dashboard";
+import { loadPortalBuildDetail, shapePortalBuildDetail, shapePortalDashboard } from "@/lib/portal/dashboard";
 
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), admin: vi.fn() }));
 vi.mock("server-only", () => ({}));
+vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth, clerkClient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
+
+describe("portal build detail lookup", () => {
+  it("treats an id that is not a UUID as not found, without asking the database", async () => {
+    for (const buildId of ["not-a-uuid", "123", "bfa16669-b62c-49e5-a356-9ac634a969b", "bfa16669-b62c-49e5-a356-9ac634a969bb'--"]) {
+      await expect(loadPortalBuildDetail(buildId)).resolves.toEqual({ available: true, detail: null });
+    }
+    expect(mocks.auth).not.toHaveBeenCalled();
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it("still looks up a real UUID", async () => {
+    mocks.auth.mockResolvedValueOnce({ userId: null, orgId: null });
+    vi.spyOn(console, "error").mockImplementationOnce(() => {});
+    await expect(loadPortalBuildDetail("bfa16669-b62c-49e5-a356-9ac634a969bb")).resolves.toEqual({ available: false, detail: null });
+    expect(mocks.auth).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("portal dashboard shaping", () => {
   it("uses reviewed quote data and tenant rows for the portal", () => {

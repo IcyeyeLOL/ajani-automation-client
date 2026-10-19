@@ -13,7 +13,10 @@ import {
 
 export const runtime = "nodejs";
 
-const MAX_BODY_BYTES = 100_000;
+// websiteRequestDraftSchema bounds the text fields. This caps the raw body,
+// and must fit a draft at those bounds in non-Latin text (about 175 KB as
+// UTF-8), or a long note would pass every step and then fail at Send.
+const MAX_BODY_BYTES = 256_000;
 const WINDOW_MS = 10 * 60 * 1_000;
 const MAX_REQUESTS_PER_WINDOW = 8;
 

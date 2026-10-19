@@ -2,6 +2,7 @@ import "server-only";
 
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
+import { z } from "zod";
 import { provisionClerkWorkspace } from "@/lib/clerk/provisioning";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -176,6 +177,9 @@ export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> 
 });
 
 export const loadPortalBuildDetail = cache(async (buildId: string): Promise<PortalBuildDetailResult> => {
+  // Postgres rejects an id that is not a UUID, which used to read as an outage.
+  // No request can have that id, so it is simply not found.
+  if (!z.guid().safeParse(buildId).success) return { available: true, detail: null };
   try {
     const organizationId = await portalOrganizationId();
     const admin = createSupabaseAdminClient();

@@ -9,9 +9,16 @@ const clerkMustFailClosed = shouldFailClosedForClerk();
 const clerkDevelopmentOptions = process.env.NODE_ENV === "development"
   ? { clockSkewInMs: 15 * 60 * 1000 }
   : undefined;
+// Signed-out visitors to /portal go to this site's sign-in page, not Clerk's
+// hosted one. auth.protect() reads these when it redirects.
+const clerkOptions = {
+  signInUrl: "/sign-in",
+  signUpUrl: "/sign-up",
+  ...clerkDevelopmentOptions,
+};
 
 export default clerkIsConfigured
-  ? clerkMiddleware(clerkDevelopmentOptions)
+  ? clerkMiddleware(clerkOptions)
   : function proxy() {
       if (clerkMustFailClosed) {
         return new NextResponse("Service temporarily unavailable.", {

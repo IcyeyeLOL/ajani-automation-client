@@ -10,7 +10,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BODY_BYTES = 32_000;
+// A 20,000-character note can be up to 60,000 bytes once non-Latin text is
+// UTF-8 encoded, plus five answers of up to 500 characters each.
+const MAX_BODY_BYTES = 96_000;
 const WINDOW_MS = 10 * 60 * 1_000;
 const MAX_GENERATIONS_PER_WINDOW = 12;
 const requestSchema = z.discriminatedUnion("action", [
