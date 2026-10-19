@@ -34,6 +34,7 @@ import {
   type TrendViewId,
 } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricDefinition, MetricSeriesResult } from "@/lib/admin/metric-types";
+import { adminFetch } from "@/lib/admin/fresh-session";
 // Types only: the generator itself is loaded on demand, and only while sample data is on.
 import type { sampleMetricSeries } from "@/lib/admin/sample-data";
 
@@ -139,14 +140,16 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
     if (sampleMode || !cacheKey || seriesState.results[cacheKey] || seriesState.errors[cacheKey]) return;
     const controller = new AbortController();
     const fail = (failure: SeriesError) => setSeriesState((current) => ({ ...current, errors: pruned({ ...current.errors, [cacheKey]: failure }) }));
-    fetch(`/admin/analytics/series?${search}`, { cache: "no-store", headers: { accept: "application/json" }, signal: controller.signal })
+    adminFetch(`/admin/analytics/series?${search}`, { cache: "no-store", headers: { accept: "application/json" }, signal: controller.signal })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
         if (controller.signal.aborted) return;
         if (!response.ok) {
           // The server's own words when it can explain (sample data switched on
           // in another tab, a bad query); a calm generic line for outages.
-          fail({ message: response.status < 500 && typeof body.error === "string" ? body.error : LOAD_FAILED, refresh: response.status === 409 });
+          // A 401 here already failed once after renewing the sign-in, so the desk is locked or signed out.
+          if (response.status === 401) fail({ message: "Your desk session ended. Refresh the page to unlock it again.", refresh: true });
+          else fail({ message: response.status < 500 && typeof body.error === "string" ? body.error : LOAD_FAILED, refresh: response.status === 409 });
           return;
         }
         const data = body as MetricSeriesResult;

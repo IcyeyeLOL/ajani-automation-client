@@ -18,6 +18,7 @@ import { initialAdminActionState } from "@/app/admin/action-state";
 import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, isEarlyTracking, type GoalProgress, type GoalStatus, type TrendViewId } from "@/lib/admin/metric-query";
 import { optionLabel, plural } from "@/lib/admin/display-labels";
 import { OUTREACH_CHANNELS } from "@/lib/admin/outreach-channels";
+import { renewSignIn, withRenewedSignIn } from "@/lib/admin/fresh-session";
 import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
 import type { ConnectionBoard } from "@/lib/admin/connection-types";
 import type {
@@ -30,6 +31,12 @@ import type {
   TrendPoint,
   VariantPerformance,
 } from "@/lib/admin/types";
+
+// Every desk save renews the sign-in first (see fresh-session.ts).
+const setSampleMode = withRenewedSignIn(setSampleModeAction);
+const voidBatch = withRenewedSignIn(voidOutreachBatchAction);
+const createExperiment = withRenewedSignIn(createExperimentAction);
+const logExperimentMetrics = withRenewedSignIn(logExperimentMetricsAction);
 
 type Section = "overview" | "trends" | "outreach" | "experiments" | "website" | "operations" | "connections";
 /** How Trends opens: on a view, and with Log numbers open on a channel's tab. */
@@ -70,21 +77,26 @@ export function AdminDashboard({ data, catalog, channels, goals, connections, re
   const [isRefreshing, startRefresh] = useTransition();
   const lastAutomaticRefreshAt = useRef(0);
 
-  const refreshDashboard = () => startRefresh(() => router.refresh());
+  // Each refresh renews the sign-in first: one sent with an expired token reads
+  // as signed out, and used to bounce the desk to sign-in and back.
+  const refreshDashboard = () => { void renewSignIn().then(() => startRefresh(() => router.refresh())); };
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (document.visibilityState !== "visible") return;
+      // A hidden or unfocused window can't renew the sign-in reliably.
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
 
       const now = Date.now();
       if (now - lastAutomaticRefreshAt.current < 15_000) return;
       lastAutomaticRefreshAt.current = now;
-      startRefresh(() => router.refresh());
+      void renewSignIn().then((renewed) => { if (renewed) startRefresh(() => router.refresh()); });
     };
     const interval = window.setInterval(refreshWhenVisible, 60_000);
     document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
     };
   }, [router]);
 
@@ -127,7 +139,7 @@ export function AdminDashboard({ data, catalog, channels, goals, connections, re
 /** Offered while tracking is new and most charts are empty, so the sample switch is not missed. */
 function EarlyTrackingPrompt() {
   const router = useRouter();
-  const [state, action, pending] = useActionState(setSampleModeAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(setSampleMode, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   return <aside aria-label="Tracking just started" className="admin-early-prompt">
     <div>
@@ -145,7 +157,7 @@ function EarlyTrackingPrompt() {
 /** Shown above every section while sample data is on, so made-up numbers are never mistaken for real ones. */
 function SampleBanner({ section }: { section: Section }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(setSampleModeAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(setSampleMode, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   return <aside aria-label="Sample data notice" className="admin-sample-banner">
     <div>
@@ -163,7 +175,7 @@ function SampleBanner({ section }: { section: Section }) {
 
 function SampleModeToggle({ sampleMode }: { sampleMode: boolean }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(setSampleModeAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(setSampleMode, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   return <form action={action} className="admin-sample-toggle">
     <input name="enabled" type="hidden" value={sampleMode ? "0" : "1"} />
@@ -360,7 +372,7 @@ function RecentActivity({ data, sampleMode }: { data: AdminDashboardData; sample
 function VoidBatchControl({ batchId, sampleMode }: { batchId: string; sampleMode: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(voidOutreachBatchAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(voidBatch, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   if (!open) return <button className="admin-void-toggle" onClick={() => setOpen(true)} type="button">VOID</button>;
   return <form action={action} className="admin-void-form">
@@ -409,7 +421,7 @@ function AdminPagination({ data, kind }: { data: AdminDashboardData; kind: "expe
 
 function ExperimentForm({ enabled, sampleMode }: { enabled: boolean; sampleMode: boolean }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(createExperimentAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(createExperiment, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.status]);
   return <article className="admin-panel admin-experiment-form"><header className="admin-panel-head"><div><p>NEW EXPERIMENT</p><h2>Create a flexible comparison.</h2></div><span>A / B / CUSTOM</span></header><form action={action} key={state.entityId ?? "new-experiment"}>
     {sampleMode ? <input name="sample" type="hidden" value="1" /> : null}
@@ -434,7 +446,7 @@ function ExperimentComparison({ experiment, experiments, pager, performance, sel
 
 function ExperimentMetricEntry({ experiment, enabled, sampleMode }: { experiment: OutreachExperiment | null; enabled: boolean; sampleMode: boolean }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(logExperimentMetricsAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(logExperimentMetrics, initialAdminActionState);
   const [rows, setRows] = useState<ExperimentMetricRow[]>(() => experimentRows(experiment));
   const isConnectionTest = experiment?.messageStep === "connection_request";
   const sentLabel = isConnectionTest ? "Requests sent" : `${messageStepLabel(experiment?.messageStep)} sent`;

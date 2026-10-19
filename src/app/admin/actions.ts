@@ -14,11 +14,11 @@ import {
   type OutreachMetricInput,
 } from "@/lib/admin/validation";
 import {
+  authorizeAdminAction,
   clearAdminSessionCookie,
   fingerprintRequest,
   getAdminConfiguration,
   keysMatch,
-  requireAdminSession,
   setAdminSessionCookie,
 } from "@/lib/admin/session";
 import { metricDeletionSchema, metricEntrySchema, outreachVoidSchema } from "@/lib/admin/metric-query";
@@ -78,7 +78,8 @@ export async function logoutAdminAction() {
 
 /** Turns "Sample data" on ("1") or off ("0"). Only changes what the desk renders. */
 export async function setSampleModeAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
   const enabled = formData.get("enabled");
   if (enabled !== "1" && enabled !== "0") return { status: "error", message: "Choose whether sample data is on or off." };
   if (enabled === "1") await setSampleModeCookie();
@@ -103,7 +104,9 @@ async function refusedInSampleMode(formData?: FormData): Promise<AdminActionStat
 }
 
 export async function createExperimentAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   const parsed = outreachExperimentSchema.safeParse(Object.fromEntries(formData));
@@ -134,7 +137,9 @@ export async function createExperimentAction(_state: AdminActionState, formData:
 }
 
 export async function createOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   let metrics: unknown;
@@ -181,7 +186,9 @@ export async function createOutreachBatchAction(_state: AdminActionState, formDa
 }
 
 export async function logExperimentMetricsAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   let metrics: unknown;
@@ -223,7 +230,9 @@ export async function logExperimentMetricsAction(_state: AdminActionState, formD
 }
 
 export async function voidOutreachBatchAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   const parsed = outreachVoidSchema.safeParse({ batchId: formData.get("batchId"), reason: formData.get("reason") });
@@ -247,7 +256,9 @@ export async function voidOutreachBatchAction(_state: AdminActionState, formData
 
 /** Upserts: re-entering a day replaces its value instead of adding to it. */
 export async function recordMetricValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   let values: unknown;
@@ -288,7 +299,9 @@ export async function recordMetricValuesAction(_state: AdminActionState, formDat
  * the value the owner saw. Saving a day again replaces it.
  */
 export async function saveReportValuesAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   let rows: unknown;
@@ -397,7 +410,9 @@ export async function saveReportValuesAction(_state: AdminActionState, formData:
 }
 
 export async function deleteMetricValueAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  const actor = await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const actor = access.userId;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   const parsed = metricDeletionSchema.safeParse({
@@ -426,7 +441,8 @@ export async function deleteMetricValueAction(_state: AdminActionState, formData
 
 /** Same job as the nightly cron, run on demand so a new key can be checked immediately. */
 export async function syncDripifyAction(_state?: AdminActionState, formData?: FormData): Promise<AdminActionState> {
-  await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   try {
@@ -441,7 +457,8 @@ export async function syncDripifyAction(_state?: AdminActionState, formData?: Fo
 }
 
 export async function syncConnectorAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
-  await requireAdminSession();
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
   const refused = await refusedInSampleMode(formData);
   if (refused) return refused;
   const connector = formData.get("connector");

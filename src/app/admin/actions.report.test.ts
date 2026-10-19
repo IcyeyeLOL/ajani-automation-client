@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  rpc: vi.fn(), requireAdminSession: vi.fn(), revalidatePath: vi.fn(), cookieGet: vi.fn(), loadMetricCatalog: vi.fn(), loadSavedValues: vi.fn(),
+  rpc: vi.fn(), authorizeAdminAction: vi.fn(), revalidatePath: vi.fn(), cookieGet: vi.fn(), loadMetricCatalog: vi.fn(), loadSavedValues: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: vi.fn(), cookies: async () => ({ get: mocks.cookieGet, set: vi.fn() }) }));
@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/admin/session", () => ({
   clearAdminSessionCookie: vi.fn(), fingerprintRequest: vi.fn(), getAdminConfiguration: vi.fn(), keysMatch: vi.fn(),
-  requireAdminSession: mocks.requireAdminSession, setAdminSessionCookie: vi.fn(),
+  authorizeAdminAction: mocks.authorizeAdminAction, setAdminSessionCookie: vi.fn(),
 }));
 vi.mock("@/lib/admin/clerk", () => ({ requireAdminClerkUser: vi.fn() }));
 vi.mock("@/lib/admin/login-throttle", () => ({ consumeAdminLoginAllowance: vi.fn() }));
@@ -36,7 +36,7 @@ function save(rows: unknown, extra: { removals?: unknown; confirmed?: unknown } 
 describe("saving reviewed report rows", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAdminSession.mockResolvedValue("user_admin");
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
     mocks.cookieGet.mockReturnValue(undefined);
     mocks.rpc.mockResolvedValue({ data: 3, error: null });
     mocks.loadSavedValues.mockResolvedValue([]);
@@ -135,7 +135,7 @@ describe("removing saved numbers an import shows are wrong", () => {
   ];
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAdminSession.mockResolvedValue("user_admin");
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
     mocks.cookieGet.mockReturnValue(undefined);
     mocks.rpc.mockImplementation(async (name: string) => ({ data: name === "delete_analytics_metric_value" ? true : 1, error: null }));
     mocks.loadSavedValues.mockResolvedValue(wrong.map((item) => ({ ...item, synced: false })));

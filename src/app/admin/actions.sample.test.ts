@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   createClient: vi.fn(),
-  requireAdminSession: vi.fn(),
+  authorizeAdminAction: vi.fn(),
   clearAdminSessionCookie: vi.fn(),
   setAdminSessionCookie: vi.fn(),
   revalidatePath: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock("@/lib/admin/session", () => ({
   fingerprintRequest: vi.fn(() => "fingerprint"),
   getAdminConfiguration: vi.fn(() => ({ accessKey: "team-access-key", sessionSecret: "s".repeat(32) })),
   keysMatch: vi.fn(() => true),
-  requireAdminSession: mocks.requireAdminSession,
+  authorizeAdminAction: mocks.authorizeAdminAction,
   setAdminSessionCookie: mocks.setAdminSessionCookie,
 }));
 vi.mock("@/lib/admin/clerk", () => ({ requireAdminClerkUser: mocks.requireAdminClerkUser }));
@@ -97,7 +97,7 @@ describe("admin actions while sample data is on", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     extraFields = {};
-    mocks.requireAdminSession.mockResolvedValue("user_admin");
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
     mocks.createClient.mockReturnValue({ rpc: mocks.rpc });
     mocks.rpc.mockResolvedValue({ data: "5210b79a-90eb-4218-82c2-32d7eea6f429", error: null });
     mocks.syncDripifyMetrics.mockResolvedValue({ status: "synced", reason: null, date: "2026-10-16", campaigns: 1, synced: 1, deferred: 0, failed: 0, valuesWritten: 4, labelsWritten: 1 });
@@ -118,7 +118,7 @@ describe("admin actions while sample data is on", () => {
     const result = await writes[name]();
     expect(result).toEqual(REFUSAL);
     // Still authorized first, then refused: no database client, RPC, sync or revalidation.
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(mocks.loadMetricCatalog).not.toHaveBeenCalled();
     expect(mocks.createClient).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
@@ -148,7 +148,7 @@ describe("admin actions while sample data is on", () => {
 
   it("keeps the sign-in check ahead of the sample-data check", async () => {
     sampleCookie(true);
-    mocks.requireAdminSession.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mocks.authorizeAdminAction.mockRejectedValue(new Error("NEXT_REDIRECT"));
     for (const name of Object.keys(writes)) await expect(writes[name](), name).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.cookieGet).not.toHaveBeenCalled();
     expect(mocks.createClient).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("sample data switch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     extraFields = {};
-    mocks.requireAdminSession.mockResolvedValue("user_admin");
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
   });
 
   it("turns sample data on and off with a cookie, without the database", async () => {
@@ -204,7 +204,7 @@ describe("sample data switch", () => {
   });
 
   it("is only for a signed-in admin", async () => {
-    mocks.requireAdminSession.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mocks.authorizeAdminAction.mockRejectedValue(new Error("NEXT_REDIRECT"));
     await expect(actions.setSampleModeAction(initialAdminActionState, form({ enabled: "1" }))).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.cookieSet).not.toHaveBeenCalled();
   });

@@ -11,6 +11,10 @@ import {
   type MergedQuestion, type MergedReportRow, type MergedReports, type ReportReadResult,
 } from "@/lib/admin/report-merge";
 import { conclusionFacts, digestRows, type SourceDigest } from "@/lib/admin/report-summary";
+import { adminFetch, withRenewedSignIn } from "@/lib/admin/fresh-session";
+
+// The save renews the sign-in first (see fresh-session.ts).
+const saveReportValues = withRenewedSignIn(saveReportValuesAction);
 
 type FileProblem = { file: string; message: string };
 type ReadOutcome = { result: ReportReadResult; today: string; error?: undefined } | { result?: undefined; today?: undefined; error: string };
@@ -52,7 +56,7 @@ async function readReport(file: File): Promise<ReadOutcome> {
   try {
     const body = new FormData();
     body.set("file", file);
-    const response = await fetch("/admin/reports/read", { method: "POST", body });
+    const response = await adminFetch("/admin/reports/read", { method: "POST", body });
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload) return { error: payload?.error ?? "This file could not be read. Try again." };
     return { result: payload as ReportReadResult, today: String(payload.today) };
@@ -66,7 +70,7 @@ async function loadComparison(merged: MergedReports): Promise<Comparison> {
   const dates = [...merged.rows.map((row) => row.date), ...merged.questions.flatMap((question) => question.cells.map((cell) => cell.date))].sort();
   if (!keys.length || !dates.length) return { status: "ready", saved: [], metrics: new Map() };
   try {
-    const response = await fetch("/admin/reports/saved", {
+    const response = await adminFetch("/admin/reports/saved", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys: keys.slice(0, 200), from: dates[0], to: dates[dates.length - 1] }),
     });
     const payload = await response.json().catch(() => null);
@@ -99,7 +103,7 @@ async function loadConclusion(digests: SourceDigest[], warnings: string[]): Prom
   const facts = conclusionFacts(digests).map((fact) => ({ ...fact, text: clip(fact.text, 160), value: clip(fact.value, 60) }));
   if (facts.length < 3) return NO_CONCLUSION;
   try {
-    const response = await fetch("/admin/reports/conclude", {
+    const response = await adminFetch("/admin/reports/conclude", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ facts, warnings: warnings.map((warning) => clip(warning, 240)) }),
     });
     const payload = await response.json().catch(() => null);
@@ -130,7 +134,7 @@ export function ReportImport({ sampleMode }: { sampleMode: boolean }) {
   const [skippedRemovals, setSkippedRemovals] = useState<Set<string>>(new Set());
   const [choices, setChoices] = useState<Map<string, boolean>>(new Map());
   const [copied, setCopied] = useState(false);
-  const [state, action, saving] = useActionState(saveReportValuesAction, initialAdminActionState);
+  const [state, action, saving] = useActionState(saveReportValues, initialAdminActionState);
   const [savedToken, setSavedToken] = useState(state.entityId);
   const readCount = useRef(0);
   const reading = progress !== null;

@@ -3,8 +3,13 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { syncConnectorAction, syncDripifyAction } from "@/app/admin/actions";
-import { initialAdminActionState } from "@/app/admin/action-state";
+import { initialAdminActionState, type AdminActionState } from "@/app/admin/action-state";
 import type { ConnectionBoard, ConnectionCard, ConnectionSetting, DripifySummary } from "@/lib/admin/connection-types";
+import { withRenewedSignIn } from "@/lib/admin/fresh-session";
+
+// Each sync renews the sign-in first (see fresh-session.ts).
+const syncConnector = withRenewedSignIn(syncConnectorAction);
+const syncDripify = withRenewedSignIn<AdminActionState, FormData>(syncDripifyAction);
 
 const synced: Record<ConnectionCard["id"], { always: string; analytics?: string; steps: string[] }> = {
   youtube: {
@@ -45,7 +50,7 @@ export function Connections({ board, sampleMode = false }: { board: ConnectionBo
 
 function ConnectorCard({ connector, sampleMode }: { connector: ConnectionCard; sampleMode: boolean }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(syncConnectorAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(syncConnector, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   const copy = synced[connector.id];
   const outcome = state.message ? { status: state.status, message: state.message } : connector.lastOutcome;
@@ -75,7 +80,7 @@ function ConnectorCard({ connector, sampleMode }: { connector: ConnectionCard; s
 
 function DripifyCard({ summary, sampleMode }: { summary: DripifySummary; sampleMode: boolean }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(syncDripifyAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(syncDripify, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   const low = summary.lowCampaigns;
   return <article className="admin-panel admin-connection-card">

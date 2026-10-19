@@ -7,6 +7,11 @@ import { initialAdminActionState } from "@/app/admin/action-state";
 import { bucketLabel, formatMetricValue, shortMetricLabel } from "@/lib/admin/metric-query";
 import type { TrendViewId } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricDefinition } from "@/lib/admin/metric-types";
+import { withRenewedSignIn } from "@/lib/admin/fresh-session";
+
+// Each save renews the sign-in first (see fresh-session.ts).
+const recordValues = withRenewedSignIn(recordMetricValuesAction);
+const deleteValue = withRenewedSignIn(deleteMetricValueAction);
 
 const NEW_ACCOUNT = "__new_account__";
 const SAMPLE_NOTE = "Sample data is on, so nothing can be saved. Switch to real data to log numbers.";
@@ -64,7 +69,7 @@ export function MetricLog({ catalog, definitions, request, viewId, viewSources, 
     setOpen(true);
     setGroupId(groupFor(request.sources ?? viewSources)?.id ?? "");
   }
-  const [state, action, pending] = useActionState(recordMetricValuesAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(recordValues, initialAdminActionState);
   const group = groups.find((item) => item.id === groupId) ?? groups[0];
   const fields = group ? catalog.metrics.filter((metric) => metric.entryMode === "manual" && group.sources.includes(metric.source)) : [];
   // Sales, revenue, cold calls and Dripify's logged outcomes belong to the business, not to a platform account.
@@ -183,7 +188,7 @@ function RecentEntries({ entries, definitions, sampleMode }: { entries: MetricCa
 function RemoveEntry({ metricKey, date, dimension, description, sampleMode }: { metricKey: string; date: string; dimension: string; description: string; sampleMode: boolean }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
-  const [state, action, pending] = useActionState(deleteMetricValueAction, initialAdminActionState);
+  const [state, action, pending] = useActionState(deleteValue, initialAdminActionState);
   useEffect(() => { if (state.status === "success") router.refresh(); }, [router, state.entityId, state.status]);
   return <form action={action} className="admin-trend-confirm">
     <input name="metricKey" type="hidden" value={metricKey} />

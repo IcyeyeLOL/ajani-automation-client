@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
-  requireAdminSession: vi.fn(),
+  authorizeAdminAction: vi.fn(),
   revalidatePath: vi.fn(),
   syncDripifyMetrics: vi.fn(),
 }));
@@ -17,7 +17,7 @@ vi.mock("@/lib/admin/session", () => ({
   fingerprintRequest: vi.fn(),
   getAdminConfiguration: vi.fn(),
   keysMatch: vi.fn(),
-  requireAdminSession: mocks.requireAdminSession,
+  authorizeAdminAction: mocks.authorizeAdminAction,
   setAdminSessionCookie: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: mocks.rpc }) }));
@@ -40,8 +40,8 @@ import { initialAdminActionState } from "@/app/admin/action-state";
 describe("admin server actions", () => {
   beforeEach(() => {
     mocks.rpc.mockReset();
-    mocks.requireAdminSession.mockReset();
-    mocks.requireAdminSession.mockResolvedValue("user_admin");
+    mocks.authorizeAdminAction.mockReset();
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "allowed", userId: "user_admin" });
     mocks.revalidatePath.mockReset();
   });
 
@@ -61,7 +61,7 @@ describe("admin server actions", () => {
 
     const result = await createExperimentAction(initialAdminActionState, form);
 
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith("create_outreach_experiment", expect.objectContaining({
       p_title: "Outcome hook comparison",
       p_created_by: "user_admin",
@@ -103,7 +103,7 @@ describe("admin server actions", () => {
 
     const result = await createOutreachBatchAction(initialAdminActionState, form);
 
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith("create_outreach_batch", expect.objectContaining({ p_actor: "user_admin", p_metrics: metrics }));
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
     expect(result).toMatchObject({ status: "success", entityId: "5210b79a-90eb-4218-82c2-32d7eea6f429" });
@@ -202,7 +202,7 @@ describe("admin server actions", () => {
 
     const result = await logExperimentMetricsAction(initialAdminActionState, form);
 
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith("create_experiment_metric_snapshot", {
       p_experiment_id: "5210b79a-90eb-4218-82c2-32d7eea6f429",
       p_activity_date: "2026-08-26",
@@ -227,7 +227,7 @@ describe("admin server actions", () => {
 
     const result = await recordMetricValuesAction(initialAdminActionState, form);
 
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith("upsert_analytics_metric_values", {
       p_values: [
         { metricKey: "youtube.subscribers", value: 1250, date: "2026-10-15", dimension: "@ajaniflow" },
@@ -238,6 +238,20 @@ describe("admin server actions", () => {
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
     expect(result).toMatchObject({ status: "success", message: expect.stringContaining("Saved 2 numbers") });
+  });
+
+  it("asks to save again, without redirecting or writing, while the sign-in renews", async () => {
+    const renewing = { status: "error", message: "Your sign-in was renewing, so nothing was saved. Press save again." } as const;
+    mocks.authorizeAdminAction.mockResolvedValue({ status: "refused", state: renewing });
+    const form = new FormData();
+    form.set("date", "2026-10-15");
+    form.set("values", JSON.stringify([{ metricKey: "cold_calls.dials", value: 30 }]));
+
+    expect(await recordMetricValuesAction(initialAdminActionState, form)).toBe(renewing);
+    expect(await deleteMetricValueAction(initialAdminActionState, form)).toBe(renewing);
+    expect(await syncDripifyAction()).toBe(renewing);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.syncDripifyMetrics).not.toHaveBeenCalled();
   });
 
   it("rejects negative or malformed platform numbers before the database", async () => {
@@ -303,7 +317,7 @@ describe("admin server actions", () => {
       status: "synced", reason: null, date: "2026-10-16", campaigns: 2, synced: 2, deferred: 0, failed: 0, valuesWritten: 8, labelsWritten: 2,
     });
     const result = await syncDripifyAction();
-    expect(mocks.requireAdminSession).toHaveBeenCalledOnce();
+    expect(mocks.authorizeAdminAction).toHaveBeenCalledOnce();
     expect(result).toMatchObject({ status: "success", message: "Synced 2 of 2 campaigns for 2026-10-16 (UTC).", entityId: expect.stringMatching(/^dripify:/) });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin");
 
@@ -312,7 +326,7 @@ describe("admin server actions", () => {
     });
     expect(await syncDripifyAction()).toMatchObject({ status: "error", message: expect.stringMatching(/plan does not include API access/) });
 
-    mocks.requireAdminSession.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mocks.authorizeAdminAction.mockRejectedValue(new Error("NEXT_REDIRECT"));
     mocks.syncDripifyMetrics.mockClear();
     await expect(syncDripifyAction()).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.syncDripifyMetrics).not.toHaveBeenCalled();

@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({ currentUser: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: "user_customer" }), currentUser: mocks.currentUser }));
 vi.mock("@/lib/clerk/config", () => ({ hasClerkCredentials: () => true }));
-vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("not_found"); }, redirect: () => { throw new Error("redirect"); } }));
+vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("not_found"); }, redirect: () => { throw new Error("redirect"); }, RedirectType: { push: "push", replace: "replace" } }));
 import { requireAdminClerkUser, skipsSignInLocally } from "./clerk";
 
 afterEach(() => vi.unstubAllEnvs());

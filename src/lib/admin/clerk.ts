@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { notFound, redirect } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import { getAdminAllowlist, isAdminIdentityAllowed } from "@/lib/admin/authorization";
 import { hasClerkCredentials } from "@/lib/clerk/config";
 
@@ -18,8 +19,12 @@ export function skipsSignInLocally(environment: Partial<Record<"NODE_ENV" | "AJA
   return environment.NODE_ENV === "development" && environment.AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT === "true";
 }
 
-/** Non-throwing identity check for JSON route handlers. */
-export async function resolveAdminClerkUser(): Promise<AdminClerkResolution> {
+/**
+ * Non-throwing identity check for JSON route handlers. Memoized per request:
+ * one desk render runs it in the layout and every loader, and each run would
+ * otherwise call Clerk's API again.
+ */
+export const resolveAdminClerkUser = cache(async (): Promise<AdminClerkResolution> => {
   if (skipsSignInLocally()) return { status: "allowed", userId: "local-development-admin" };
   if (!hasClerkCredentials()) return { status: "signed_out" };
 
@@ -33,11 +38,11 @@ export async function resolveAdminClerkUser(): Promise<AdminClerkResolution> {
   if (!isAdminIdentityAllowed({ userId, emails }, getAdminAllowlist())) return { status: "forbidden" };
 
   return { status: "allowed", userId };
-}
+});
 
 export async function requireAdminClerkUser(returnTo = "/admin") {
   const resolution = await resolveAdminClerkUser();
-  if (resolution.status === "signed_out") redirect(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`);
+  if (resolution.status === "signed_out") redirect(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`, RedirectType.replace);
   if (resolution.status === "forbidden") notFound();
   return resolution.userId;
 }
