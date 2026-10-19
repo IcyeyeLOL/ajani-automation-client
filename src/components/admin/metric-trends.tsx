@@ -34,7 +34,7 @@ import {
   type TrendViewId,
 } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricDefinition, MetricSeriesResult } from "@/lib/admin/metric-types";
-import { adminFetch } from "@/lib/admin/fresh-session";
+import { adminFetch, renewSignIn } from "@/lib/admin/fresh-session";
 // Types only: the generator itself is loaded on demand, and only while sample data is on.
 import type { sampleMetricSeries } from "@/lib/admin/sample-data";
 
@@ -271,7 +271,7 @@ export function MetricTrends({ catalog, refreshToken, sampleMode = false, openLo
 
     {error ? <div className="admin-trend-notice" role="alert">
       <p>{error.message}</p>
-      {error.refresh ? <button className="admin-trend-button" onClick={() => { retry(); router.refresh(); }} type="button">Refresh the page</button>
+      {error.refresh ? <button className="admin-trend-button" onClick={() => { retry(); void renewSignIn().then(() => router.refresh()); }} type="button">Refresh the page</button>
         : <button className="admin-trend-button" onClick={retry} type="button">Try again</button>}
     </div> : null}
 

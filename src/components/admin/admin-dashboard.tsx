@@ -406,16 +406,26 @@ function Experiments({ data, sampleMode }: { data: AdminDashboardData; sampleMod
 }
 
 function AdminPagination({ data, kind }: { data: AdminDashboardData; kind: "experiments" | "batches" }) {
+  const router = useRouter();
   const { experimentPage, batchPage, experimentCount, batchCount } = data.pagination;
   const page = kind === "experiments" ? experimentPage : batchPage;
   const size = kind === "experiments" ? 25 : 20;
   const count = kind === "experiments" ? experimentCount : batchCount;
   const href = (next: number) => `/admin?experiments=${kind === "experiments" ? next : experimentPage}&batches=${kind === "batches" ? next : batchPage}`;
+  // In-app page changes are server fetches that an expired sign-in token reads
+  // as signed out, so renew first. Opening in a new tab is a full load and
+  // skips this.
+  const renewThenGo = (target: string) => (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    const from = window.location.href;
+    // Skipped if the owner went somewhere else while the sign-in renewed.
+    void renewSignIn().then(() => { if (window.location.href === from) router.push(target, { scroll: false }); });
+  };
   if (page === 0 && count <= size) return null;
   return <nav aria-label={`${kind} pages`} className="admin-pagination">
     <span>{count ? `${Math.min(page * size + 1, count)}–${Math.min((page + 1) * size, count)} of ${count}` : "No"} {kind}. Totals include all pages.</span>
-    {page > 0 ? <Link href={href(page - 1)} prefetch={false} scroll={false}>Previous {kind}</Link> : null}
-    {(page + 1) * size < count ? <Link href={href(page + 1)} prefetch={false} scroll={false}>Next {kind}</Link> : null}
+    {page > 0 ? <Link href={href(page - 1)} onNavigate={renewThenGo(href(page - 1))} prefetch={false} scroll={false}>Previous {kind}</Link> : null}
+    {(page + 1) * size < count ? <Link href={href(page + 1)} onNavigate={renewThenGo(href(page + 1))} prefetch={false} scroll={false}>Next {kind}</Link> : null}
   </nav>;
 }
 

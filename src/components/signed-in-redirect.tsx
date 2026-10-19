@@ -8,20 +8,49 @@ const HOPS_KEY = "ajani_signed_in_hops";
 const HOP_WINDOW_MS = 60_000;
 const MAX_HOPS = 2;
 
+/**
+ * The tab's hop times, kept in sessionStorage and in window.name, which also
+ * survives same-site page loads. Both are read and merged: storage can be
+ * refused outright, or allow reads but refuse writes (when it is full), and
+ * either way the count must keep growing.
+ */
+function readHops(): number[] {
+  let stored: string | null = null;
+  try {
+    stored = window.sessionStorage.getItem(HOPS_KEY);
+  } catch {
+    // Storage refused: window.name still has the count.
+  }
+  const named = window.name.startsWith(`${HOPS_KEY}=`) ? window.name.slice(HOPS_KEY.length + 1) : null;
+  const times = [stored, named].flatMap((raw) => {
+    try {
+      const hops: unknown = JSON.parse(raw ?? "[]");
+      return Array.isArray(hops) ? hops.filter((time): time is number => typeof time === "number") : [];
+    } catch {
+      return [];
+    }
+  });
+  return [...new Set(times)].sort((a, b) => a - b);
+}
+
+function writeHops(hops: number[]) {
+  try {
+    window.sessionStorage.setItem(HOPS_KEY, JSON.stringify(hops));
+  } catch {
+    // Storage refused: window.name below still keeps the count.
+  }
+  window.name = `${HOPS_KEY}=${JSON.stringify(hops)}`;
+}
+
 /** Counts this hop and says whether the last minute already had too many. */
 function tooManyHops() {
-  try {
-    const now = Date.now();
-    const hops = (JSON.parse(window.sessionStorage.getItem(HOPS_KEY) ?? "[]") as number[]).filter((time) => now - time < HOP_WINDOW_MS);
-    // A second run within a second is the same visit (React runs effects twice in development).
-    if (hops.length && now - hops[hops.length - 1] < 1_000) return false;
-    if (hops.length >= MAX_HOPS) return true;
-    window.sessionStorage.setItem(HOPS_KEY, JSON.stringify([...hops, now]));
-    return false;
-  } catch {
-    // Without storage there is no count, so the page loads once and the browser stops any loop.
-    return false;
-  }
+  const now = Date.now();
+  const hops = readHops().filter((time) => typeof time === "number" && now - time < HOP_WINDOW_MS);
+  // A second run within a second is the same visit (React runs effects twice in development).
+  if (hops.length && now - hops[hops.length - 1] < 1_000) return false;
+  if (hops.length >= MAX_HOPS) return true;
+  writeHops([...hops, now]);
+  return false;
 }
 
 /**
@@ -53,7 +82,7 @@ export function SignedInRedirect({ to, children }: { to: string; children: React
     <b>WE COULDN&apos;T RESTORE YOUR SESSION</b>
     <p>Sign out and sign in again to continue.</p>
     <button onClick={() => {
-      try { window.sessionStorage.removeItem(HOPS_KEY); } catch { /* storage is optional */ }
+      writeHops([]);
       void signOut({ redirectUrl: authPageUrl("/sign-in", to) });
     }} type="button">SIGN OUT AND SIGN IN AGAIN →</button>
   </div>;
