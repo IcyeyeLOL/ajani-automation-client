@@ -111,7 +111,7 @@ Provider clients return normalized application errors. Durable work records sepa
 - `/demos` — interactive automation examples
 - `/stories` — business-specific automation narratives
 - `/approach` — delivery approach
-- `/record` and `/request` — guided intake and approval flow
+- `/record` — guided intake and approval flow (`/request` is a permanent redirect to it, in `next.config.ts`)
 - `/legal`, `/terms`, and `/privacy` — policy surfaces
 
 ### Authenticated pages

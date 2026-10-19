@@ -35,7 +35,9 @@ Weeks start on Monday (ISO). Days are UTC calendar days, matching the existing c
 
 ### Idempotent writes
 
-`(metric_key, metric_date, dimension_key)` is the primary key. Re-entering or re-syncing a day **replaces** its value. Writing an identical value is a no-op and is not audited again. This is what keeps the totals free of double counting.
+`(metric_key, metric_date, dimension_key)` is the primary key. A write **replaces** that day's value, so a re-sync never double counts. Writing an identical value is a no-op and is not audited again.
+
+Log numbers reads the day first, because calls, DMs and replies are logged per session. When a `sum` metric in the save already has a non-zero value for that day and account, nothing is saved: the form asks **Add to them** or **Replace them** and sends `onExisting`. "Add" adds to those `sum` metrics. `last` metrics such as followers are always replaced, since the newest total is the right one. Cold-call answers are checked against calls made on the day's final totals, after the add or replace. The read and the write are separate calls, so two saves within milliseconds can still race; closing that needs an atomic RPC (a migration).
 
 ## Measurement accuracy fixes (same release)
 
@@ -363,7 +365,7 @@ The catalog was checked against the owner's notes, the Growth Goal Sheet and the
 - **Accounts are picked, not typed.** The entry form lists existing accounts plus "Add another account…". A handle typed two ways would otherwise become two accounts whose followers add up forever. Sales and revenue have no account field.
 - **Trends defaults follow the goals:** clients signed, revenue collected, MRR, LinkedIn followers, calls booked, Dripify reply rate, outreach touches and briefs saved. The saved-view key moved to `ajani_admin_trends_v2`. The Trends rebuild later moved it to `ajani_admin_trends_v3`, with up to 8 picks per view; it migrates v2 picks into the "Key numbers" view and keeps saved keys even while the catalog is unavailable.
 
-Known limits, not changed: brief → build conversion reads low for the newest periods because recent briefs have had less time to convert. Comparisons assume manual numbers are logged as regularly in both windows. Outreach periods before the first logged batch read 0. Entry dates default to the UTC day.
+Known limits, not changed: brief → build conversion reads low for the newest periods because recent briefs have had less time to convert. Comparisons assume manual numbers are logged as regularly in both windows. Outreach periods before the first logged batch read 0. Entry dates (Log numbers and Experiments) default to the browser's own day, set after hydration; the stored days are still UTC.
 
 ## Sample data mode
 

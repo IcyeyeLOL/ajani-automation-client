@@ -21,7 +21,7 @@ This creates a clean boundary between automated interpretation and human authori
 ## Core experiences
 
 - **Marketing and education** — the home page, interactive system preview, business-specific examples, automation demos, and implementation stories explain the product without requiring an account.
-- **Guided request flow** — `/record` and `/request` support voice and written intake, transcription, clarification, workflow editing, review, and submission.
+- **Guided request flow** — `/record` (the old `/request` redirects there) supports voice and written intake, transcription, clarification, workflow editing, review, and submission.
 - **Secure account handoff** — Clerk authentication connects an anonymous draft to the correct user and organization without discarding work completed before sign-in.
 - **Client portal** — authenticated organizations can inspect submitted builds, delivery status, system activity, and billing-oriented information.
 - **Internal operations** — the admin experience supports demand triage, request comparison, outreach tracking, experiment metrics, operational follow-up, and day-to-year Trends across the funnel, outreach, content platforms and revenue.

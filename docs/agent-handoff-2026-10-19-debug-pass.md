@@ -28,14 +28,30 @@ Read `docs/agent-handoff-2026-10-16.md` first for the project background. This d
 
 ## 2. Where things stand
 
+**Update, second session (2026-10-19): tasks 1–5 of §5 are done.** Everything is committed; nothing is pushed or deployed. Next step is §5 task 6: ask the owner whether to put it live.
+
 | Area | State |
 |---|---|
-| Sign-in loop fix | **Committed** as `90c51b2`. An independent subagent confirmed it fixes the loop. Not pushed. |
-| Follow-ups to the sign-in fix (3 files) | Uncommitted, not yet verified |
-| Control desk logging fixes (5 bugs) | Uncommitted, written by a fixer subagent. **Not yet reviewed by the lead agent**, not verified. |
-| Public site fixes (14 bugs) | Uncommitted, written by a fixer subagent. **Not yet reviewed**, not verified. |
-| `next build`, full test suite, database suite on the combined tree | **Not run yet** |
-| Deploy | Not done. The live site is still on `e7a5d9c`. |
+| Sign-in loop fix | Committed `90c51b2`, verified. |
+| Sign-in follow-ups, incl. the two verifier leftovers (pagination renews, desk error page uses `retry`) | Committed `05cb6a9`, verified. |
+| Control desk logging fixes | Reviewed by the lead agent, verified by an adversarial subagent, committed `3f90402`. |
+| Public site fixes (14) | Reviewed, verified (redirect fuzzed with ~100 payloads), committed `e70d8c4`. |
+| Docs (this file, metric store §"Idempotent writes", `/request` mentions) | Committed with the docs commit after `e70d8c4`. |
+| Checks on the final tree | `vitest` 674/674, `eslint` clean, `next build` OK, `tsc` clean, database suite 14/14 `PASS:`. |
+| Deploy | **Not done.** The live site is still on `e7a5d9c`. |
+
+Fixed during verification, beyond the original lists:
+- **Log numbers.** The save reply only reaches the tab and form that sent it, so a question can't land on another tab. A save that came back unsaved after the tab was reopened shows a note. The answers check says when saved numbers are part of it. "Added to…" also names the numbers saved alongside.
+- **Sign-in.** The hop guard merges sessionStorage and `window.name`, so it counts even when storage is full. Pagination drops a stale `router.push` if the URL changed during renewal.
+- **Draft saves.** `MAX_BODY_BYTES` went 100 KB → 256 KB, since the brief route's 96 KB let a long non-Latin note pass every step and fail at Send. New `src/lib/text/clip.ts` keeps truncation from splitting an emoji, which makes jsonb reject the draft: used for the fallback brief, the approved brief subject/overview and the recorder's title/clarification answer.
+- **Fonts.** `global-error.tsx` loads the font variables itself, because it replaces the root layout.
+
+Verifier notes not fixed (minor):
+- Report import still replaces cold-call days and skips the answers check, since files carry day totals.
+- Deep links fall back to `/portal` on localhost and preview hosts; `redirect.ts` only knows ajaniflow.com.
+- `systemBlockSchema.id` has no max length.
+- "Also saved 1 meetings booked" reads awkwardly, because the labels are plural.
+- No DOM test environment, so the add/replace buttons and the Experiments clearing are verified by trace, not tests.
 
 Working tree: 38 changed files plus 3 new ones (`git status`). No `zz-agent-*` temp files remain. The changes split into three groups:
 
