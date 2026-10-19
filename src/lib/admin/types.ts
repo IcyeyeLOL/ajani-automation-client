@@ -116,6 +116,9 @@ export type OutreachChannelBoard = {
   dripifyConnected: boolean;
 };
 
+/** Each UTC day's replies by channel, for the Outreach activity chart. */
+export type OutreachReplySources = Record<string, Record<OutreachChannelId, number>>;
+
 export type OperationsStatus = {
   label: string;
   healthy: number;

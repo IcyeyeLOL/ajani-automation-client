@@ -140,3 +140,8 @@
 .admin-action-buttons { display:grid; gap:8px; margin-top:auto; padding-top:22px; }.admin-action-panel .admin-action-buttons button { margin-top:0; }
 @media (max-width:1320px) { .admin-channel-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:700px) { .admin-channel-grid { padding:14px 15px; }.admin-channel-card { padding:12px 11px 10px; }.admin-channel-card dd strong { font-size:16px; }.admin-channel-unavailable { padding:18px 15px; } }
+/* Outreach activity: each replies bar split by the channel the replies came from. */
+.admin-reply-dripify { --reply-color:var(--admin-green); }.admin-reply-reddit { --reply-color:var(--admin-amber); }.admin-reply-cold_calls { --reply-color:#4d6a8c; }.admin-reply-unsplit { --reply-color:var(--admin-sand); }
+.admin-bar-pair i.admin-bar-stack { display:flex; flex-direction:column-reverse; overflow:hidden; }.admin-bar-stack span { display:block; flex:0 1 0; min-height:0; background:var(--reply-color); }
+.admin-chart-foot > div:first-child { flex-wrap:wrap; row-gap:6px; }.admin-chart-foot span.admin-reply-key i { background:var(--reply-color); }.admin-chart-foot span.admin-reply-heading { margin-right:-7px; }
+.admin-bar-tip small.admin-tip-source { display:flex; align-items:center; gap:5px; }.admin-tip-source i { width:6px; height:6px; border-radius:2px; background:var(--reply-color); }

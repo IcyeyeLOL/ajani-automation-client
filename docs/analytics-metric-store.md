@@ -167,6 +167,7 @@ The owner reaches people three ways: Dripify, Reddit DMs and cold calls. Nobody 
 - **Rates can read above 100% over short ranges.** Dripify and Reddit replies, and Dripify acceptances, are counted on the day they arrive, against that day's new sends.
 - **Positive reply rate.** Reddit DMs don't record positive replies, so they lower the combined positive reply rate.
 - **Overview.** The "Outreach touches" and "Replies" cards and the 90-day trend in `load_admin_analytics` read the same totals, so they agree with Trends.
+- **Where replies came from.** The "Outreach activity" chart (Overview and Outreach) splits each replies bar by channel, colour-coded, with the split in the tooltip and each channel's total in the legend. The split comes from three `load_analytics_series` calls, one per channel, for `outreach.replies` over the trend's 90 days (`outreachReplySourceQueries`). If any of them fails, the bars show replies unsplit. Any replies the channels don't account for keep the plain replies colour, so a bar always matches the total.
 - **Catalog.** The Channel filter lists `linkedin/dripify`, `reddit/dm` and `phone/cold_call` once they have numbers. `channelLabel` shows them as "LinkedIn · Dripify", "Reddit · DMs" and "Phone · Cold calls".
 - **History.** `20261018010000` first added logged batches as a fourth channel, with rules that stopped Dripify and Reddit batches from double counting. It was applied live on 2026-10-18, then narrowed the same day.
 - **Checks.**

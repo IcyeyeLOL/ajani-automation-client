@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { OUTREACH_CHANNELS, outreachChannelQueries, summarizeOutreachChannels } from "@/lib/admin/outreach-channels";
-import { SAMPLE_DEFINITIONS, sampleMetricCatalog, sampleMetricSeries } from "@/lib/admin/sample-data";
+import { OUTREACH_CHANNELS, outreachChannelQueries, outreachReplySourceQueries, outreachReplySources, summarizeOutreachChannels } from "@/lib/admin/outreach-channels";
+import { SAMPLE_DEFINITIONS, sampleDashboardData, sampleMetricCatalog, sampleMetricSeries } from "@/lib/admin/sample-data";
 import type { MetricCatalog, MetricDefinition, MetricSeriesResult } from "@/lib/admin/metric-types";
 
 const TODAY = "2026-10-18";
@@ -48,6 +48,12 @@ describe("outreach channel queries", () => {
       expect(query).toMatchObject({ grain: "day", from: "2026-09-19", to: TODAY });
       expect(query.metrics).toEqual(["outreach.touches", "outreach.replies", "outreach.reply_base", "outreach.calls_booked"]);
     });
+  });
+
+  it("asks for each channel's replies over the chart's 90 days", () => {
+    const queries = outreachReplySourceQueries(TODAY);
+    expect(queries.map((query) => query.dimension)).toEqual(["linkedin/dripify", "reddit/dm", "phone/cold_call"]);
+    queries.forEach((query) => expect(query).toMatchObject({ metrics: ["outreach.replies"], grain: "day", from: "2026-07-21", to: TODAY }));
   });
 
   it("names the three channels and their Log numbers sources", () => {
@@ -129,6 +135,35 @@ describe("outreach channel summary", () => {
     // Dripify: the last sync, not the day its calls were logged.
     expect(dates.channels.map((channel) => [channel.id, channel.synced, channel.lastDate])).toEqual([["dripify", true, "2026-10-17"], ["reddit", false, "2026-10-14"], ["cold_calls", false, "2026-10-17"]]);
     expect(summarizeOutreachChannels(results(), catalog({}, { connectors: { dripify: false } }), TODAY).dripifyConnected).toBe(false);
+  });
+
+  it("splits each day's replies by channel for the activity chart", () => {
+    const daily = (dimension: string, replies: Array<number | null>): MetricSeriesResult => ({
+      ...result(dimension, { touches: 0, replies: 0, reached: 0, calls: 0 }),
+      buckets: ["2026-10-16", "2026-10-17", "2026-10-18"].map((start) => ({ start, end: start, partial: start === TODAY })),
+      series: [{ ...result(dimension, { touches: 0, replies: 0, reached: 0, calls: 0 }).series[1], values: replies }],
+    });
+    const sources = outreachReplySources([daily("linkedin/dripify", [0, 1, 0]), daily("reddit/dm", [2, 0, null]), daily("phone/cold_call", [0, 0, 1])]);
+    expect(sources).toEqual({
+      "2026-10-16": { dripify: 0, reddit: 2, cold_calls: 0 },
+      "2026-10-17": { dripify: 1, reddit: 0, cold_calls: 0 },
+      "2026-10-18": { dripify: 0, reddit: 0, cold_calls: 1 },
+    });
+    // A missing channel would pin its replies on the others, so the chart shows replies unsplit.
+    expect(outreachReplySources([daily("linkedin/dripify", [0, 1, 0]), daily("reddit/dm", [2, 0, 0])])).toBeNull();
+    expect(outreachReplySources(null)).toBeNull();
+  });
+
+  it("splits sample replies so each day adds up to the chart's total", () => {
+    const sources = outreachReplySources(outreachReplySourceQueries(TODAY).map((query) => sampleMetricSeries(query, SAMPLE_DEFINITIONS, TODAY)));
+    const trend = sampleDashboardData({}, new Date(`${TODAY}T12:00:00Z`)).trend;
+    expect(sources).not.toBeNull();
+    expect(Object.keys(sources!)).toEqual(trend.map((point) => point.date));
+    trend.forEach((point) => {
+      const day = sources![point.date];
+      expect(day.dripify + day.reddit + day.cold_calls, point.date).toBe(point.replies);
+    });
+    expect(trend.some((point) => point.replies > 0)).toBe(true);
   });
 
   it("works from sample data the way it does from the database", () => {

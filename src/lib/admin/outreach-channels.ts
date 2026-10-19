@@ -1,6 +1,6 @@
 import { rangeForPreset } from "@/lib/admin/metric-query";
 import type { MetricCatalog, MetricSeriesQuery, MetricSeriesResult } from "@/lib/admin/metric-types";
-import type { OutreachChannelBoard, OutreachChannelId, OutreachChannelSummary } from "@/lib/admin/types";
+import type { OutreachChannelBoard, OutreachChannelId, OutreachChannelSummary, OutreachReplySources } from "@/lib/admin/types";
 
 /** Same window as the Overview cards: the last 30 UTC days, today included. */
 export const OUTREACH_CHANNEL_DAYS = 30;
@@ -26,6 +26,35 @@ export const OUTREACH_CHANNELS: ReadonlyArray<{ id: OutreachChannelId; label: st
 export function outreachChannelQueries(today: string): MetricSeriesQuery[] {
   const { from, to } = rangeForPreset("day", OUTREACH_CHANNEL_DAYS, today);
   return OUTREACH_CHANNELS.map((channel) => ({ metrics: CHANNEL_METRICS, grain: "day", from, to, dimension: channel.dimension }));
+}
+
+/** The Outreach activity chart's days: the last 90 UTC days, like its trend. */
+export const OUTREACH_REPLY_SOURCE_DAYS = 90;
+
+/** Each channel's replies per day, so the chart can show where replies came from. */
+export function outreachReplySourceQueries(today: string): MetricSeriesQuery[] {
+  const { from, to } = rangeForPreset("day", OUTREACH_REPLY_SOURCE_DAYS, today);
+  return OUTREACH_CHANNELS.map((channel) => ({ metrics: ["outreach.replies"], grain: "day", from, to, dimension: channel.dimension }));
+}
+
+/**
+ * Replies per day, split by channel, keyed by UTC day. null when any channel's
+ * series is missing: a partial split would pin replies on the wrong channels,
+ * so the chart then shows replies unsplit instead.
+ */
+export function outreachReplySources(results: MetricSeriesResult[] | null): OutreachReplySources | null {
+  if (!results) return null;
+  const byChannel = OUTREACH_CHANNELS.map((channel) => results.find((item) => item.dimension === channel.dimension));
+  if (byChannel.some((result) => !result?.series.some((item) => item.metricKey === "outreach.replies"))) return null;
+  const days: OutreachReplySources = {};
+  byChannel.forEach((result, index) => {
+    const values = result!.series.find((item) => item.metricKey === "outreach.replies")!.values;
+    result!.buckets.forEach((bucket, bucketIndex) => {
+      days[bucket.start] ??= { dripify: 0, reddit: 0, cold_calls: 0 };
+      days[bucket.start][OUTREACH_CHANNELS[index].id] += values[bucketIndex] ?? 0;
+    });
+  });
+  return days;
 }
 
 /**

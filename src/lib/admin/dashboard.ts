@@ -5,10 +5,10 @@ import { requireAdminSession } from "@/lib/admin/session";
 import { withinDeadline } from "@/lib/operations/deadline";
 import { aggregateExperimentPerformance } from "@/lib/admin/experiment-performance";
 import { loadMetricSeries } from "@/lib/admin/metrics";
-import { outreachChannelQueries } from "@/lib/admin/outreach-channels";
+import { outreachChannelQueries, outreachReplySourceQueries, outreachReplySources } from "@/lib/admin/outreach-channels";
 import type { MetricSeriesResult } from "@/lib/admin/metric-types";
 import type {
-  AdminDashboardData, AdminMetric, OutreachExperiment, OutreachMessageStep, OutreachTotals,
+  AdminDashboardData, AdminMetric, OutreachExperiment, OutreachMessageStep, OutreachReplySources, OutreachTotals,
 } from "@/lib/admin/types";
 
 // Moved to an isomorphic module so the sample-data generator reuses the same math.
@@ -64,6 +64,19 @@ export async function loadOutreachChannelSeries(today: string): Promise<MetricSe
   } catch (error) {
     console.error("Outreach channels unavailable", {
       code: error && typeof error === "object" && "code" in error ? error.code : "outreach_channels_unavailable",
+    });
+    return null;
+  }
+}
+
+/** Each channel's replies per day for the Outreach activity chart; null shows replies unsplit. */
+export async function loadOutreachReplySources(today: string): Promise<OutreachReplySources | null> {
+  await requireAdminSession();
+  try {
+    return outreachReplySources(await Promise.all(outreachReplySourceQueries(today).map((query) => loadMetricSeries(query))));
+  } catch (error) {
+    console.error("Outreach reply sources unavailable", {
+      code: error && typeof error === "object" && "code" in error ? error.code : "outreach_reply_sources_unavailable",
     });
     return null;
   }

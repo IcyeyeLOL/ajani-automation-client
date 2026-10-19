@@ -7,12 +7,13 @@ const mocks = vi.hoisted(() => ({
   loadGoalBoard: vi.fn(),
   loadConnectionBoard: vi.fn(),
   loadOutreachChannelSeries: vi.fn(),
+  loadOutreachReplySources: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/components/admin/admin-dashboard", () => ({ AdminDashboard: () => null }));
 vi.mock("@/lib/admin/sample-mode", () => ({ isSampleMode: mocks.isSampleMode }));
-vi.mock("@/lib/admin/dashboard", () => ({ adminPageNumber: () => 1, loadAdminDashboardData: mocks.loadAdminDashboardData, loadOutreachChannelSeries: mocks.loadOutreachChannelSeries }));
+vi.mock("@/lib/admin/dashboard", () => ({ adminPageNumber: () => 1, loadAdminDashboardData: mocks.loadAdminDashboardData, loadOutreachChannelSeries: mocks.loadOutreachChannelSeries, loadOutreachReplySources: mocks.loadOutreachReplySources }));
 vi.mock("@/lib/admin/metrics", () => ({ loadGoalBoard: mocks.loadGoalBoard, loadMetricCatalog: mocks.loadMetricCatalog }));
 vi.mock("@/lib/admin/connections", () => ({ loadConnectionBoard: mocks.loadConnectionBoard }));
 
@@ -45,6 +46,7 @@ describe("control desk page", () => {
     mocks.loadAdminDashboardData.mockResolvedValue({ generatedAt: "real" });
     mocks.loadGoalBoard.mockResolvedValue({ status: "real" });
     mocks.loadOutreachChannelSeries.mockResolvedValue(null);
+    mocks.loadOutreachReplySources.mockResolvedValue(null);
   });
 
   it("renders sample data without reading real numbers, goals or logged entries", async () => {
@@ -68,6 +70,9 @@ describe("control desk page", () => {
     expect(channels.status).toBe("available");
     expect(channels.channels.map((channel) => channel.id)).toEqual(["dripify", "reddit", "cold_calls"]);
     expect(channels.total.touches).toBeGreaterThan(0);
+    // So are the replies split by channel on the activity chart.
+    expect(mocks.loadOutreachReplySources).not.toHaveBeenCalled();
+    expect(Object.keys(props.replySources as object)).toHaveLength(90);
   });
 
   it("renders real numbers when sample data is off", async () => {
@@ -82,5 +87,8 @@ describe("control desk page", () => {
     // Today's last 30 days, loaded alongside the rest; a failed load is "unavailable", not zeros.
     expect(mocks.loadOutreachChannelSeries).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect((props.channels as OutreachChannelBoard).status).toBe("unavailable");
+    // The chart's replies by channel; null shows them unsplit.
+    expect(mocks.loadOutreachReplySources).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(props.replySources).toBeNull();
   });
 });

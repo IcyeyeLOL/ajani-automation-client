@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
-import { adminPageNumber, loadAdminDashboardData, loadOutreachChannelSeries } from "@/lib/admin/dashboard";
+import { adminPageNumber, loadAdminDashboardData, loadOutreachChannelSeries, loadOutreachReplySources } from "@/lib/admin/dashboard";
 import { loadGoalBoard, loadMetricCatalog } from "@/lib/admin/metrics";
 import { loadConnectionBoard } from "@/lib/admin/connections";
-import { outreachChannelQueries, summarizeOutreachChannels } from "@/lib/admin/outreach-channels";
+import { outreachChannelQueries, outreachReplySourceQueries, outreachReplySources, summarizeOutreachChannels } from "@/lib/admin/outreach-channels";
 import { isSampleMode } from "@/lib/admin/sample-mode";
 import { SAMPLE_DEFINITIONS, sampleDashboardData, sampleGoalBoard, sampleMetricCatalog, sampleMetricSeries } from "@/lib/admin/sample-data";
 
@@ -24,24 +24,27 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     const catalog = sampleMetricCatalog(definitions, today);
     // The same series Trends charts in sample mode, one per Outreach channel.
     const channels = summarizeOutreachChannels(outreachChannelQueries(today).map((channelQuery) => sampleMetricSeries(channelQuery, definitions, today)), catalog, today);
+    const replySources = outreachReplySources(outreachReplySourceQueries(today).map((sourceQuery) => sampleMetricSeries(sourceQuery, definitions, today)));
     return <AdminDashboard
       catalog={catalog}
       channels={channels}
       connections={connections}
       data={sampleDashboardData(pages, now)}
       goals={sampleGoalBoard(today)}
+      replySources={replySources}
       sampleMode
     />;
   }
   // Each loader authorizes itself before reading, so they can run in parallel.
   const today = new Date().toISOString().slice(0, 10);
-  const [data, catalog, goals, connections, channelSeries] = await Promise.all([
+  const [data, catalog, goals, connections, channelSeries, replySources] = await Promise.all([
     loadAdminDashboardData(pages),
     loadMetricCatalog(),
     loadGoalBoard(),
     loadConnectionBoard(),
     loadOutreachChannelSeries(today),
+    loadOutreachReplySources(today),
   ]);
-  return <AdminDashboard catalog={catalog} channels={summarizeOutreachChannels(channelSeries, catalog, today)} connections={connections} data={data} goals={goals} />;
+  return <AdminDashboard catalog={catalog} channels={summarizeOutreachChannels(channelSeries, catalog, today)} connections={connections} data={data} goals={goals} replySources={replySources} />;
 }
 

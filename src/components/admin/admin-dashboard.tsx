@@ -17,13 +17,16 @@ import { DemandBars, SystemHealth, VariantChart } from "@/components/admin/secti
 import { initialAdminActionState } from "@/app/admin/action-state";
 import { axisLabels, axisTicks, dayCount, formatMetricValue, goalProgress, goalRateLabel, isEarlyTracking, type GoalProgress, type GoalStatus, type TrendViewId } from "@/lib/admin/metric-query";
 import { optionLabel, plural } from "@/lib/admin/display-labels";
+import { OUTREACH_CHANNELS } from "@/lib/admin/outreach-channels";
 import type { Goal, GoalBoard, MetricCatalog } from "@/lib/admin/metric-types";
 import type { ConnectionBoard } from "@/lib/admin/connection-types";
 import type {
   AdminDashboardData,
   AdminMetric,
   OutreachChannelBoard,
+  OutreachChannelId,
   OutreachExperiment,
+  OutreachReplySources,
   TrendPoint,
   VariantPerformance,
 } from "@/lib/admin/types";
@@ -52,7 +55,7 @@ const sections: Array<{ id: Section; label: string; number: string }> = [
   { id: "connections", label: "Connections", number: "07" },
 ];
 
-export function AdminDashboard({ data, catalog, channels, goals, connections, sampleMode = false }: { data: AdminDashboardData; catalog: MetricCatalog; channels: OutreachChannelBoard; goals: GoalBoard; connections: ConnectionBoard; sampleMode?: boolean }) {
+export function AdminDashboard({ data, catalog, channels, goals, connections, replySources = null, sampleMode = false }: { data: AdminDashboardData; catalog: MetricCatalog; channels: OutreachChannelBoard; goals: GoalBoard; connections: ConnectionBoard; replySources?: OutreachReplySources | null; sampleMode?: boolean }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("overview");
   // "LOG NUMBERS" opens Trends with its log panel open (on a channel's tab when one is named), and
@@ -108,8 +111,8 @@ export function AdminDashboard({ data, catalog, channels, goals, connections, sa
       {data.dataNotice && activeSection !== "trends" && activeSection !== "connections" ? <p className="admin-data-notice" role={data.dataStatus === "unavailable" ? "status" : undefined}>{data.dataNotice}</p> : null}
       {earlyTracking && activeSection !== "connections" ? <EarlyTrackingPrompt /> : null}
       {data.dataStatus !== "unavailable" ? <>
-      {activeSection === "overview" ? <Overview channels={channels} data={data} goals={goals} onLogNumbers={logNumbers} onLogOutreach={logOutreach} onNavigate={setActiveSection} onOutreachCharts={outreachCharts} /> : null}
-      {activeSection === "outreach" ? <Outreach channels={channels} data={data} onLogOutreach={logOutreach} onOutreachCharts={outreachCharts} /> : null}
+      {activeSection === "overview" ? <Overview channels={channels} data={data} goals={goals} onLogNumbers={logNumbers} onLogOutreach={logOutreach} onNavigate={setActiveSection} onOutreachCharts={outreachCharts} replySources={replySources} /> : null}
+      {activeSection === "outreach" ? <Outreach channels={channels} data={data} onLogOutreach={logOutreach} onOutreachCharts={outreachCharts} replySources={replySources} /> : null}
       {activeSection === "experiments" ? <Experiments data={data} key={data.pagination.experimentPage} sampleMode={sampleMode} /> : null}
       {activeSection === "website" ? <WebsiteFunnel data={data} /> : null}
       {activeSection === "operations" ? <Operations data={data} /> : null}
@@ -189,12 +192,12 @@ function SetupBanner({ connected }: { connected: boolean }) {
   </aside>;
 }
 
-function Overview({ data, channels, goals, onNavigate, onLogNumbers, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; goals: GoalBoard; onNavigate: (section: Section) => void; onLogNumbers: () => void; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
+function Overview({ data, channels, goals, replySources, onNavigate, onLogNumbers, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; goals: GoalBoard; replySources: OutreachReplySources | null; onNavigate: (section: Section) => void; onLogNumbers: () => void; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
   return <div className="admin-section-stack">
     <GrowthGoals board={goals} onLogNumbers={onLogNumbers} onNavigate={onNavigate} />
     <section className="admin-metric-grid">{data.metrics.map((item) => <MetricCard item={item} key={item.label} />)}</section>
     <section className="admin-two-column admin-chart-row">
-      <GrowthChart trend={data.trend} />
+      <GrowthChart sources={replySources} trend={data.trend} />
       <FunnelCard data={data} />
     </section>
     <section className="admin-two-column admin-bottom-row">
@@ -292,14 +295,21 @@ function MetricCard({ item }: { item: AdminMetric }) {
   </article>;
 }
 
-/** `only` pins one series and hides the switch, for sections that are about one flow. Bars are buttons, so a tap or a key shows their numbers. */
-function GrowthChart({ trend, only }: { trend: TrendPoint[]; only?: "outreach" | "website" }) {
+/**
+ * `only` pins one series and hides the switch, for sections that are about one flow. Bars are buttons, so a tap or a key shows their numbers.
+ * With `sources`, each Outreach replies bar is split by the channel the replies came from.
+ */
+function GrowthChart({ trend, only, sources = null }: { trend: TrendPoint[]; only?: "outreach" | "website"; sources?: OutreachReplySources | null }) {
   const [range, setRange] = useState<7 | 30 | 90>(30);
   const [picked, setSeries] = useState<"outreach" | "website">("outreach");
   const [hovered, setHovered] = useState<number | null>(null);
   const [pinned, setPinned] = useState<number | null>(null);
   const series = only ?? picked;
-  const points = useMemo(() => chartPoints(trend.slice(-range), range), [range, trend]);
+  const points = useMemo(() => chartPoints(trend.slice(-range), range, sources), [range, sources, trend]);
+  const split = series === "outreach" && sources !== null;
+  const parts = points.map((point) => split ? replyParts(point) : []);
+  const sourceTotals = OUTREACH_CHANNELS.map((channel) => points.reduce((sum, point) => sum + (point.sources?.[channel.id] ?? 0), 0));
+  const partsText = (index: number) => parts[index].length ? ` (${parts[index].map(partText).join(", ")})` : "";
   const primaryKey = series === "outreach" ? "outreach" : "drafts";
   const secondaryKey = series === "outreach" ? "replies" : "submissions";
   const ticks = axisTicks(points.flatMap((point) => [point[primaryKey], point[secondaryKey]]), { fromZero: true, whole: true });
@@ -317,13 +327,16 @@ function GrowthChart({ trend, only }: { trend: TrendPoint[]; only?: "outreach" |
     <div className="admin-chart-summary"><p><span>{series === "outreach" ? "TOUCHES" : "SAVED DRAFTS"}</span><b>{formatNumber(primaryTotal)}</b></p><p><span>{series === "outreach" ? "REPLIES" : "SUBMITTED BUILDS"}</span><b>{formatNumber(secondaryTotal)}</b></p><small>LAST {range} DAYS</small></div>
     {primaryTotal + secondaryTotal === 0 ? <p className="admin-chart-empty admin-growth-empty">{series === "outreach" ? `No outreach logged in the last ${range} days yet.` : `No briefs saved or builds submitted in the last ${range} days yet.`}</p> : <div aria-label={`${names[0]} and ${names[1]} ${range === 90 ? "in groups of 7 days" : "per day"} over the last ${range} days: ${formatNumber(primaryTotal)} ${names[0]}, ${formatNumber(secondaryTotal)} ${names[1]}. Select a bar to read its numbers.`} className="admin-bar-chart" role="group">
       <div aria-hidden="true" className="admin-bar-axis">{[2, 1, 0].map((index) => <span key={index}>{tickLabels[index]}</span>)}</div>
-      {points.map((point, index) => <button aria-label={`${when(point.date)}: ${formatNumber(point[primaryKey])} ${names[0]}, ${formatNumber(point[secondaryKey])} ${names[1]}`} className={`admin-bar-group${active === index ? " active" : ""}`} key={point.date} onBlur={() => setPinned((current) => current === index ? null : current)} onClick={() => setPinned(index)} onFocus={() => setPinned(index)} onKeyDown={(event) => { if (event.key === "Escape") setPinned(null); }} onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)} type="button">
-        <b className="admin-bar-pair"><i style={{ height: barHeight(point[primaryKey]) }} /><i style={{ height: barHeight(point[secondaryKey]) }} /></b>
+      {points.map((point, index) => <button aria-label={`${when(point.date)}: ${formatNumber(point[primaryKey])} ${names[0]}, ${formatNumber(point[secondaryKey])} ${names[1]}${partsText(index)}`} className={`admin-bar-group${active === index ? " active" : ""}`} key={point.date} onBlur={() => setPinned((current) => current === index ? null : current)} onClick={() => setPinned(index)} onFocus={() => setPinned(index)} onKeyDown={(event) => { if (event.key === "Escape") setPinned(null); }} onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)} type="button">
+        <b className="admin-bar-pair"><i style={{ height: barHeight(point[primaryKey]) }} />{parts[index].length ? <i className="admin-bar-stack" style={{ height: barHeight(point[secondaryKey]) }}>{parts[index].map((part) => <span className={`admin-reply-${part.id}`} key={part.id} style={{ flexGrow: part.value }} />)}</i> : <i style={{ height: barHeight(point[secondaryKey]) }} />}</b>
         {showAxisLabel(index, points.length) ? <span aria-hidden="true">{shortDate(point.date)}</span> : null}
-        {active === index ? <em aria-hidden="true" className={`admin-bar-tip${index < points.length / 4 ? " start" : index >= (points.length * 3) / 4 ? " end" : ""}`}><strong>{when(point.date)}</strong><small>{formatNumber(point[primaryKey])} {names[0]}</small><small>{formatNumber(point[secondaryKey])} {names[1]}</small></em> : null}
+        {active === index ? <em aria-hidden="true" className={`admin-bar-tip${index < points.length / 4 ? " start" : index >= (points.length * 3) / 4 ? " end" : ""}`}><strong>{when(point.date)}</strong><small>{formatNumber(point[primaryKey])} {names[0]}</small><small>{formatNumber(point[secondaryKey])} {names[1]}</small>{parts[index].map((part) => <small className={`admin-tip-source admin-reply-${part.id}`} key={part.id}><i />{partText(part)}</small>)}</em> : null}
       </button>)}
     </div>}
-    <footer className="admin-chart-foot"><div><span><i />{series === "outreach" ? "TOUCHES" : "SAVED DRAFTS"}</span><span><i />{series === "outreach" ? "REPLIES" : "SUBMITTED BUILDS"}</span></div><div className="admin-segmented small">{([7, 30, 90] as const).map((value) => <button aria-pressed={range === value} key={value} onClick={() => pickRange(value)} type="button">{value}D</button>)}</div></footer>
+    <footer className="admin-chart-foot"><div><span><i />{series === "outreach" ? "TOUCHES" : "SAVED DRAFTS"}</span>{split ? <>
+      <span className="admin-reply-heading">REPLIES FROM</span>
+      {OUTREACH_CHANNELS.map((channel, index) => <span className={`admin-reply-key admin-reply-${channel.id}`} key={channel.id}><i />{channel.label.toUpperCase()} {formatNumber(sourceTotals[index])}</span>)}
+    </> : <span><i />{series === "outreach" ? "REPLIES" : "SUBMITTED BUILDS"}</span>}</div><div className="admin-segmented small">{([7, 30, 90] as const).map((value) => <button aria-pressed={range === value} key={value} onClick={() => pickRange(value)} type="button">{value}D</button>)}</div></footer>
   </article>;
 }
 
@@ -361,10 +374,10 @@ function VoidBatchControl({ batchId, sampleMode }: { batchId: string; sampleMode
 }
 
 /** Outreach is three channels added up: Dripify, Reddit DMs and cold calls. */
-function Outreach({ data, channels, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
+function Outreach({ data, channels, replySources, onLogOutreach, onOutreachCharts }: { data: AdminDashboardData; channels: OutreachChannelBoard; replySources: OutreachReplySources | null; onLogOutreach: (sources: string[] | null) => void; onOutreachCharts: () => void }) {
   return <div className="admin-section-stack">
     <OutreachChannels board={channels} onCharts={onOutreachCharts} />
-    <section className="admin-two-column admin-chart-row admin-outreach-charts"><GrowthChart only="outreach" trend={data.trend} /><LogOutreachPanel board={channels} onLog={onLogOutreach} /></section>
+    <section className="admin-two-column admin-chart-row admin-outreach-charts"><GrowthChart only="outreach" sources={replySources} trend={data.trend} /><LogOutreachPanel board={channels} onLog={onLogOutreach} /></section>
   </div>;
 }
 
@@ -518,15 +531,40 @@ function messageStepLabel(step: OutreachExperiment["messageStep"] | undefined) {
   } as const)[step];
 }
 
-function chartPoints(points: TrendPoint[], range: number) {
-  if (range !== 90) return points;
-  const weeks: TrendPoint[] = [];
-  points.forEach((point, index) => {
+type ChartPoint = TrendPoint & { sources: Record<OutreachChannelId, number> | null };
+
+/** Days as they are, or 7-day groups for 90 days; each carries its replies by channel when known. */
+function chartPoints(points: TrendPoint[], range: number, sources: OutreachReplySources | null): ChartPoint[] {
+  const days = points.map((point) => ({ ...point, sources: sources?.[point.date] ? { ...sources[point.date] } : null }));
+  if (range !== 90) return days;
+  const weeks: ChartPoint[] = [];
+  days.forEach((point, index) => {
     const bucket = Math.floor(index / 7);
-    weeks[bucket] ??= { date: point.date, drafts: 0, submissions: 0, outreach: 0, replies: 0 };
+    weeks[bucket] ??= { date: point.date, drafts: 0, submissions: 0, outreach: 0, replies: 0, sources: null };
     weeks[bucket].drafts += point.drafts; weeks[bucket].submissions += point.submissions; weeks[bucket].outreach += point.outreach; weeks[bucket].replies += point.replies;
+    if (point.sources) {
+      const week = weeks[bucket].sources ??= { dripify: 0, reddit: 0, cold_calls: 0 };
+      OUTREACH_CHANNELS.forEach((channel) => { week[channel.id] += point.sources![channel.id]; });
+    }
   });
   return weeks;
+}
+
+/**
+ * A bar's replies by channel, bottom to top. Any reply the channels don't
+ * account for stays in the plain replies colour, so the bar always matches
+ * the total.
+ */
+function replyParts(point: ChartPoint) {
+  const parts: Array<{ id: string; label: string; value: number }> = OUTREACH_CHANNELS
+    .map((channel) => ({ id: channel.id, label: channel.label, value: point.sources?.[channel.id] ?? 0 }))
+    .filter((part) => part.value > 0);
+  const unsplit = point.replies - parts.reduce((sum, part) => sum + part.value, 0);
+  return unsplit > 0 ? [...parts, { id: "unsplit", label: "", value: unsplit }] : parts;
+}
+
+function partText(part: { id: string; label: string; value: number }) {
+  return part.id === "unsplit" ? `${formatNumber(part.value)} not matched to a channel` : `${formatNumber(part.value)} from ${part.label}`;
 }
 
 function showAxisLabel(index: number, length: number) { return index === 0 || index === length - 1 || index === Math.floor(length / 2); }
