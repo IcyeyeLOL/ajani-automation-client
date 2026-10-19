@@ -98,6 +98,16 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
      - After: latest version `20261018010000`, 38 recorded, 100 definitions (TikTok inactive), daily values unchanged at 515, grants unchanged.
      - Access: a project-scoped, database-only token with 24-hour expiry. The owner clicked Create, because the safety classifier blocks the agent creating it. The agent then deleted it on the Tokens page. The older "cold calls" and "Claude" tokens (no expiry) are still active; the owner was asked to delete them.
      - **Live data at the time.** There are no outreach batches. Dripify's `new_contacted` is 0 on 10-17 and 10-18: contacted is stuck at 694 with 186 leads remaining. The sync brought in 4 acceptances and 1 reply. Outreach therefore shows those, with rates unknown (0 new sends).
+   - **Outreach narrowed to three channels (2026-10-18, owner request).** Commit `0a4207e`, migration `20261018020000_outreach_three_channels.sql`.
+     - Outreach adds up only Dripify, Reddit DMs and cold calls. Logged batches stay for the Experiments page, which is the owner's own.
+     - A cold call counts as a reply only when the answer was positive.
+     - New manual `dripify.positive_replies` and `dripify.calls_booked` (Log numbers → Dripify tab). `outreach.follow_ups` and `outreach.initial_dms` are retired, and `reply_base` is labelled "People reached".
+     - **Applied live on 2026-10-18** with the owner's typed approval.
+       - Before: a backup (`Documents/ajani-database-backups/ajani-live-before-outreach-three-channels-2026-10-19T00-33-41.json`, UTC time) and a rehearsal whose definitions and functions matched live exactly. All five related regression files passed.
+       - After: latest version `20261018020000`, 39 recorded, 102 definitions (89 active), daily values unchanged at 526, grants unchanged.
+       - Access: a token made the same way as before, deleted by the agent afterwards.
+     - **Live numbers right after.** The only person reached in the window is 1 logged cold call, with no positive answer. Dripify's 1 reply (10-17) came from people contacted before tracking began, and Dripify has contacted nobody new since. So the overall reply rate reads 1 of 1 (100%) until Dripify sends again or more calls are logged. Dripify's own card shows no rate.
+     - The new code still needs a deploy before the live site shows the three-channel cards.
    - **Import rebuilt (2026-10-18, owner request).** The old reader saved the owner's combined Instagram and LinkedIn CSV wrongly:
      - Live `instagram.followers` for Sep 18 – Oct 17 holds LinkedIn's counts (2,362–2,533, 30 rows).
      - Instagram views (30 days), interactions (24) and posts (9) from that file are missing, and so are all its LinkedIn numbers.
