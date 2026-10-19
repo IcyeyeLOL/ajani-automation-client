@@ -108,6 +108,19 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
        - Access: a token made the same way as before, deleted by the agent afterwards.
      - **Live numbers right after.** The only person reached in the window is 1 logged cold call, with no positive answer. Dripify's 1 reply (10-17) came from people contacted before tracking began, and Dripify has contacted nobody new since. So the overall reply rate reads 1 of 1 (100%) until Dripify sends again or more calls are logged. Dripify's own card shows no rate.
      - The new code still needs a deploy before the live site shows the three-channel cards.
+   - **Outreach activity chart splits replies by channel (2026-10-18, owner request).** Commit `e7a5d9c`. See `docs/analytics-metric-store.md` → "Where replies came from".
+   - **Released 2026-10-18 (owner request: "push what we have locally to prod").**
+     - `main` was fast-forwarded from `15253d9` to `e7a5d9c` (17 commits, nothing to merge). Vercel's production deploy succeeded, and ajaniflow.com, `/admin` and `/sign-up` answer 200.
+     - Checks before pushing:
+       - lint, `next build`, 632 unit tests;
+       - the local database suite (all `PASS:` lines);
+       - a read-only subagent review, with no blockers. New env reads are optional; the import's AI path degrades to a 503, and plain CSVs still import.
+     - All 39 migrations were already live.
+     - The open PRs #1, #2 and #4 (old website redesigns) were left alone.
+   - **Admin access, 2026-10-18.**
+     - Production `AJANI_ADMIN_EMAIL_ALLOWLIST` now lists lime71129, lime17451 and the co-founder's yvngadey (all @gmail.com). The agent set it in Vercel at the owner's request.
+     - The owner updated `AJANI_ADMIN_ACCESS_KEY` themselves.
+     - The co-founder signs up at `/sign-up` with that email, then enters the shared key. Cold-call logging goes through `recordMetricValuesAction`, which needs the admin session.
    - **Import rebuilt (2026-10-18, owner request).** The old reader saved the owner's combined Instagram and LinkedIn CSV wrongly:
      - Live `instagram.followers` for Sep 18 – Oct 17 holds LinkedIn's counts (2,362–2,533, 30 rows).
      - Instagram views (30 days), interactions (24) and posts (9) from that file are missing, and so are all its LinkedIn numbers.
