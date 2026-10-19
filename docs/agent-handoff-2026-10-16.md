@@ -117,6 +117,7 @@ Read this first, then `docs/analytics-metric-store.md`. `docs/next-agent-impleme
        - a read-only subagent review, with no blockers. New env reads are optional; the import's AI path degrades to a 503, and plain CSVs still import.
      - All 39 migrations were already live.
      - The open PRs #1, #2 and #4 (old website redesigns) were left alone.
+   - **Debugging pass, 2026-10-19 (in progress).** See `docs/agent-handoff-2026-10-19-debug-pass.md`. The sign-in loop fix is committed (`90c51b2`); the logging and public-site fixes are uncommitted and unverified; nothing is deployed.
    - **Admin access, 2026-10-18.**
      - Production `AJANI_ADMIN_EMAIL_ALLOWLIST` now lists lime71129, lime17451 and the co-founder's yvngadey (all @gmail.com). The agent set it in Vercel at the owner's request.
      - The owner updated `AJANI_ADMIN_ACCESS_KEY` themselves.
