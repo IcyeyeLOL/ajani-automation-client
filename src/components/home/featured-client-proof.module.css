@@ -1,0 +1,204 @@
+.card {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(38, 30, 27, .22);
+  border-radius: 24px;
+  background: #fffdfa;
+  color: #181615;
+  box-shadow:
+    0 30px 68px rgba(57, 42, 34, .14),
+    0 2px 0 rgba(255, 255, 255, .92) inset;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 54px;
+  padding: 0 20px;
+  border-bottom: 1px solid #3f3734;
+  background: #1b1818;
+  color: #a99d97;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.proofLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #f4f1eb;
+}
+
+.proofLabel i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #edc6a0;
+  box-shadow: 0 0 0 4px rgba(237, 198, 160, .13);
+}
+
+.videoFrame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-bottom: 1px solid #3f3734;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(121, 0, 24, .22), transparent 35%),
+    #100f0f;
+}
+
+.videoFrame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.body {
+  padding: clamp(20px, 2.2vw, 30px);
+}
+
+.identity {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(121, 0, 24, .2);
+  border-radius: 50%;
+  background: #f4e8de;
+  color: #790018;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.identity h2 {
+  margin: 0;
+  color: #181615;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -.025em;
+}
+
+.identity p {
+  margin: 5px 0 0;
+  color: #706a63;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.body blockquote {
+  margin: 22px 0 0;
+  padding: 0 0 0 17px;
+  border-left: 3px solid #790018;
+  color: #25201e;
+  font-size: clamp(19px, 1.65vw, 26px);
+  font-weight: 620;
+  line-height: 1.17;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 24px 0 0;
+  border-top: 1px solid #ddd5cc;
+  border-bottom: 1px solid #ddd5cc;
+}
+
+.details > div {
+  min-width: 0;
+  padding: 15px 14px 16px;
+  border-right: 1px solid #ddd5cc;
+}
+
+.details > div:first-child { padding-left: 0; }
+.details > div:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.details dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #790018;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .075em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.details dt span { color: #b28b77; }
+
+.details dd {
+  margin: 8px 0 0;
+  color: #706a63;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 19px;
+  color: #790018;
+  font-size: 12.5px;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.link span {
+  transition: transform var(--motion-standard, 220ms) var(--ease-standard, ease);
+}
+
+.link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.link:hover span { transform: translate(2px, -2px); }
+.link:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid rgba(121, 0, 24, .48);
+  outline-offset: 4px;
+}
+
+@media (max-width: 700px) {
+  .card { border-radius: 19px; }
+  .header { min-height: 49px; padding: 0 16px; }
+  .body { padding: 19px 17px 21px; }
+  .body blockquote { margin-top: 19px; font-size: 19px; }
+  .details { grid-template-columns: 1fr; }
+  .details > div {
+    padding: 13px 0;
+    border-right: 0;
+    border-bottom: 1px solid #e5ded7;
+  }
+  .details > div:last-child { border-bottom: 0; }
+  .details dd { margin-top: 5px; }
+}
+
+@media (max-width: 390px) {
+  .header > span:last-child { display: none; }
+  .identity { grid-template-columns: 38px minmax(0, 1fr); gap: 11px; }
+  .avatar { width: 36px; height: 36px; }
+  .identity p { font-size: 10.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link span { transition: none; }
+}
