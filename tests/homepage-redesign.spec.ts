@@ -40,10 +40,10 @@ test("credibility-first homepage keeps supported navigation and section order", 
 
   const orderedSections = page.locator([
     "#client-work",
+    "#client-voices",
     "#solutions",
     "#industries",
     "#process",
-    "#client-voices",
     "#engagement",
     "#security",
     "#about",
@@ -72,6 +72,7 @@ test("credibility-first homepage keeps supported navigation and section order", 
   const clientWork = page.locator("#client-work");
   await expect(clientWork.getByTitle("Karol from Granker's Team shares his experience working with Ajani"))
     .toHaveCount(1);
+  expect(await clientWork.evaluate((element) => element.nextElementSibling?.id)).toBe("client-voices");
 
   const productionSystem = page.locator("#industries + section");
   await expect(productionSystem.getByRole("heading", {
@@ -81,7 +82,7 @@ test("credibility-first homepage keeps supported navigation and section order", 
   await expect(productionSystem).toContainText("Request → route → review → delivery brief");
   expect(await productionSystem.evaluate((element) => element.nextElementSibling?.id)).toBe("process");
 
-  const additionalClientWork = page.locator("#client-voices + section");
+  const additionalClientWork = page.locator("#process + section");
   await expect(additionalClientWork.getByRole("heading", {
     name: "The route stays visible where judgment matters.",
   })).toBeVisible();

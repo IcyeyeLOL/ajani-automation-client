@@ -261,6 +261,8 @@ export default function Home() {
           </div>
         </section>
 
+        <TestimonialPipeline />
+
         <section className={`${styles.section} ${styles.solutionsSection}`} id="solutions">
           <Reveal className={styles.sectionHead}>
             <div className={styles.headMain}>
@@ -366,8 +368,6 @@ export default function Home() {
             stepWhenClassName={styles.stepWhen}
           />
         </section>
-
-        <TestimonialPipeline />
 
         <section className={`${styles.section} ${styles.additionalCases}`} aria-labelledby="additional-cases-title">
           <Reveal className={styles.additionalCaseCopy}>
