@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BuildPostForm } from "@/components/admin/build-post-form";
 import { AdminBuildsShell } from "@/components/admin/builds-shell";
 import { ConversationThread } from "@/components/builds/conversation-thread";
+import { openQuestions } from "@/lib/builds/conversation";
 import { PostTime } from "@/components/builds/post-time";
 import { loadAdminBuildDetail, sampleAdminBuildDetail } from "@/lib/admin/builds";
 import { isSampleMode } from "@/lib/admin/sample-mode";
@@ -32,6 +33,8 @@ export default async function AdminBuildPage({ params }: { params: Promise<{ bui
   const build = result.detail;
   // From the whole thread, not just the posts loaded below.
   const { openQuestions: questionsOut, waitingOn } = build.conversation;
+  // An open question older than the posts loaded below would otherwise be counted but not shown.
+  const olderQuestion = build.conversation.openQuestion && !openQuestions(build.thread).some((message) => message.body === build.conversation.openQuestion) ? build.conversation.openQuestion : null;
 
   return <AdminBuildsShell sampleMode={sampleMode}>
     <Link className="admin-builds-back" href="/admin/builds">← All client builds</Link>
@@ -57,6 +60,7 @@ export default async function AdminBuildPage({ params }: { params: Promise<{ bui
         </header>
         <div className="admin-build-conversation-body">
           {build.threadTotal > build.thread.length ? <p className="admin-data-notice" role="status">Showing the newest {build.thread.length} of {build.threadTotal} posts.</p> : null}
+          {olderQuestion ? <p className="admin-data-notice" role="status"><b>Still open, asked earlier:</b> {olderQuestion}</p> : null}
           <ConversationThread clientName={build.client.name || build.client.business} closed={build.status === "cancelled"} thread={build.thread} viewer="ajani" />
           <BuildPostForm buildId={build.id} clientEmail={build.client.email} clientReachable={build.client.reachable} sampleMode={sampleMode} status={build.status} />
         </div>

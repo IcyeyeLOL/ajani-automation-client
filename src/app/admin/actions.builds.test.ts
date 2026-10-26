@@ -141,6 +141,26 @@ describe("posting on a client build", () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  it("refuses a question on a closed build, but allows an update or a reopening", async () => {
+    const original = rows.build_requests;
+    rows.build_requests = { ...original, status: "cancelled" };
+    try {
+      const refused = await postBuildUpdateAction(initialAdminActionState, form({ buildId, kind: "question", body: "Do you still want this?" }));
+      expect(refused.status).toBe("error");
+      expect(refused.message).toContain("closed");
+      expect(mocks.rpc).not.toHaveBeenCalled();
+      const closing = await postBuildUpdateAction(initialAdminActionState, form({ buildId, kind: "question", body: "Anything else?", status: "cancelled" }));
+      expect(closing.status).toBe("error");
+      expect(mocks.rpc).not.toHaveBeenCalled();
+      const update = await postBuildUpdateAction(initialAdminActionState, form({ buildId, kind: "update", body: "Closed as agreed." }));
+      expect(update.status).toBe("success");
+      const reopened = await postBuildUpdateAction(initialAdminActionState, form({ buildId, kind: "question", body: "Shall we restart?", status: "in_progress" }));
+      expect(reopened.status).toBe("success");
+    } finally {
+      rows.build_requests = original;
+    }
+  });
+
   it("explains a stage it is already at", async () => {
     mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: "nothing_to_post" } });
     const result = await postBuildUpdateAction(initialAdminActionState, form({ buildId, status: "live" }));

@@ -580,6 +580,16 @@ export async function postBuildUpdateAction(_state: AdminActionState, formData: 
   let stage: string;
   try {
     const admin = createSupabaseAdminClient();
+    // A question on a closed build cannot be answered: the client's reply box is off there.
+    if (post.kind === "question" && post.body) {
+      let closed = post.status === "cancelled";
+      if (!closed && !post.status) {
+        const { data: current, error: currentError } = await admin.from("build_requests").select("status").eq("id", post.buildId).maybeSingle();
+        if (currentError) throw currentError;
+        closed = current?.status === "cancelled";
+      }
+      if (closed) return { status: "error", message: "This build is closed, so the client cannot answer a question. Post it as an update, or move the build to another stage in the same post." };
+    }
     const { data, error } = await admin.rpc("post_build_update", {
       p_build_request_id: post.buildId,
       p_actor: access.userId,
