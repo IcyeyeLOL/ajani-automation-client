@@ -84,6 +84,7 @@ const writes: Record<string, () => Promise<AdminActionState>> = {
   })),
   syncDripifyAction: () => actions.syncDripifyAction(initialAdminActionState, form({})),
   syncConnectorAction: () => actions.syncConnectorAction(initialAdminActionState, form({ connector: "youtube" })),
+  postBuildUpdateAction: () => actions.postBuildUpdateAction(initialAdminActionState, form({ buildId: "5210b79a-90eb-4218-82c2-32d7eea6f429", kind: "update", body: "Calendar connected.", status: "in_progress" })),
 };
 
 /** Actions that never write business numbers: signing in and out, and the switch itself. */

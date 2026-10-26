@@ -36,6 +36,8 @@ import { dripifySyncMessage, syncDripifyMetrics } from "@/lib/connectors/dripify
 import { connectorMessage, isConnectorId, syncConnector } from "@/lib/connectors/registry";
 import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/admin/sample-mode";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildStatusLabel, parseAjaniBuildPost, type AjaniBuildPost } from "@/lib/builds/conversation";
+import { appUrl, recordBuildMessageEmail, sendBuildMessageEmail } from "@/lib/notifications/build-message";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminClerkUser("/admin/login");
@@ -556,6 +558,103 @@ function amount(value: number, metric: LoggedMetric) {
   const label = shortMetricLabel(metric.label);
   const words = /^[A-Z]{2}/.test(label) ? label : `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   return `${formatMetricValue(value, metric.unit).replace(/ h$/, "")} ${words}`;
+}
+
+/**
+ * Posts an update or question on a client's build, moves its stage, or both.
+ * The post shows in the client's portal at once; the client is emailed when
+ * the box is ticked. A failed email never undoes the post.
+ */
+export async function postBuildUpdateAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const access = await authorizeAdminAction();
+  if (access.status === "refused") return access.state;
+  const refused = await refusedInSampleMode(formData);
+  if (refused) return refused;
+  const parsed = parseAjaniBuildPost(formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  const post = parsed.value;
+
+  let messageId: string | null;
+  let stage: string;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.rpc("post_build_update", {
+      p_build_request_id: post.buildId,
+      p_actor: access.userId,
+      p_status: post.status,
+      p_kind: post.kind,
+      p_body: post.body,
+      p_link_url: post.link?.url ?? null,
+      p_link_label: post.link?.label ?? null,
+    });
+    if (error) {
+      if (error.message.includes("nothing_to_post")) return { status: "error", message: "The build is already at that stage. Write an update, or pick a different stage." };
+      if (error.message.includes("build_request_not_found")) return { status: "error", message: "This build could not be found. Go back to the list and open it again." };
+      throw error;
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as { message_id: string | null; current_status: string } | null;
+    messageId = row?.message_id ?? null;
+    stage = row?.current_status ?? "";
+  } catch (error) {
+    console.error("Build update failed", { buildId: post.buildId, message: error instanceof Error ? error.message : "unknown" });
+    return { status: "error", message: "Nothing was posted. If this keeps happening, the build conversation migration may not be applied to this database yet." };
+  }
+
+  let emailNote = "";
+  if (messageId && post.notifyClient) {
+    const emailed = await emailClientAboutPost(post, messageId);
+    emailNote = emailed === "sent" ? " The client was emailed."
+      : emailed === "not_member" ? " No email was sent: the person who requested this build is no longer in the client's workspace."
+        : " The email to the client did not send, but the post is in their portal.";
+  }
+  revalidatePath("/admin/builds");
+  revalidatePath(`/admin/builds/${post.buildId}`);
+  const posted = messageId ? `${post.kind === "question" ? "Question" : "Update"} posted to the client's portal.` : `Stage moved to ${buildStatusLabel(stage)}.`;
+  const stageNote = messageId && post.status ? ` Stage is now ${buildStatusLabel(stage)}.` : "";
+  return { status: "success", message: `${posted}${stageNote}${emailNote}`, entityId: messageId ?? `stage:${stage}:${Date.now()}` };
+}
+
+/**
+ * Emails the person who requested the build, while they can still open its
+ * portal: an active member of a workspace that is not archived. Returns how it
+ * went; never throws.
+ */
+async function emailClientAboutPost(post: AjaniBuildPost, messageId: string): Promise<"sent" | "failed" | "not_member"> {
+  let result: "sent" | "failed";
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: build, error } = await admin.from("build_requests").select("title,created_by,organization_id").eq("id", post.buildId).maybeSingle();
+    if (error || !build) throw error ?? new Error("build_missing");
+    const [profileResult, membershipResult, organizationResult] = await Promise.all([
+      admin.from("profiles").select("email,deleted_at").eq("id", String(build.created_by)).maybeSingle(),
+      admin.from("organization_members").select("user_id").eq("organization_id", String(build.organization_id)).eq("user_id", String(build.created_by)).is("deleted_at", null).maybeSingle(),
+      admin.from("organizations").select("archived_at").eq("id", String(build.organization_id)).maybeSingle(),
+    ]);
+    const lookupError = profileResult.error ?? membershipResult.error ?? organizationResult.error;
+    if (lookupError) throw lookupError;
+    // A removed member must not receive what the portal now hides from them.
+    if (!membershipResult.data || organizationResult.data?.archived_at || profileResult.data?.deleted_at) return "not_member";
+    const profile = profileResult.data;
+    const title = typeof build.title === "string" && build.title ? build.title : "your build";
+    const question = post.kind === "question";
+    result = await sendBuildMessageEmail({
+      to: typeof profile?.email === "string" ? profile.email : "",
+      subject: question ? `Ajani has a question about ${title}` : `New update on ${title}`,
+      eyebrow: question ? "Question from Ajani" : "Build update",
+      heading: title,
+      intro: question ? "Ajani needs a quick answer to keep this build moving." : "Here is the latest on your build.",
+      body: post.body ?? "",
+      link: post.link ? { url: post.link.url, label: post.link.label ?? "Open link" } : null,
+      ctaUrl: `${appUrl()}/portal/builds/${post.buildId}#conversation`,
+      ctaLabel: question ? "Answer in your portal" : "Open your portal",
+      idempotencyKey: `build-message-${messageId}`,
+    });
+  } catch (error) {
+    console.error("Build update email failed", { buildId: post.buildId, message: error instanceof Error ? error.message : "unknown" });
+    result = "failed";
+  }
+  await recordBuildMessageEmail(messageId, result);
+  return result;
 }
 
 /** "a", "a and b", "a, b and c". */

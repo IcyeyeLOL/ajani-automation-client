@@ -148,3 +148,12 @@
 .admin-bar-pair i.admin-bar-stack { display:flex; flex-direction:column-reverse; overflow:hidden; }.admin-bar-stack span { display:block; flex:0 1 0; min-height:0; background:var(--reply-color); }
 .admin-chart-foot > div:first-child { flex-wrap:wrap; row-gap:6px; }.admin-chart-foot span.admin-reply-key i { background:var(--reply-color); }.admin-chart-foot span.admin-reply-heading { margin-right:-7px; }
 .admin-bar-tip small.admin-tip-source { display:flex; align-items:center; gap:5px; }.admin-tip-source i { width:6px; height:6px; border-radius:2px; background:var(--reply-color); }
+
+/* Sidebar links to pages with their own URL (client builds), styled like the section buttons. */
+.admin-sidebar nav a { display:flex; align-items:center; gap:14px; width:100%; min-height:46px; padding:0 11px; border-radius:8px; color:#a89f96; font-size:13px; transition:background .16s ease,color .16s ease; }
+.admin-sidebar nav a span { color:#6f6760; font:9px "Consolas",monospace; }
+.admin-sidebar nav a:hover { background:#292622; color:#fff; }
+.admin-sidebar nav a[aria-current="page"] { background:#f7f2eb; color:#1c1a18; font-weight:650; }
+.admin-sidebar nav a[aria-current="page"] span { color:var(--admin-red); }
+.admin-sidebar nav a:focus-visible { outline:2px solid #f7f2eb; outline-offset:2px; }
+@media (max-width:1000px) { .admin-sidebar nav a { flex:0 0 auto; width:auto; min-height:38px; padding:0 10px; }.admin-sidebar nav a span { display:none; } }

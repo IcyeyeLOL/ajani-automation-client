@@ -109,6 +109,7 @@ export function AdminDashboard({ data, catalog, channels, goals, connections, re
       </div>
       <nav aria-label="Admin sections">
         {sections.map((section) => <button aria-current={activeSection === section.id ? "page" : undefined} key={section.id} onClick={() => setActiveSection(section.id)} type="button"><span>{section.number}</span>{section.label}</button>)}
+        <Link href="/admin/builds"><span>08</span>Client builds</Link>
       </nav>
       <div className="admin-sidebar-foot">
         <p><i className={sampleMode ? "sample" : data.dataConnected ? "online" : "offline"} />{sampleMode ? "SAMPLE DATA SHOWN, NOT LIVE" : data.dataConnected ? "LIVE DATA CONNECTED" : "DATA CONNECTION NEEDED"}</p>

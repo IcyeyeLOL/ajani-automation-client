@@ -778,3 +778,41 @@
   .portalNav a, .newRequest, .requestCard, .buildRow { transition: none; }
   .loadingHeader i, .loadingMetrics i, .loadingGrid i { animation: none; }
 }
+
+/* Build conversations: an unanswered Ajani question, flagged where the client looks first. */
+.questionBanner {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px 18px 14px 14px;
+  border: 1px solid #e2c3a0;
+  border-radius: 14px;
+  background: linear-gradient(100deg, #fbf1e4, #fffaf3 70%);
+  color: #5e3f26;
+  text-decoration: none;
+  box-shadow: 0 10px 28px rgba(150, 98, 52, .1);
+  transition: border-color .16s ease, transform .16s ease;
+}
+.questionBanner:hover { border-color: #b8763f; transform: translateY(-1px); }
+.questionBanner:focus-visible { outline: 2px solid var(--portal-crimson); outline-offset: 3px; }
+.questionBanner > i { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #b8763f; color: #fff; font: 800 17px var(--font-display), system-ui, sans-serif; font-style: normal; }
+.questionBanner > span { display: grid; gap: 3px; min-width: 0; }
+.questionBanner b { color: #3d2716; font-size: 14px; }
+.questionBanner small { overflow: hidden; color: #7a5a40; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.questionBanner em { color: var(--portal-crimson); font: 700 11px var(--font-mono), ui-monospace, monospace; font-style: normal; white-space: nowrap; }
+.questionPill { display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 9px; border-radius: 999px; background: #b8763f; color: #fff; font: 700 8px var(--font-mono), ui-monospace, monospace; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.statusPill + .questionPill { margin-left: 6px; }
+.questionPill::before { width: 5px; height: 5px; border-radius: 50%; background: #fff; content: ""; }
+
+@media (max-width: 600px) {
+  .questionBanner { grid-template-columns: 32px minmax(0, 1fr); padding: 13px; }
+  .questionBanner > i { width: 32px; height: 32px; font-size: 15px; }
+  .questionBanner em { grid-column: 2; }
+  .questionBanner small { white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .questionBanner { transition: none; }
+}

@@ -1,0 +1,272 @@
+/* One build's conversation, shared by the client portal and the control desk.
+   Each page can retune the palette through the --talk-* variables. */
+
+.thread {
+  --talk-ink: #1c1918;
+  --talk-muted: #746d68;
+  --talk-line: #ddd6cf;
+  --talk-card: #fffdf9;
+  --talk-mine: #f6f1ea;
+  --talk-accent: #8f0a27;
+  --talk-sand: #c9a27e;
+  --talk-question: #fbf3e7;
+  --talk-question-line: #d9b48a;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The spine that joins every post. */
+.thread::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 17px;
+  width: 1px;
+  background: linear-gradient(var(--talk-line), var(--talk-line) 80%, transparent);
+  content: "";
+}
+
+.post {
+  position: relative;
+  display: grid;
+  grid-template-columns: 35px minmax(0, 1fr);
+  gap: 13px;
+  align-items: start;
+  animation: talk-rise .42s cubic-bezier(.2, .78, .28, 1) both;
+}
+
+.post:nth-last-child(2) { animation-delay: .05s; }
+.post:last-child { animation-delay: .1s; }
+
+@keyframes talk-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  border: 3px solid var(--talk-card);
+  border-radius: 50%;
+  background: #241f1d;
+  color: #f2c9cf;
+  font: 700 12px var(--font-display), system-ui, sans-serif;
+  letter-spacing: -.02em;
+  box-shadow: 0 0 0 1px var(--talk-line);
+}
+
+.post[data-author="client"] .mark {
+  background: #efe3d4;
+  color: #6f4d33;
+  font-size: 11px;
+}
+
+.post article {
+  min-width: 0;
+  padding: 15px 17px 16px;
+  border: 1px solid var(--talk-line);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--talk-card);
+}
+
+.post[data-mine="true"] article { background: var(--talk-mine); }
+
+.post[data-kind="question"] article {
+  border-left: 3px solid var(--talk-sand);
+}
+
+.post[data-open] article {
+  border-color: var(--talk-question-line);
+  border-left-color: #b8763f;
+  background: var(--talk-question);
+  box-shadow: 0 10px 26px rgba(150, 98, 52, .1);
+}
+
+.post header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+}
+
+.post header b {
+  color: var(--talk-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.post header time {
+  margin-left: auto;
+  color: var(--talk-muted);
+  font: 9px var(--font-mono), ui-monospace, monospace;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+.tag {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #ece5de;
+  color: #6a5f58;
+  font: 700 8px var(--font-mono), ui-monospace, monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.post[data-kind="update"] .tag { background: #f4e4e8; color: var(--talk-accent); }
+.post[data-kind="question"] .tag { background: #f3e6d6; color: #7d5530; }
+.post[data-open] .tag { background: #b8763f; color: #fff; }
+
+.post article > p {
+  margin: 9px 0 0;
+  color: #3f3835;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: 13px;
+  padding: 9px 13px;
+  border: 1px solid var(--talk-line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--talk-accent);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+
+.link:hover {
+  border-color: var(--talk-accent);
+  box-shadow: 0 6px 16px rgba(143, 10, 39, .1);
+  transform: translateY(-1px);
+}
+
+.link:focus-visible,
+.composer textarea:focus-visible,
+.composer button:focus-visible {
+  outline: 2px solid var(--talk-accent, #8f0a27);
+  outline-offset: 2px;
+}
+
+.link i { font-style: normal; }
+
+.empty {
+  margin: 24px 0 0;
+  padding: 18px;
+  border: 1px dashed #ddd6cf;
+  border-radius: 10px;
+  color: #746d68;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The reply box under the thread. */
+.composer {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #ddd6cf;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.composer label {
+  color: #5d5550;
+  font: 700 9px var(--font-mono), ui-monospace, monospace;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 104px;
+  padding: 12px 13px;
+  border: 1px solid #ddd6cf;
+  border-radius: 10px;
+  background: #fcfaf7;
+  color: #1c1918;
+  font: 14px/1.55 var(--font-display), system-ui, sans-serif;
+  resize: vertical;
+}
+
+.composer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.composer footer p {
+  margin: 0;
+  color: #746d68;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.composer footer p[data-status="error"] { color: #9c263d; }
+.composer footer p[data-status="success"] { color: #2e6d58; }
+
+.composer button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9px;
+  background: #8f0a27;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background .16s ease, transform .16s ease;
+}
+
+.composer button:hover { background: #6f071d; transform: translateY(-1px); }
+.composer button:disabled { cursor: wait; opacity: .6; transform: none; }
+
+.hint {
+  color: #9a918a;
+  font: 9px var(--font-mono), ui-monospace, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post { animation: none; }
+}
+
+@media (max-width: 600px) {
+  .post { grid-template-columns: 28px minmax(0, 1fr); gap: 9px; }
+  .thread::before { left: 14px; }
+  .mark { width: 28px; height: 28px; border-width: 2px; font-size: 10px; }
+  .post article { padding: 13px 13px 14px; }
+  .post header time { width: 100%; margin-left: 0; }
+  .composer footer { align-items: stretch; flex-direction: column; }
+  .composer button { width: 100%; }
+}
