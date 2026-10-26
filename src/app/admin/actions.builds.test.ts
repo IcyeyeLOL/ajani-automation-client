@@ -102,7 +102,7 @@ describe("posting on a client build", () => {
     mocks.fetch.mockResolvedValueOnce(new Response("{}", { status: 500 }));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await postBuildUpdateAction(initialAdminActionState, form({ buildId, kind: "question", body: "Which calendar?", notifyClient: "on" }));
-    expect(result).toMatchObject({ status: "success", message: "Question posted to the client's portal. The email to the client did not send, but the post is in their portal." });
+    expect(result).toMatchObject({ status: "success", message: "Question posted to the client's portal. The email to the client may not have sent, but the post is in their portal." });
     expect(mocks.update).toHaveBeenCalledWith("build_messages", { email_status: "failed" });
   });
 

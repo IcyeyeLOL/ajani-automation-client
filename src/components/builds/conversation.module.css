@@ -30,6 +30,9 @@
   content: "";
 }
 
+/* Links to #open-question and #reply land clear of the sticky phone header. */
+.post, .composer { scroll-margin-top: 96px; }
+
 .post {
   position: relative;
   display: grid;

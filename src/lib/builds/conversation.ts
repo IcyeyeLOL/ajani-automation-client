@@ -102,20 +102,19 @@ export type ConversationState = {
  * message waits on Ajani until Ajani posts after it.
  */
 export function conversationState(thread: BuildThreadMessage[], build?: { flaggedAt: string | null; status: string }): ConversationState {
-  const open = openQuestions(thread);
+  // A closed build is finished business on both sides.
+  const closed = build?.status === "cancelled";
+  const open = closed ? [] : openQuestions(thread);
   const lastClient = lastIndex(thread, (message) => message.author === "client");
   const lastAjani = lastIndex(thread, (message) => message.author === "ajani");
   const clientAt = lastClient >= 0 ? thread[lastClient].timestamp : null;
-  const flagged = build?.status === "needs_attention" && (
-    clientAt === null
-    || (build.flaggedAt !== null && clientAt < build.flaggedAt)
-    || (build.flaggedAt === null && lastClient < lastAjani)
-  );
+  // With no logged move (older builds, hand edits), "Needs input" asks only until the client first writes.
+  const flagged = build?.status === "needs_attention" && (clientAt === null || (build.flaggedAt !== null && clientAt < build.flaggedAt));
   const last = thread.at(-1);
   return {
     openQuestions: open.length,
     openQuestion: open.at(-1)?.body ?? null,
-    waitingOn: open.length > 0 || flagged ? "client" : lastClient > lastAjani ? "ajani" : null,
+    waitingOn: closed ? null : open.length > 0 || flagged ? "client" : lastClient > lastAjani ? "ajani" : null,
     postCount: thread.length,
     lastPost: last ? { author: last.author, body: last.body, timestamp: last.timestamp } : null,
   };
@@ -180,7 +179,7 @@ export type AjaniBuildPost = {
 
 /** The control desk's post form: an update or question, a new stage, or both. */
 export function parseAjaniBuildPost(formData: FormData): { ok: true; value: AjaniBuildPost } | { ok: false; message: string } {
-  const parsed = ajaniPostFields.safeParse(Object.fromEntries(formData));
+  const parsed = ajaniPostFields.safeParse(formFields(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message || "Check the post and try again." };
   const { body, buildId, kind, linkLabel, linkUrl, notifyClient, status } = parsed.data;
   if (!body && !status) return { ok: false, message: "Write an update or question, or pick a new stage." };
@@ -209,10 +208,21 @@ const clientMessageFields = z.object({
 });
 
 export function parseClientBuildMessage(formData: FormData): { ok: true; value: { body: string; buildId: string } } | { ok: false; message: string } {
-  const parsed = clientMessageFields.safeParse(Object.fromEntries(formData));
+  const parsed = clientMessageFields.safeParse(formFields(formData));
   return parsed.success
     ? { ok: true, value: parsed.data }
     : { ok: false, message: parsed.error.issues[0]?.message || "Check your message and try again." };
+}
+
+/**
+ * A form upload sends each line break in a text box as "\r\n", while the box
+ * counted it as one character, so a message at the box's limit would read as
+ * too long. Line breaks are stored as "\n".
+ */
+function formFields(formData: FormData) {
+  const fields: Record<string, unknown> = Object.fromEntries(formData);
+  if (typeof fields.body === "string") fields.body = fields.body.replace(/\r\n?/g, "\n");
+  return fields;
 }
 
 function lastIndex<T>(items: T[], matches: (item: T) => boolean) {

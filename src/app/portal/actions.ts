@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { parseClientBuildMessage } from "@/lib/builds/conversation";
 import { hasClerkCredentials } from "@/lib/clerk/config";
 import { provisionClerkWorkspace } from "@/lib/clerk/provisioning";
+import { adminBuildLink } from "@/lib/admin/return-path";
 import { appUrl, recordBuildMessageEmail, sendBuildMessageEmail } from "@/lib/notifications/build-message";
 import { portalSampleMode } from "@/lib/portal/dashboard";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -71,7 +72,8 @@ async function notifyAjani(buildId: string, messageId: string, body: string) {
       intro: `${client} sent a message on this build.`,
       body,
       link: null,
-      ctaUrl: `${appUrl()}/admin/builds/${buildId}`,
+      // Through the desk's unlock page, which returns to this build.
+      ctaUrl: adminBuildLink(appUrl(), buildId),
       ctaLabel: "Reply in the control desk",
       idempotencyKey: `build-message-${messageId}`,
     });

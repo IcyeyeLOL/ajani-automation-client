@@ -177,6 +177,17 @@ describe("admin actions while sample data is on", () => {
     expect(mocks.cookieSet).toHaveBeenCalledWith("ajani_admin_sample", "", expect.objectContaining({ maxAge: 0, path: "/admin" }));
     expect(mocks.redirect).toHaveBeenLastCalledWith("/admin/login");
   });
+
+  it("returns an unlock to the build an email linked to, and nowhere else", async () => {
+    mocks.requireAdminClerkUser.mockResolvedValue("user_admin");
+    mocks.consumeAdminLoginAllowance.mockResolvedValue(true);
+    mocks.headers.mockResolvedValue(new Headers({ "x-forwarded-for": "203.0.113.9" }));
+    const build = "/admin/builds/21000000-0000-4000-8000-000000000001";
+    await actions.unlockAdminAction(initialAdminActionState, form({ accessKey: "team-access-key", next: build }));
+    expect(mocks.redirect).toHaveBeenLastCalledWith(build);
+    await actions.unlockAdminAction(initialAdminActionState, form({ accessKey: "team-access-key", next: "https://evil.example/admin/builds" }));
+    expect(mocks.redirect).toHaveBeenLastCalledWith("/admin");
+  });
 });
 
 describe("sample data switch", () => {

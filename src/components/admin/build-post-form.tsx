@@ -7,7 +7,17 @@ import { withRenewedSignIn } from "@/lib/admin/fresh-session";
 import { BUILD_LINK_LABEL_MAX_LENGTH, BUILD_MESSAGE_MAX_LENGTH, DELIVERY_STAGES, buildStatusLabel } from "@/lib/builds/conversation";
 
 // Every desk save renews the sign-in first (see fresh-session.ts).
-const postBuildUpdate = withRenewedSignIn(postBuildUpdateAction);
+const renewedPost = withRenewedSignIn(postBuildUpdateAction);
+
+// A dropped connection or a stale page throws instead of answering; without this
+// the error screen replaces the form and everything typed is lost.
+async function postBuildUpdate(state: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  try {
+    return await renewedPost(state, formData);
+  } catch {
+    return { status: "error", message: "The post did not reach the server. Everything is still in the form; check your connection and post again." };
+  }
+}
 
 /** clientReachable: the requester is still in the client's workspace, so they may be emailed. */
 type Props = { buildId: string; clientEmail: string; clientReachable: boolean; sampleMode: boolean; status: string };
@@ -25,10 +35,12 @@ function PostFields({ action, buildId, clientEmail, clientReachable, pending, sa
   const [kind, setKind] = useState<"update" | "question">("update");
   // Only a written post is emailed; a stage move alone is not.
   const [hasBody, setHasBody] = useState(false);
+  const [wantsEmail, setWantsEmail] = useState(true);
   const canEmail = Boolean(clientEmail) && clientReachable;
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sampleMode) return;
+    // Enter in a field while posting must not post twice.
+    if (sampleMode || pending) return;
     const formData = new FormData(event.currentTarget);
     startTransition(() => action(formData));
   };
@@ -68,7 +80,7 @@ function PostFields({ action, buildId, clientEmail, clientReachable, pending, sa
       </label>
       <label className="admin-post-notify">
         {/* A disabled box is left out of the form, so nothing promises an email that will not go. */}
-        <input defaultChecked={canEmail} disabled={!canEmail || !hasBody} name="notifyClient" type="checkbox" />
+        <input checked={canEmail && hasBody && wantsEmail} disabled={!canEmail || !hasBody} name="notifyClient" onChange={(event) => setWantsEmail(event.currentTarget.checked)} type="checkbox" />
         <span><b>Email the client</b><small>{!clientEmail ? "No email on file for this client, so the post stays in their portal only."
           : !clientReachable ? "The person who requested this build is no longer in the client's workspace, so nothing is emailed."
             : !hasBody ? "Write an update or question to email it. A stage move alone is not emailed."

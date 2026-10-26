@@ -77,7 +77,8 @@ describe("a client writing on their build", () => {
     const body = JSON.parse(String((mocks.fetch.mock.calls[0] as [string, RequestInit])[1].body)) as { to: string[]; subject: string; html: string };
     expect(body.to).toEqual(["owner@example.com"]);
     expect(body.subject).toBe("Northline Dental wrote about Text back every missed call");
-    expect(body.html).toContain(`https://ajaniflow.com/admin/builds/${buildId}`);
+    // Through the unlock page, which returns to the build.
+    expect(body.html).toContain(`https://ajaniflow.com/admin/login?next=%2Fadmin%2Fbuilds%2F${buildId}`);
     expect(mocks.update).toHaveBeenCalledWith("build_messages", { email_status: "sent" });
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/portal/builds/${buildId}`);
   });

@@ -24,13 +24,13 @@ export default async function BuildDetailPage({ params }: PageProps<"/portal/bui
   const reference = build.id.slice(0, 8).toUpperCase();
   // Both cover the whole thread, so an open question older than the posts shown still reads here.
   const waitingCount = build.openQuestions;
-  const latestQuestion = build.openQuestion ?? openQuestions(thread).at(-1)?.body ?? null;
+  const latestQuestion = waitingCount ? build.openQuestion ?? openQuestions(thread).at(-1)?.body ?? null : null;
   // Asked before the newest posts shown: print it in full, or the client cannot see what to answer.
   const olderQuestion = latestQuestion && !openQuestions(thread).some((message) => message.body === latestQuestion) ? latestQuestion : null;
 
   return <div className={styles.page}>
     <Link className={styles.textBack} href="/portal/builds">← Back to requests</Link>
-    {waitingCount ? <a className={styles.questionBanner} href="#conversation">
+    {waitingCount ? <a className={styles.questionBanner} href="#open-question">
       <i aria-hidden="true">?</i>
       <span><b>{waitingCount === 1 ? "Ajani has a question for you." : `Ajani has ${waitingCount} questions for you.`}</b><small>{latestQuestion ? excerpt(latestQuestion) : "Open the conversation below to answer."}</small></span>
       <em>Answer <span aria-hidden="true">→</span></em>
@@ -59,8 +59,8 @@ export default async function BuildDetailPage({ params }: PageProps<"/portal/bui
             <small>{threadTotal ? `${threadTotal} ${threadTotal === 1 ? "post" : "posts"}` : "Nothing yet"}</small>
           </header>
           {threadTotal > thread.length ? <p className={styles.sectionEmpty}>Showing the newest {thread.length} of {threadTotal} posts.</p> : null}
-          {olderQuestion ? <blockquote><b>Ajani asked earlier, still open:</b> {olderQuestion}</blockquote> : null}
-          <ConversationThread clientName="You" thread={thread} viewer="client" />
+          {olderQuestion ? <blockquote id="open-question"><b>Ajani asked earlier, still open:</b> {olderQuestion}</blockquote> : null}
+          <ConversationThread clientName="You" closed={build.status === "cancelled"} thread={thread} viewer="client" />
           <BuildMessageForm answering={waitingCount > 0} buildId={build.id} />
         </article>
 
@@ -117,7 +117,7 @@ export default async function BuildDetailPage({ params }: PageProps<"/portal/bui
           <div className={styles.detailProgress}><i style={{ width: build.progress + "%" }} /></div>
           <h2>{build.statusLabel}</h2>
           <p>{build.nextStep}</p>
-          {build.needsClient ? <a href="#conversation">{waitingCount ? "Answer Ajani" : "Reply to Ajani"} <i>→</i></a> : null}
+          {build.needsClient ? <a href={waitingCount ? "#open-question" : "#reply"}>{waitingCount ? "Answer Ajani" : "Reply to Ajani"} <i>→</i></a> : null}
         </section>
 
         <section className={styles.timelineCard}>

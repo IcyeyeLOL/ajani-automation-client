@@ -79,9 +79,16 @@ describe("build threads", () => {
     expect(waitingOn(updated, { status: "needs_attention", flaggedAt: at(2) })).toBeNull();
     // Moved on from Needs input, the flag no longer counts.
     expect(waitingOn(thread, { status: "in_progress", flaggedAt: at(2) })).toBe("ajani");
-    // An older Needs input build with no logged move waits on the client until they write after Ajani.
+    // An older Needs input build with no logged move waits on the client until they first write, and a later Ajani post does not ask again.
     expect(waitingOn([], { status: "needs_attention", flaggedAt: null })).toBe("client");
     expect(waitingOn(shapeBuildThread([row("u", "ajani", "update", 1), row("m", "client", "message", 2)]), { status: "needs_attention", flaggedAt: null })).toBe("ajani");
+    expect(waitingOn(shapeBuildThread([row("m", "client", "message", 1), row("u", "ajani", "update", 2)]), { status: "needs_attention", flaggedAt: null })).toBeNull();
+  });
+
+  it("waits on nobody and asks nothing once a build is closed", () => {
+    const thread = shapeBuildThread([row("q", "ajani", "question", 1), row("m", "client", "message", 2), row("q2", "ajani", "question", 3)]);
+    expect(conversationState(thread, { status: "cancelled", flaggedAt: null })).toMatchObject({ waitingOn: null, openQuestions: 0, openQuestion: null });
+    expect(waitingOn(shapeBuildThread([row("m", "client", "message", 1)]), { status: "cancelled", flaggedAt: null })).toBeNull();
   });
 
   it("finds when a build was last put at Needs input", () => {
@@ -141,6 +148,16 @@ describe("the control desk post form", () => {
 describe("the client message form", () => {
   it("trims and accepts a message", () => {
     expect(parseClientBuildMessage(form({ buildId, body: "  Use the front desk calendar.  " }))).toEqual({ ok: true, value: { buildId, body: "Use the front desk calendar." } });
+  });
+
+  it("counts a line break once, as the text box does", () => {
+    // The box allowed 4,000 characters; the upload sent each of the 99 breaks as two.
+    const lines = Array.from({ length: 100 }, () => "x".repeat(39)).join("\r\n");
+    const parsed = parseClientBuildMessage(form({ buildId, body: lines }));
+    expect(parsed.ok && parsed.value.body.length).toBe(3_999);
+    expect(parsed.ok && parsed.value.body.includes("\r")).toBe(false);
+    const update = parseAjaniBuildPost(form({ buildId, body: lines }));
+    expect(update.ok && update.value.body?.length).toBe(3_999);
   });
 
   it.each([

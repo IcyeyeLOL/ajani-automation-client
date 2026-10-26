@@ -33,14 +33,14 @@ export type AdminBuildRow = {
 
 export type AdminBuildViewId = "all" | "you" | "client" | "active" | "live" | "closed";
 
-type AdminBuildView = { id: AdminBuildViewId; label: string; notStatuses?: string[]; statuses?: string[]; waitingOn?: BuildMessageAuthor };
+type AdminBuildView = { id: AdminBuildViewId; label: string; statuses?: string[]; waitingOn?: BuildMessageAuthor };
 
 /** The desk's list views. Each filters every build, not just one page of them. */
 export const ADMIN_BUILD_VIEWS: AdminBuildView[] = [
   { id: "all", label: "All" },
   { id: "you", label: "Waiting on you", waitingOn: "ajani" },
   { id: "client", label: "Waiting on client", waitingOn: "client" },
-  { id: "active", label: "In delivery", notStatuses: ["live", "cancelled"] },
+  { id: "active", label: "In delivery", statuses: ["paid", "in_review", "in_progress", "needs_attention"] },
   { id: "live", label: "Live", statuses: ["live"] },
   { id: "closed", label: "Closed", statuses: ["cancelled"] },
 ];
@@ -98,7 +98,8 @@ export async function loadAdminBuildList(viewId: unknown = "all", requestedPage:
   try {
     const admin = createSupabaseAdminClient();
     // The conversation view has one row per build, so filters and counts cover every build.
-    const countResults = await Promise.all(ADMIN_BUILD_VIEWS.map((item) => viewQuery(admin, item, "build_request_id", { count: "exact", head: true })));
+    // Stage-only counts read the builds table; only "who is waiting" needs the view's work.
+    const countResults = await Promise.all(ADMIN_BUILD_VIEWS.map((item) => viewQuery(admin, item, item.waitingOn ? "build_request_id" : "id", { count: "exact", head: true }, item.waitingOn ? "build_conversation_state" : "build_requests")));
     const countError = countResults.find((result) => result.error)?.error;
     if (countError) throw countError;
     const counts = Object.fromEntries(ADMIN_BUILD_VIEWS.map((item, index) => [item.id, countResults[index].count ?? 0])) as Record<AdminBuildViewId, number>;
@@ -277,18 +278,16 @@ export function sampleAdminBuildDetail(buildId: string, sample: SampleBuildWorks
   };
 }
 
-function viewQuery(admin: AdminClient, view: AdminBuildView, columns: string, options?: { count: "exact"; head: boolean }) {
-  let query = admin.from("build_conversation_state").select(columns, options);
+function viewQuery(admin: AdminClient, view: AdminBuildView, columns: string, options?: { count: "exact"; head: boolean }, table: "build_conversation_state" | "build_requests" = "build_conversation_state") {
+  let query = admin.from(table).select(columns, options);
   if (view.waitingOn) query = query.eq("waiting_on", view.waitingOn);
   if (view.statuses) query = query.in("status", view.statuses);
-  if (view.notStatuses) query = query.not("status", "in", `(${view.notStatuses.join(",")})`);
   return query;
 }
 
 function viewMatches(view: AdminBuildView, row: AdminBuildRow) {
   if (view.waitingOn && row.waitingOn !== view.waitingOn) return false;
-  if (view.statuses && !view.statuses.includes(row.status)) return false;
-  return !view.notStatuses?.includes(row.status);
+  return !view.statuses || view.statuses.includes(row.status);
 }
 
 function pageFor(requested: unknown, total: number) {

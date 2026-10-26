@@ -4,9 +4,10 @@ import styles from "./conversation.module.css";
 
 /**
  * One build's conversation, as either side sees it. The viewer's own posts
- * read "You"; an unanswered question is marked until the client replies.
+ * read "You"; an unanswered question is marked until the client replies, or
+ * until the build is closed. The newest one is the page's #open-question.
  */
-export function ConversationThread({ clientName, thread, viewer }: { clientName: string; thread: BuildThreadMessage[]; viewer: "ajani" | "client" }) {
+export function ConversationThread({ clientName, closed = false, thread, viewer }: { clientName: string; closed?: boolean; thread: BuildThreadMessage[]; viewer: "ajani" | "client" }) {
   if (!thread.length) {
     return <p className={styles.empty}>
       {viewer === "client"
@@ -14,7 +15,9 @@ export function ConversationThread({ clientName, thread, viewer }: { clientName:
         : "Nothing posted yet. Your first update or question shows up in the client's portal right away."}
     </p>;
   }
-  const open = new Set(openQuestions(thread).map((message) => message.id));
+  const openList = closed ? [] : openQuestions(thread);
+  const open = new Set(openList.map((message) => message.id));
+  const newestOpen = openList.at(-1)?.id;
   return <ol className={styles.thread}>
     {thread.map((message) => {
       const fromAjani = message.author === "ajani";
@@ -23,7 +26,7 @@ export function ConversationThread({ clientName, thread, viewer }: { clientName:
       const tag = message.kind === "question"
         ? isOpen ? viewer === "client" ? "Question for you" : "Waiting on the client" : "Question"
         : message.kind === "update" ? "Update" : null;
-      return <li className={styles.post} data-author={message.author} data-kind={message.kind} data-mine={message.author === viewer} data-open={isOpen || undefined} key={message.id}>
+      return <li className={styles.post} data-author={message.author} data-kind={message.kind} data-mine={message.author === viewer} data-open={isOpen || undefined} id={message.id === newestOpen ? "open-question" : undefined} key={message.id}>
         <span aria-hidden="true" className={styles.mark}>{fromAjani ? "A" : initials(clientName)}</span>
         <article>
           <header>

@@ -58,8 +58,10 @@ export default async function BuildsPage({ searchParams }: PageProps<"/portal/bu
           <div className={styles.requestIndex}>{String(index + 1).padStart(2, "0")}</div>
           <div className={styles.requestCardMain}>
             <div className={styles.requestCardHead}>
-              <span className={styles.statusPill} data-status={build.status}><i />{build.statusLabel}</span>
-              {build.openQuestions ? <span className={styles.questionPill}>{build.openQuestions === 1 ? "Question for you" : `${build.openQuestions} questions for you`}</span> : null}
+              <span className={styles.requestCardPills}>
+                <span className={styles.statusPill} data-status={build.status}><i />{build.statusLabel}</span>
+                {build.openQuestions ? <span className={styles.questionPill}>{build.openQuestions === 1 ? "Question for you" : `${build.openQuestions} questions for you`}</span> : null}
+              </span>
               <small>{build.updated}</small>
             </div>
             <h2>{build.title}</h2>

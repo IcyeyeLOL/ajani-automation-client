@@ -38,6 +38,7 @@ import { clearSampleModeCookie, isSampleMode, setSampleModeCookie } from "@/lib/
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildStatusLabel, parseAjaniBuildPost, type AjaniBuildPost } from "@/lib/builds/conversation";
 import { appUrl, recordBuildMessageEmail, sendBuildMessageEmail } from "@/lib/notifications/build-message";
+import { adminReturnPath } from "@/lib/admin/return-path";
 
 export async function unlockAdminAction(_state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   const actor = await requireAdminClerkUser("/admin/login");
@@ -72,7 +73,8 @@ export async function unlockAdminAction(_state: AdminActionState, formData: Form
   await setAdminSessionCookie(configuration.sessionSecret);
   // Every session starts on real numbers; an older sample switch must not outlive it.
   await clearSampleModeCookie();
-  redirect("/admin");
+  // Back to the build an email linked to, or the desk overview.
+  redirect(adminReturnPath(formData.get("next")) ?? "/admin");
 }
 
 export async function logoutAdminAction() {
@@ -605,7 +607,7 @@ export async function postBuildUpdateAction(_state: AdminActionState, formData: 
     const emailed = await emailClientAboutPost(post, messageId);
     emailNote = emailed === "sent" ? " The client was emailed."
       : emailed === "not_member" ? " No email was sent: the person who requested this build is no longer in the client's workspace."
-        : " The email to the client did not send, but the post is in their portal.";
+        : " The email to the client may not have sent, but the post is in their portal.";
   }
   revalidatePath("/admin/builds");
   revalidatePath(`/admin/builds/${post.buildId}`);

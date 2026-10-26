@@ -544,7 +544,8 @@ function shapeActivity(
       id: stringValue(event.id) || `${buildId}-${timestamp}`,
       title: eventCopy.title,
       detail: build?.title || "Automation request",
-      href: buildId ? `/portal/builds/${buildId}` : "/portal/builds",
+      // A move to "Needs input" asks for an answer, so it opens the reply box.
+      href: buildId ? `/portal/builds/${buildId}${asksForInput(eventType, recordValue(event.payload)) ? "#reply" : ""}` : "/portal/builds",
       timestamp,
       when: formatRelativeDate(timestamp),
       tone: eventCopy.tone,
@@ -584,6 +585,10 @@ function shapeActivity(
     })),
   ];
   return derived.slice(0, 8);
+}
+
+function asksForInput(eventType: string, payload: Row) {
+  return eventType === "needs_attention" || (eventType === "status_changed" && stringValue(payload.to) === "needs_attention");
 }
 
 function activityCopy(eventType: string, payload: Row = {}): Pick<PortalActivity, "title" | "tone"> {

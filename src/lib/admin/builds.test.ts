@@ -106,6 +106,8 @@ describe("the client builds list", () => {
     const rows = Array.from({ length: 120 }, (_, index) => state(index, index === 119 ? "ajani" : index === 60 ? "client" : null, index % 40 === 5 ? "live" : index === 7 ? "cancelled" : "in_progress"));
     vi.mocked(createSupabaseAdminClient).mockReturnValue(fakeDatabase({
       build_conversation_state: rows,
+      // Stage-only counts read the builds table.
+      build_requests: rows.map((row) => ({ id: row.build_request_id, status: row.status })),
       organizations: [{ id: "org-1", business_name: "Northline Dental" }],
       profiles: [{ id: "dana", full_name: "Dana Whitfield" }],
     }) as unknown as ReturnType<typeof createSupabaseAdminClient>);

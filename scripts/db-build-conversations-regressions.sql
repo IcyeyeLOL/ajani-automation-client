@@ -18,7 +18,8 @@ insert into public.build_requests(id,organization_id,created_by,title,status) va
   ('21000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000001','talk-client','Synthetic quiet build','in_review'),
   ('21000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000001','talk-client','Synthetic needs input build','in_progress'),
   ('21000000-0000-4000-8000-000000000006','20000000-0000-4000-8000-000000000001','talk-client','Synthetic same moment build','in_progress'),
-  ('21000000-0000-4000-8000-000000000007','20000000-0000-4000-8000-000000000001','talk-client','Synthetic older flagged build','needs_attention');
+  ('21000000-0000-4000-8000-000000000007','20000000-0000-4000-8000-000000000001','talk-client','Synthetic older flagged build','needs_attention'),
+  ('21000000-0000-4000-8000-000000000008','20000000-0000-4000-8000-000000000001','talk-client','Synthetic closed build','in_progress');
 
 do $$
 declare
@@ -30,6 +31,7 @@ declare
   flag_build uuid := '21000000-0000-4000-8000-000000000005';
   same_moment_build uuid := '21000000-0000-4000-8000-000000000006';
   legacy_build uuid := '21000000-0000-4000-8000-000000000007';
+  closed_build uuid := '21000000-0000-4000-8000-000000000008';
   result record; conversation record; message uuid; failed boolean; index integer;
 begin
   ---------------------------------------------------------------------------
@@ -149,6 +151,17 @@ begin
   perform pg_temp.assert_true((select waiting_on = 'client' from public.build_conversation_state where build_request_id = legacy_build), 'an older Needs input build waits on the client');
   insert into public.build_messages(build_request_id,author_role,author_user_id,kind,body) values(legacy_build,'client','talk-client','message','Done.');
   perform pg_temp.assert_true((select waiting_on = 'ajani' from public.build_conversation_state where build_request_id = legacy_build), 'and the client reply hands it back');
+  insert into public.build_messages(build_request_id,author_role,author_user_id,kind,body) values(legacy_build,'ajani','admin-user','update','Thanks, testing now.');
+  perform pg_temp.assert_true((select waiting_on is null from public.build_conversation_state where build_request_id = legacy_build), 'a later Ajani post does not ask the client again');
+
+  -- A closed build waits on nobody, even with a question or a client message outstanding.
+  perform public.post_build_update(closed_build, 'admin-user', null, 'question', 'Should we pause this?', null, null);
+  perform pg_temp.assert_true((select waiting_on = 'client' and open_questions = 1 from public.build_conversation_state where build_request_id = closed_build), 'an open question waits on the client');
+  perform public.post_build_update(closed_build, 'admin-user', 'cancelled', null, null, null, null);
+  select * into conversation from public.build_conversation_state where build_request_id = closed_build;
+  perform pg_temp.assert_true(conversation.waiting_on is null and conversation.open_questions = 0 and conversation.open_question_body is null and conversation.waiting_rank = 2, 'a closed build waits on nobody and asks nothing');
+  perform public.post_client_build_message(closed_build, 'talk-teammate', workspace, 'Please stop this one.');
+  perform pg_temp.assert_true((select waiting_on is null from public.build_conversation_state where build_request_id = closed_build), 'a client message on a closed build does not wait on Ajani');
 
   -- The table itself refuses mismatched authors and blank bodies.
   begin insert into public.build_messages(build_request_id,author_role,kind,body) values(state_build,'ajani','message','Hi'); failed := false; exception when others then failed := true; end;

@@ -7,14 +7,22 @@ import { ConversationThread } from "@/components/builds/conversation-thread";
 import { PostTime } from "@/components/builds/post-time";
 import { loadAdminBuildDetail, sampleAdminBuildDetail } from "@/lib/admin/builds";
 import { isSampleMode } from "@/lib/admin/sample-mode";
+import { requireAdminSession } from "@/lib/admin/session";
 import "../../../builds.css";
 
 export const metadata: Metadata = { title: "Client build | Ajani Automation", robots: { index: false, follow: false } };
 
 export default async function AdminBuildPage({ params }: { params: Promise<{ buildId: string }> }) {
+  // The layout's check does not cover every render, and sample mode skips the loader's.
+  await requireAdminSession();
   const { buildId } = await params;
   const sampleMode = await isSampleMode();
   const result = sampleMode ? sampleAdminBuildDetail(buildId) : await loadAdminBuildDetail(buildId);
+  // A real build's link opened while sample data is on: say why it is not here.
+  if (sampleMode && !result.detail) return <AdminBuildsShell sampleMode>
+    <Link className="admin-builds-back" href="/admin/builds">← All client builds</Link>
+    <p className="admin-data-notice" role="status">Sample data is on, so only the made-up builds open here. Turn sample data off on the desk overview to open this build.</p>
+  </AdminBuildsShell>;
   if (result.status === "available" && !result.detail) notFound();
   if (!result.detail) return <AdminBuildsShell sampleMode={sampleMode}>
     <Link className="admin-builds-back" href="/admin/builds">← All client builds</Link>
@@ -49,7 +57,7 @@ export default async function AdminBuildPage({ params }: { params: Promise<{ bui
         </header>
         <div className="admin-build-conversation-body">
           {build.threadTotal > build.thread.length ? <p className="admin-data-notice" role="status">Showing the newest {build.thread.length} of {build.threadTotal} posts.</p> : null}
-          <ConversationThread clientName={build.client.name || build.client.business} thread={build.thread} viewer="ajani" />
+          <ConversationThread clientName={build.client.name || build.client.business} closed={build.status === "cancelled"} thread={build.thread} viewer="ajani" />
           <BuildPostForm buildId={build.id} clientEmail={build.client.email} clientReachable={build.client.reachable} sampleMode={sampleMode} status={build.status} />
         </div>
       </article>

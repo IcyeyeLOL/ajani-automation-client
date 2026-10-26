@@ -71,7 +71,7 @@ export default async function PortalPage() {
             <span><b>{decisionBuild.price}</b> current scope</span>
           </div>
           {questionBuild
-            ? <Link href={"/portal/builds/" + decisionBuild.id + "#conversation"}>Answer the question <i aria-hidden="true">→</i></Link>
+            ? <Link href={"/portal/builds/" + decisionBuild.id + "#open-question"}>Answer the question <i aria-hidden="true">→</i></Link>
             : <Link href={"/portal/builds/" + decisionBuild.id}>Open request <i aria-hidden="true">→</i></Link>}
         </> : <>
           <div className={styles.nextMoveMark} aria-hidden="true">A</div>
