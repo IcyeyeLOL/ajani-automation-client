@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState, type FormEvent } from "react";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { postBuildUpdateAction } from "@/app/admin/actions";
 import { initialAdminActionState, type AdminActionState } from "@/app/admin/action-state";
 import { withRenewedSignIn } from "@/lib/admin/fresh-session";
@@ -14,7 +15,9 @@ const renewedPost = withRenewedSignIn(postBuildUpdateAction);
 async function postBuildUpdate(state: AdminActionState, formData: FormData): Promise<AdminActionState> {
   try {
     return await renewedPost(state, formData);
-  } catch {
+  } catch (error) {
+    // An expired desk session redirects to the unlock page; let that navigation happen.
+    if (isRedirectError(error)) throw error;
     return { status: "error", message: "The post did not reach the server. Everything is still in the form; check your connection and post again." };
   }
 }

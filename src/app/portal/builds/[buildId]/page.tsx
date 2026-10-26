@@ -61,7 +61,9 @@ export default async function BuildDetailPage({ params }: PageProps<"/portal/bui
           {threadTotal > thread.length ? <p className={styles.sectionEmpty}>Showing the newest {thread.length} of {threadTotal} posts.</p> : null}
           {olderQuestion ? <blockquote id="open-question"><b>Ajani asked earlier, still open:</b> {olderQuestion}</blockquote> : null}
           <ConversationThread clientName="You" closed={build.status === "cancelled"} thread={thread} viewer="client" />
-          <BuildMessageForm answering={waitingCount > 0} buildId={build.id} />
+          {build.status === "cancelled"
+            ? <p className={styles.sectionEmpty}>This build was closed, so replies are switched off. To pick it up again, send Ajani a new request.</p>
+            : <BuildMessageForm answering={waitingCount > 0} buildId={build.id} />}
         </article>
 
         <article className={styles.detailSection}>
