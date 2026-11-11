@@ -9,7 +9,7 @@ import { HeaderUserMenu } from "@/components/header-user-menu";
 const links = [
   { href: "/", label: "Home" },
   { href: "/demos", label: "Demos" },
-  { href: "/stories", label: "Stories" },
+  { href: "/#client-work", label: "Client work" },
   { href: "/approach", label: "Approach" },
 ];
 

@@ -143,7 +143,7 @@ export default function PrivacyPage() {
               <p className={styles.sectionNumber}>10</p>
               <h2>Security</h2>
               <p>Ajani uses administrative, technical, and organizational safeguards designed to protect personal information. Current measures include access controls, encrypted transport, private storage for voice uploads, scoped upload capabilities, randomized object paths, hashed draft capabilities, input and media validation, request limits, and abuse prevention.</p>
-              <p>No system can guarantee absolute security. Do not submit passwords, full payment-card numbers, health information, government identifiers, biometric templates, or other sensitive data through the public request tools. Report a suspected security issue to <a href="mailto:hello@ajaniautomation.com">hello@ajaniautomation.com</a>.</p>
+              <p>No system can guarantee absolute security. Do not submit passwords, full payment-card numbers, health information, government identifiers, biometric templates, or other sensitive data through the public request tools. Report a suspected security issue to <a href="mailto:olakunleajani@ajaniautomation.com">olakunleajani@ajaniautomation.com</a>.</p>
             </section>
 
             <section id="transfers">
@@ -156,7 +156,7 @@ export default function PrivacyPage() {
               <p className={styles.sectionNumber}>12</p>
               <h2>Your privacy choices and requests</h2>
               <p>Depending on where you live, you may have rights to know or access, correct, delete, or obtain a portable copy of personal information; object to or restrict processing; withdraw consent; opt out of sale, targeted advertising, or qualifying profiling; and appeal a denied request. Ajani does not discriminate against a person for exercising an applicable privacy right.</p>
-              <p>Email <a href="mailto:hello@ajaniautomation.com?subject=Privacy%20request">hello@ajaniautomation.com</a> with &ldquo;Privacy request&rdquo; in the subject. You do not need an account. Ajani may verify your identity and authority and may retain or withhold information where law permits or requires it. An authorized agent should identify the person represented and provide evidence of authority. To appeal a decision, reply with &ldquo;Privacy appeal&rdquo; and explain the requested review.</p>
+              <p>Email <a href="mailto:olakunleajani@ajaniautomation.com?subject=Privacy%20request">olakunleajani@ajaniautomation.com</a> with &ldquo;Privacy request&rdquo; in the subject. You do not need an account. Ajani may verify your identity and authority and may retain or withhold information where law permits or requires it. An authorized agent should identify the person represented and provide evidence of authority. To appeal a decision, reply with &ldquo;Privacy appeal&rdquo; and explain the requested review.</p>
               <p>People in the EEA or UK may also complain to their local supervisory authority. If your request concerns information processed for an Ajani client, Ajani may direct you to that client or assist the client in responding.</p>
             </section>
 
@@ -177,7 +177,7 @@ export default function PrivacyPage() {
               <p className={styles.sectionNumber}>15</p>
               <h2>Changes and contact</h2>
               <p>Ajani may update this Policy as practices or legal obligations change. The effective date identifies the current version. Any direct notice or renewed acknowledgment required by applicable law must be completed before Ajani relies on the change. Changes apply prospectively unless applicable law permits otherwise.</p>
-              <p>Questions, privacy requests, security reports, accessibility feedback, or requests for an accessible copy may be sent to <a href="mailto:hello@ajaniautomation.com">hello@ajaniautomation.com</a>. Do not include a diagnosis, medical record, password, or other sensitive information in the email. Ajani may request information needed to verify identity, authority, or the location of the relevant record.</p>
+              <p>Questions, privacy requests, security reports, accessibility feedback, or requests for an accessible copy may be sent to <a href="mailto:olakunleajani@ajaniautomation.com">olakunleajani@ajaniautomation.com</a>. Do not include a diagnosis, medical record, password, or other sensitive information in the email. Ajani may request information needed to verify identity, authority, or the location of the relevant record.</p>
             </section>
 
             <section className={styles.relatedDocument}>

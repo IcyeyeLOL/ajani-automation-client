@@ -110,7 +110,7 @@ export default function SubprocessorsPage() {
               <p className={styles.sectionNumber}>05</p>
               <h2>Changes and questions</h2>
               <p>Ajani may update this list as the service changes. The date at the top identifies the current version. Where a client agreement requires advance notice or an objection process for a new subprocessor, that agreement controls.</p>
-              <p>Questions about a provider or a client&apos;s processing path may be sent to <a href="mailto:hello@ajaniautomation.com?subject=Provider%20question">hello@ajaniautomation.com</a>.</p>
+              <p>Questions about a provider or a client&apos;s processing path may be sent to <a href="mailto:olakunleajani@ajaniautomation.com?subject=Provider%20question">olakunleajani@ajaniautomation.com</a>.</p>
             </section>
 
             <section className={styles.relatedDocument}>

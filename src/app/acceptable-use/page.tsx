@@ -61,7 +61,7 @@ export default function AcceptableUsePage() {
               <p className={styles.sectionNumber}>02</p>
               <h2>Security and service integrity</h2>
               <p>Do not introduce malware, probe or bypass security, scrape or access accounts without authorization, interfere with service operation, overwhelm an endpoint, reverse engineer protected components except where law permits, expose credentials, or help another person do any of those things.</p>
-              <p>Promptly report suspected unauthorized access, exposed credentials, abusive automation, or a security weakness to <a href="mailto:hello@ajaniautomation.com?subject=Security%20report">hello@ajaniautomation.com</a>. Do not publicly disclose a vulnerability before Ajani has a reasonable opportunity to investigate and reduce harm.</p>
+              <p>Promptly report suspected unauthorized access, exposed credentials, abusive automation, or a security weakness to <a href="mailto:olakunleajani@ajaniautomation.com?subject=Security%20report">olakunleajani@ajaniautomation.com</a>. Do not publicly disclose a vulnerability before Ajani has a reasonable opportunity to investigate and reduce harm.</p>
             </section>
 
             <section id="communications">
@@ -110,7 +110,7 @@ export default function AcceptableUsePage() {
               <p className={styles.sectionNumber}>08</p>
               <h2>Review, restriction, and reporting</h2>
               <p>Ajani may investigate suspected violations; request information or evidence; pause a message, integration, or workflow; restrict access; or terminate use when reasonably necessary to protect people, clients, providers, platforms, or Ajani. Ajani will ordinarily give notice and an opportunity to correct a non-urgent issue when appropriate.</p>
-              <p>Report suspected abuse to <a href="mailto:hello@ajaniautomation.com?subject=Acceptable%20use%20report">hello@ajaniautomation.com</a>. Include the affected workflow or account, what occurred, and any time-sensitive risk. Ajani may preserve relevant records while investigating or meeting legal duties.</p>
+              <p>Report suspected abuse to <a href="mailto:olakunleajani@ajaniautomation.com?subject=Acceptable%20use%20report">olakunleajani@ajaniautomation.com</a>. Include the affected workflow or account, what occurred, and any time-sensitive risk. Ajani may preserve relevant records while investigating or meeting legal duties.</p>
             </section>
 
             <section className={styles.relatedDocument}>

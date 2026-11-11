@@ -71,18 +71,18 @@
   white-space: nowrap;
 }
 
-.nav { display: flex; align-items: center; gap: 6px; }
+.nav { display: flex; align-items: center; gap: 2px; }
 .mobileControls { display: none; }
 
 .link {
   display: inline-flex;
   align-items: center;
   min-height: 42px;
-  padding: 0 13px;
+  padding: 0 9px;
   border: 1px solid transparent;
   border-radius: 999px;
   color: #c7bbb5;
-  font-size: 14px;
+  font-size: 12.5px;
   transition:
     border-color var(--motion-fast) ease,
     background var(--motion-fast) ease,
@@ -101,12 +101,12 @@
   align-items: center;
   justify-content: center;
   min-height: 42px;
-  padding: 0 18px;
+  padding: 0 13px;
   border: 1px solid rgba(255, 244, 232, .22);
   border-radius: 999px;
   background: #edc6a0;
   color: #2c211c;
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 650;
   letter-spacing: -.01em;
   box-shadow:
@@ -178,7 +178,7 @@
 
 /* The homepage follows the warm O01 concept while every other marketing route
    keeps the established dark chrome. The variant is explicit so this pass does
-   not silently restyle Demos, Stories, or the legal surfaces. */
+   not silently restyle Demos or the legal surfaces. */
 .header[data-tone="light"] {
   border-bottom-color: #ddd6d0;
   background: rgba(251, 250, 247, .92);
@@ -209,7 +209,7 @@
 
 .header[data-tone="light"] .cta {
   min-height: 42px;
-  padding: 0 18px;
+  padding: 0 15px;
   border: 1.5px solid rgba(24, 22, 21, .88);
   border-radius: 999px;
   background: rgba(255, 253, 249, .58);
@@ -272,7 +272,7 @@
 }
 .footerNav {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
   gap: 52px;
 }
 .footerGroup { display: grid; align-content: start; gap: 11px; }
@@ -371,7 +371,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1120px) {
   .header { padding: 8px 0; }
   .header[data-safe-area="cover"] {
     padding:
@@ -450,7 +450,7 @@
   .footer[data-safe-area="cover"] .footerInner { padding-bottom: calc(24px + var(--site-safe-area-bottom)); }
   .footerMain { grid-template-columns: 1fr; gap: 26px; padding-bottom: 24px; }
   .footerBrand p { max-width: 360px; margin-top: 13px; font-size: 15px; }
-  .footerNav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  .footerNav { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
   .socialLinks { flex-wrap: wrap; }
   .socialNote { max-width: 190px; }
   .footerGroup:nth-child(2) { grid-template-columns: 1fr; gap: 4px; }
@@ -465,7 +465,7 @@
   .headerInner { min-height: 58px; }
   .brand { font-size: 28px; }
   .link { min-height: 48px; padding-inline: 17px; font-size: 15.5px; }
-  .cta { min-height: 48px; padding-inline: 22px; font-size: 15px; }
+  .cta { min-height: 48px; padding-inline: 19px; font-size: 14px; }
   .footerInner { padding-top: 58px; }
   .footerBrand > a { font-size: 32px; }
   .footerBrand p { font-size: 18px; }
@@ -481,6 +481,9 @@
 }
 
 @media (max-width: 430px) {
+  .footerNav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+  .footerGroup:first-child { grid-column: 1 / -1; }
+  .footerGroup:first-child > a { max-width: 100%; overflow-wrap: anywhere; }
   .header[data-variant="funnel"] .headerInner { gap: 10px; }
   .header[data-variant="funnel"] .brandLockup { gap: 9px; }
   .header[data-variant="funnel"] .context {

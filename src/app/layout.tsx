@@ -53,7 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   ) : app;
 
   return (
-    <html className={`${display.variable} ${mono.variable}`} data-motion="full" data-motion-policy={MOTION_POLICY_VERSION} lang="en">
+    <html className={`${display.variable} ${mono.variable}`} data-motion="full" data-motion-policy={MOTION_POLICY_VERSION} data-scroll-behavior="smooth" lang="en">
       <body>
         {configuredApp}
       </body>

@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // reports the expanded layout viewport, so it silently matches an overflowing page.
 // Protected routes redirect to Clerk for an unauthenticated browser, so testing
 // them here would measure a third-party page rather than Ajani's portal UI.
-const routes = ["/", "/demos", "/stories", "/approach", "/record", "/request"];
+const routes = ["/", "/demos", "/approach", "/record", "/request"];
 const widths = [320, 390, 600, 768, 1040];
 
 for (const width of widths) {

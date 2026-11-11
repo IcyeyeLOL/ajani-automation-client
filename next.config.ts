@@ -4,7 +4,7 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://*.clerk.accounts.dev https://*.clerk.com https://clerk.ajaniflow.com https://challenges.cloudflare.com https://*.protect.clerk.com`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com https://*.clerk.accounts.dev",
+  "img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://i.ytimg.com https://img.youtube.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.clerk.accounts.dev https://*.clerk.com https://clerk.ajaniflow.com https://*.protect.clerk.com:*",
   "media-src 'self' blob: https://*.supabase.co",

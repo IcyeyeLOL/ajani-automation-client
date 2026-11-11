@@ -20,7 +20,7 @@ test("home process copy reflows without horizontal scrolling at 320px", async ({
   ));
   expect(overflow).toBeLessThanOrEqual(1);
 
-  const processCopy = page.getByText("The proposed build and budget stay clear before work begins or anything is charged.", { exact: true });
+  const processCopy = page.getByText("You inspect the proposed system and written project order before paid work begins.", { exact: true });
   await expect(processCopy).toHaveCSS("white-space", "normal");
 });
 
@@ -45,23 +45,24 @@ test("the reduced-motion fallback stays safe when the full-motion override is ab
   await expect(page.getByRole("status")).toContainText("Paused at Lead signal");
 });
 
-test("public hover states do not move click targets and mobile targets remain usable", async ({ page }) => {
+test("workflow CTA and mobile navigation targets remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.evaluate(() => document.fonts.ready);
 
-  const audienceTab = page.getByRole("tab", { name: /Home services/ });
-  await audienceTab.scrollIntoViewIfNeeded();
-  const before = await audienceTab.evaluate((node) => {
+  const workflowCta = page.locator("main").getByRole("link", { name: "Discuss a workflow" });
+  const before = await workflowCta.evaluate((node) => {
     const rect = node.getBoundingClientRect();
-    return { height: rect.height, transform: getComputedStyle(node).transform, width: rect.width };
+    return { height: rect.height, width: rect.width };
   });
-  await audienceTab.hover();
-  const after = await audienceTab.evaluate((node) => {
+  await workflowCta.hover();
+  await expect(workflowCta).toHaveAttribute("href", /^mailto:olakunleajani@ajaniautomation\.com/);
+  const after = await workflowCta.evaluate((node) => {
     const rect = node.getBoundingClientRect();
-    return { height: rect.height, transform: getComputedStyle(node).transform, width: rect.width };
+    return { height: rect.height, width: rect.width };
   });
   expect(after).toEqual(before);
+  expect(after.height).toBeGreaterThanOrEqual(44);
 
   const mobileMenu = page.getByRole("button", { name: "Open navigation menu" });
   await mobileMenu.click();
@@ -72,7 +73,7 @@ test("public hover states do not move click targets and mobile targets remain us
 
   for (const target of [
     mobileNavigation.getByRole("link", { name: /Demos/ }),
-    mobileNavigation.getByRole("link", { name: /Stories/ }),
+    mobileNavigation.getByRole("link", { name: /Client work/ }),
     menuDialog.getByRole("link", { name: "Record a note" }),
   ]) {
     expect(await target.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
@@ -83,18 +84,12 @@ test("public hover states do not move click targets and mobile targets remain us
   await expect(page.getByRole("button", { name: "Open navigation menu" })).toBeFocused();
 });
 
-test("secondary route mastheads keep their headings and supporting copy on mobile", async ({ page }) => {
+test("Demos masthead keeps its heading and supporting copy on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
 
   await page.goto("/demos");
   await expect(page.getByRole("heading", { name: "Watch the system work. Then decide if it fits." })).toBeVisible();
   await expect(page.getByText(/A late-night inquiry\. A scattered brief\. A client ready to return\./)).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
-    .toBeLessThanOrEqual(1);
-
-  await page.goto("/stories");
-  await expect(page.getByRole("heading", { name: "The work is the proof. Here is the work." })).toBeVisible();
-  await expect(page.getByText(/Every build starts with a moment that keeps slipping/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
     .toBeLessThanOrEqual(1);
 });
@@ -109,9 +104,4 @@ test("record uses the shared funnel header and skip-link contract", async ({ pag
   await expect(skipLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#main-content")).toBeFocused();
-});
-
-test("stories no longer labels the testimonial as verified", async ({ page }) => {
-  await page.goto("/stories");
-  await expect(page.getByText("Verified client story", { exact: true })).toHaveCount(0);
 });

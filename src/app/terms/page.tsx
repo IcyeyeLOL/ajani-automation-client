@@ -181,7 +181,7 @@ export default function TermsPage() {
             <section id="disputes">
               <p className={styles.sectionNumber}>17</p>
               <h2>Disputes and general terms</h2>
-              <p>Before filing a formal claim, contact <a href="mailto:hello@ajaniautomation.com">hello@ajaniautomation.com</a> with a description of the issue and the requested resolution. The parties will try in good faith to resolve it informally for 30 days. A signed Order controls any governing-law, venue, or dispute provision for that project; otherwise, applicable law and the rules of a court with lawful jurisdiction apply.</p>
+              <p>Before filing a formal claim, contact <a href="mailto:olakunleajani@ajaniautomation.com">olakunleajani@ajaniautomation.com</a> with a description of the issue and the requested resolution. The parties will try in good faith to resolve it informally for 30 days. A signed Order controls any governing-law, venue, or dispute provision for that project; otherwise, applicable law and the rules of a court with lawful jurisdiction apply.</p>
               <p>You may not assign these Terms without Ajani&apos;s written consent, except in a merger or sale of substantially all relevant assets. Ajani may assign them in connection with a reorganization, merger, or sale. Neither party is responsible for delay caused by events outside reasonable control. If a provision is unenforceable, the remainder stays effective. Failure to enforce a provision is not a waiver.</p>
             </section>
 
@@ -189,7 +189,7 @@ export default function TermsPage() {
               <p className={styles.sectionNumber}>18</p>
               <h2>Changes, notices, contact, and accessibility</h2>
               <p>Ajani may update these Terms prospectively. The effective date identifies the current version. Any direct notice or renewed acceptance required by applicable law must be completed before Ajani enforces the change against that user. A change does not retroactively alter a signed Order or a dispute that arose before the change took effect.</p>
-              <p>Questions, formal notices, or accessibility requests may be sent to <a href="mailto:hello@ajaniautomation.com">hello@ajaniautomation.com</a>. If you cannot use part of the website, Ajani will work with you to provide a reasonable alternative intake or document format.</p>
+              <p>Questions, formal notices, or accessibility requests may be sent to <a href="mailto:olakunleajani@ajaniautomation.com">olakunleajani@ajaniautomation.com</a>. If you cannot use part of the website, Ajani will work with you to provide a reasonable alternative intake or document format.</p>
             </section>
 
             <section className={styles.relatedDocument}>

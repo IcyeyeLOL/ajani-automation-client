@@ -20,6 +20,7 @@ import {
   ProcessingConfirmationDialog,
   type ProcessingConfirmationIntent,
 } from "@/components/record/processing-confirmation-dialog";
+import { ProcessingOverlay, type ProcessingPhase } from "@/components/record/processing-overlay";
 import type { SystemBlock } from "@/lib/domain/types";
 import {
   CURRENT_HANDOFF_POLICY_VERSION,
@@ -392,6 +393,11 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
     capturedNoteReady
     || (!capture && writtenReady)
   );
+  const processingPhase: ProcessingPhase | null = voiceTranscriptionStatus === "transcribing"
+    ? "transcribing"
+    : automationStatus === "clarifying" || automationStatus === "shaping"
+      ? automationStatus
+      : null;
   const noteHint = voiceRecordingActive
     ? "Finish the voice note before continuing"
     : capture && voiceTranscriptionStatus === "transcribing"
@@ -734,6 +740,18 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
       return;
     }
     void continueFromNote(true);
+  };
+
+  const cancelProcessing = () => {
+    if (voiceTranscriptionStatus === "transcribing") {
+      cancelTranscription();
+      setVoiceTranscriptionStatus("failed");
+      setVoiceTranscriptionError("Transcription cancelled. Retry the saved recording or switch to typing.");
+    }
+    if (automationStatus === "clarifying" || automationStatus === "shaping") {
+      cancelAutomation();
+      setAutomationStatus(automationMethod === "ai" ? "ready" : automationMethod === "deterministic_fallback" ? "fallback" : "idle");
+    }
   };
 
   const updateWritten = (value: string) => {
@@ -1378,7 +1396,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
 
   return (
     <div
-      aria-busy={!hydrated}
+      aria-busy={!hydrated || processingPhase !== null}
       className={styles.flow}
       data-hydrated={hydrated ? "true" : "false"}
       inert={hydrated ? undefined : true}
@@ -1391,6 +1409,7 @@ function RecordFlowExperience({ isLoaded, isSignedIn, setActive }: {
         }}
         open={processingConfirmationIntent !== null}
       />
+      <ProcessingOverlay onCancel={cancelProcessing} phase={processingPhase} />
 
       <nav aria-label="Build request progress" className={styles.steps}>
         <div className={styles.mobileProgress}>

@@ -42,7 +42,7 @@ const capturedBytes = (page: import("@playwright/test").Page) => page.evaluate((
 test("a captured voice note is transcribed before Clarify and restored on Back", async ({ page }) => {
   const transcript = "Customer appointment changes arrive after hours, and the office team needs a clear next action the following morning.";
   await page.route("**/api/transcribe-voice", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 850));
     await route.fulfill({
       body: JSON.stringify({ transcript }),
       contentType: "application/json",
@@ -59,6 +59,12 @@ test("a captured voice note is transcribed before Clarify and restored on Back",
   await expect(page.getByText("Recording", { exact: true })).toBeVisible();
   await expect.poll(() => capturedBytes(page)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Finish note" }).click();
+
+  const transcriptionScreen = page.getByRole("dialog", { name: "Putting your note into writing." });
+  await expect(transcriptionScreen).toBeVisible();
+  await expect(transcriptionScreen).toContainText("Your recording is saved in this tab");
+  await expect(transcriptionScreen.getByRole("button", { name: /Cancel/ })).toBeVisible();
+  await expect(transcriptionScreen).toHaveCount(0, { timeout: 5_000 });
 
   await expect(page.getByRole("region", { name: "Voice note recorder" }).getByRole("status")).toHaveText("Voice note ready");
   await expect(page.getByRole("button", { name: "Continue to clarify" })).toBeEnabled();

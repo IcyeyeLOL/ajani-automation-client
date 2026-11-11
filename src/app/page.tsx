@@ -1,37 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
-import { AudiencePicker } from "@/components/home/audience-picker";
-import { ClientProofRoute } from "@/components/home/client-proof-route";
+import { DeliveryTrust } from "@/components/home/delivery-trust";
 import { HowItWorksTimeline } from "@/components/home/how-it-works-timeline";
-import { HowItWorksDialog } from "@/components/home/how-it-works-dialog";
+import { IntegrationMarquee } from "@/components/home/integration-marquee";
 import { Reveal } from "@/components/home/reveal";
 import { SystemAnimation } from "@/components/home/system-animation";
+import { TestimonialPipeline } from "@/components/home/testimonial-pipeline";
 import { RecordNoteAction } from "@/components/record-note-action";
 import { SiteFoot, SiteTop } from "@/components/site/chrome";
 import styles from "./home.module.css";
 
-const homepageTitle = "Ajani Automation";
-const homepageDescription = "Operational systems that make the work move.";
+const homepageTitle = "AI Workflow Systems for Service Businesses | Ajani Automation";
+const homepageDescription =
+  "Ajani maps costly operational processes, connects the tools a service team already uses, and ships documented workflow systems with human approval built in.";
 
 export const metadata: Metadata = {
-  alternates: {
-    canonical: "/",
-  },
+  title: homepageTitle,
+  description: homepageDescription,
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "/",
-    siteName: homepageTitle,
+    siteName: "Ajani Automation",
     title: homepageTitle,
     description: homepageDescription,
-    images: [
-      {
-        url: "/og.png",
-        width: 1200,
-        height: 630,
-        alt: "Ajani Automation",
-      },
-    ],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Ajani Automation" }],
   },
   twitter: {
     card: "summary_large_image",
@@ -41,11 +34,6 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * Let the homepage chrome own the iPhone safe area. The matching mobile header
- * padding keeps its controls below the status icons while its opaque surface
- * prevents the scrolling hero from showing through Safari's top bar.
- */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -53,72 +41,51 @@ export const viewport: Viewport = {
   themeColor: "#fbfaf7",
 };
 
+const proofFacts = [
+  {
+    value: "5 examples",
+    label: "of named client work",
+    note: "Three client videos and two named projects",
+  },
+  {
+    value: "7–10 days",
+    label: "target first-build window",
+    note: "Final commitment belongs in the written project order",
+  },
+  {
+    value: "5 platforms",
+    label: "named integration experience",
+    note: "Plus custom APIs and webhooks",
+  },
+  {
+    value: "Human approval",
+    label: "before build handoff",
+    note: "The client reviews and changes the proposed route",
+  },
+] as const;
+
 const stages = [
   {
     when: "Now",
-    title: "You talk",
-    detail: "Two minutes about the work that keeps slipping. No form to decode and no technical brief to write.",
+    title: "Map the costly process",
+    detail: "Bring the moment that wastes time, loses leads, or creates avoidable follow-up. No technical brief required.",
   },
   {
     when: "Same session",
-    title: "Ajani clarifies",
-    detail: "We ask only for the missing detail that materially changes the route.",
+    title: "Clarify the route",
+    detail: "Ajani asks only for the details that change the trigger, decision, owner, or output.",
   },
   {
-    when: "Same session",
-    title: "You approve",
-    detail: "You see the proposed system, change what is wrong, and decide whether it should move forward.",
+    when: "Before build",
+    title: "Approve scope and price",
+    detail: "You inspect the proposed system and written project order before paid work begins.",
   },
   {
-    when: "7–10 days",
-    title: "It runs",
-    detail: "The approved route goes live in the channels your team already uses, then we tune it with you.",
+    when: "Target: 7–10 days",
+    title: "Launch and tune",
+    detail: "After access and decisions are confirmed, the system is built, checked, documented, and tuned with your team.",
   },
-];
-
-const model = [
-  {
-    number: "01",
-    label: "Signal",
-    title: "Start with the stuck moment.",
-    detail: "A voice note or a few plain sentences is enough. Describe the work as it actually happens.",
-  },
-  {
-    number: "02",
-    label: "System",
-    title: "See the route, not a black box.",
-    detail: "Ajani turns the note into triggers, actions, decisions, and handoffs your team can inspect.",
-  },
-  {
-    number: "03",
-    label: "Delivery",
-    title: "Build quickly. Deliver with care.",
-    detail: "Ajani turns the approved route into a polished working system, with every important handoff checked before it reaches your team.",
-  },
-];
-
-const trustSignals = [
-  {
-    number: "01",
-    title: "Source attached",
-    detail: "The request that started the route stays visible beside the system it becomes.",
-  },
-  {
-    number: "02",
-    title: "Decisions named",
-    detail: "You can see what Ajani inferred, what changed, and what still needs an answer.",
-  },
-  {
-    number: "03",
-    title: "Human boundary",
-    detail: "The route pauses for approval. A person—not an animation—decides what moves forward.",
-  },
-  {
-    number: "04",
-    title: "Scope before payment",
-    detail: "The proposed build and budget stay clear before work begins or anything is charged.",
-  },
-];
+] as const;
 
 export default function Home() {
   return (
@@ -129,108 +96,74 @@ export default function Home() {
         <section className={styles.hero}>
           <div className={styles.heroInner}>
             <Reveal className={styles.heroCopy}>
-              <p className={styles.label}>Done for you workflows</p>
+              <p className={styles.label}>AI workflow systems · built for service businesses</p>
               <h1>
-                <span>Tell us where</span>
-                <span className={styles.heroWorkLine}>the work sucks.</span>
-                <em>We fix it.</em>
+                <span>AI workflow systems</span>
+                <em>for service businesses.</em>
               </h1>
               <p className={styles.heroLede}>
-                Ajani turns the part of your business that keeps slipping into a clear route your
-                team can review. You describe the mess; we map, build, and run the system around it.
+                We map one costly process, connect the tools your team already uses, add human
+                approval points, and ship a documented production system.
               </p>
               <div className={styles.heroActions}>
-                <RecordNoteAction className={styles.primaryCta}>
-                  Record a note <span aria-hidden="true">→</span>
+                <a
+                  className={styles.primaryCta}
+                  href="mailto:olakunleajani@ajaniautomation.com?subject=Workflow%20audit"
+                >
+                  Discuss a workflow <span aria-hidden="true">→</span>
+                </a>
+                <RecordNoteAction className={styles.secondaryCta}>
+                  Record a note <span aria-hidden="true">↗</span>
                 </RecordNoteAction>
-                <HowItWorksDialog triggerClassName={styles.secondaryCta} />
               </div>
-              <p className={styles.heroProof}>From voice note to visible workflow in minutes.</p>
+              <p className={styles.heroProof}>
+                Scope before payment · human approval before build · direct access to the delivery team
+              </p>
             </Reveal>
 
-            <Reveal as="aside" className={styles.heroVisual} delay={140}>
+            <Reveal as="aside" className={styles.heroVisual} delay={120}>
               <SystemAnimation />
             </Reveal>
           </div>
         </section>
 
-        <section className={`${styles.section} ${styles.modelSection}`}>
-          <Reveal className={styles.sectionHead}>
-            <div className={styles.headMain}>
-              <p className={styles.label}>The model</p>
-              <h2>Automation starts with the work, <em>not the software.</em></h2>
-            </div>
-            <div className={styles.headAside}>
-              <p>
-                You should not have to arrive with a workflow diagram. Bring the frustrating moment;
-                Ajani makes the system visible before anything gets built.
-              </p>
-            </div>
-          </Reveal>
-
-          <div className={styles.modelRail}>
-            {model.map((item, index) => (
-              <Reveal as="article" className={styles.modelStep} delay={index * 90} key={item.number}>
-                <div className={styles.modelStepTop}>
-                  <span>{item.number}</span>
-                  <i aria-hidden="true" />
-                  <small>{item.label}</small>
+        <section aria-labelledby="proof-rail-title" className={styles.proofBand}>
+          <div className={styles.proofBandInner}>
+            <header>
+              <p className={styles.label}>Client work and delivery</p>
+              <h2 id="proof-rail-title">Proof you can inspect.</h2>
+            </header>
+            <dl>
+              {proofFacts.map((fact) => (
+                <div key={fact.value}>
+                  <dt>{fact.value}</dt>
+                  <dd>{fact.label}</dd>
+                  <small>{fact.note}</small>
                 </div>
-                <h3>{item.title}</h3>
-                <p>{item.detail}</p>
-              </Reveal>
-            ))}
+              ))}
+            </dl>
           </div>
         </section>
 
-        <section className={`${styles.section} ${styles.audienceSection}`}>
+        <IntegrationMarquee />
+
+        <TestimonialPipeline />
+
+        <section className={`${styles.section} ${styles.processSection}`} id="process">
           <Reveal className={styles.sectionHead}>
             <div className={styles.headMain}>
-              <p className={styles.label}>The work in context</p>
-              <h2>Different businesses, <em>the same gap.</em></h2>
+              <p className={styles.label}>Delivery process</p>
+              <h2 id="delivery-process-title">You know the route <em>before the build begins.</em></h2>
             </div>
             <div className={styles.headAside}>
               <p>
-                Pick the business closest to yours. The exact task changes, but the opportunity is the same:
-                turn a fragile handoff into a visible, reliable route.
+                Submission is free and does not authorize a charge. Scope, price, support, ownership,
+                and the committed timeline belong in the written project order.
               </p>
             </div>
           </Reveal>
-          <Reveal delay={110}>
-            <AudiencePicker />
-          </Reveal>
-        </section>
-
-        <section className={`${styles.section} ${styles.proofSection}`}>
-          <Reveal className={styles.proofCopy}>
-            <p className={styles.label}>Human control / real client work</p>
-            <h2>The work is <em>the proof.</em></h2>
-            <p>
-              Frederick&apos;s dental practice needed after-hours calls to arrive with useful context,
-              without automating the judgement that belongs to the team. Ajani built the route and
-              kept the handoff visible.
-            </p>
-            <Link className={styles.textLink} href="/stories">
-              Read the client story <span aria-hidden="true">→</span>
-            </Link>
-          </Reveal>
-
-          <ClientProofRoute className={styles.proofRoute} />
-        </section>
-
-        <section className={`${styles.section} ${styles.processSection}`} id="how">
-          <Reveal className={styles.sectionHead}>
-            <div className={styles.headMain}>
-              <p className={styles.label}>After you send it</p>
-              <h2 id="how-it-works-title">You will know exactly <em>what happens next.</em></h2>
-            </div>
-            <div className={styles.headAside}>
-              <p>No black box and no long discovery process. Four clear moments, with your decision in the middle.</p>
-            </div>
-          </Reveal>
-
           <HowItWorksTimeline
-            labelledBy="how-it-works-title"
+            labelledBy="delivery-process-title"
             railClassName={styles.steps}
             stages={stages}
             stepClassName={styles.step}
@@ -239,32 +172,7 @@ export default function Home() {
           />
         </section>
 
-        <section className={styles.trustSection}>
-          <div className={styles.trustInner}>
-            <Reveal className={styles.trustCopy}>
-              <p className={styles.label}>Evidence / approach &amp; privacy</p>
-              <h2>Private by default. <em>Clear by design.</em></h2>
-              <p>
-                The source, decisions, route, and protection stay visible from the first note to
-                handoff. You should always know what Ajani has and what happens next.
-              </p>
-              <Link className={styles.textLink} href="/privacy">
-                Read how Ajani handles your data <span aria-hidden="true">→</span>
-              </Link>
-            </Reveal>
-
-            <div className={styles.trustMatrix}>
-              {trustSignals.map((signal, index) => (
-                <Reveal as="article" delay={index * 70} key={signal.number}>
-                  <b>{signal.number}</b>
-                  <h3>{signal.title}</h3>
-                  <p>{signal.detail}</p>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
+        <DeliveryTrust />
       </main>
 
       <SiteFoot coverSafeArea />

@@ -89,6 +89,7 @@ async function generateStructured<T>(
   input: Record<string, unknown>,
   options: GenerationOptions,
 ): Promise<{ output: T; model: string } | null> {
+  if (process.env.AI_PRIMARY_PROVIDER?.trim().toLowerCase() === "fallback") return null;
   const deadlineAt = options.deadlineAt ?? Date.now() + AUTOMATION_WORKFLOW_BUDGET_MS;
   if (containsHighRiskSensitiveInput(input)) {
     console.warn("[automation-workflow] external_ai_bypassed", JSON.stringify({ reason: "high_risk_sensitive_input" }));

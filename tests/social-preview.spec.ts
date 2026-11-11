@@ -20,14 +20,3 @@ test("publishes the Ajani brand card for social previews", async ({ page, reques
   expect(image.headers()["content-type"]).toContain("image/png");
   expect((await image.body()).byteLength).toBeGreaterThan(10_000);
 });
-
-test("stories inherits the brand card without claiming the homepage canonical URL", async ({ page }) => {
-  await page.goto("/stories");
-
-  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
-    "content",
-    "https://ajaniflow.com/og.png",
-  );
-  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
-  await expect(page.locator('meta[property="og:url"]')).toHaveCount(0);
-});

@@ -9,6 +9,14 @@ import { fallbackAutomationShape } from "@/lib/record/automation-brief";
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); mocks.generate.mockReset(); });
 const transcript = "Website quote requests arrive after hours and wait until the next morning for a reply.";
 describe("server generation contracts", () => {
+  it("uses the editable local fallback without contacting a provider when selected", async () => {
+    vi.stubEnv("AI_PRIMARY_PROVIDER", "fallback");
+    const intake = await generateAutomationIntake(transcript);
+    const shape = await generateAutomationShape(transcript, []);
+    expect(intake.method).not.toBe("ai");
+    expect(shape.method).not.toBe("ai");
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
   it("does not restart a provider budget after the shared deadline is exhausted", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(100_000);

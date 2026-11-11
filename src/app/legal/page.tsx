@@ -38,7 +38,7 @@ const documents = [
     details: ["Keyboard and page structure", "Written intake alternative", "Motion and media controls", "Public contact route"],
     href: "/accessibility",
     cta: "Read the statement",
-    supportingHref: "mailto:hello@ajaniautomation.com?subject=Legal%20or%20accessibility%20question",
+    supportingHref: "mailto:olakunleajani@ajaniautomation.com?subject=Legal%20or%20accessibility%20question",
     supportingLabel: "Contact Ajani about legal or access needs",
   },
 ] as const;

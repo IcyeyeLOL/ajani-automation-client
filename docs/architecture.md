@@ -109,7 +109,6 @@ Provider clients return normalized application errors. Durable work records sepa
 
 - `/` — product explanation and system preview
 - `/demos` — interactive automation examples
-- `/stories` — business-specific automation narratives
 - `/approach` — delivery approach
 - `/record` and `/request` — guided intake and approval flow
 - `/legal`, `/terms`, and `/privacy` — policy surfaces

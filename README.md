@@ -20,7 +20,7 @@ This creates a clean boundary between automated interpretation and human authori
 
 ## Core experiences
 
-- **Marketing and education** — the home page, interactive system preview, business-specific examples, automation demos, and implementation stories explain the product without requiring an account.
+- **Marketing and education** — the home page, client proof library, interactive system preview, and automation demos explain the product without requiring an account.
 - **Guided request flow** — `/record` and `/request` support voice and written intake, transcription, clarification, workflow editing, review, and submission.
 - **Secure account handoff** — Clerk authentication connects an anonymous draft to the correct user and organization without discarding work completed before sign-in.
 - **Client portal** — authenticated organizations can inspect submitted builds, delivery status, system activity, and billing-oriented information.
@@ -180,7 +180,7 @@ Before releasing:
 1. Review and explicitly approve the release and target database; apply pending Supabase migrations in order only after backup/recovery checks. Local development is not approval to push or deploy.
 2. Confirm the Vercel production environment contains the live Clerk credential pair and all required server integrations.
 3. Run the complete quality suite.
-4. Verify the deployed home page, Demos, Stories, authentication handoff, and record flow.
+4. Verify the deployed home page, client proof library, Demos, authentication handoff, and record flow.
 5. Confirm cron authorization and a plan/scheduler supporting the configured every-minute recovery and every-15-minute retention schedules. These schedules cannot run on Vercel Hobby. Inspect failed-job backlog after database or provider changes.
 6. Run `npm run check:database-contract` against the explicitly configured target. This read-only check verifies required RPCs are exposed; it does not apply migrations or certify provider behavior.
 

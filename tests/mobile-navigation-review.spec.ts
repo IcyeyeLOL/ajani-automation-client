@@ -47,7 +47,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     for (const target of [
       dialog.getByRole("button", { name: "Close navigation menu" }),
       dialog.getByRole("link", { name: /Demos/ }),
-      dialog.getByRole("link", { name: /Stories/ }),
+      dialog.getByRole("link", { name: /Client work/ }),
       dialog.getByRole("link", { name: "Record a note" }),
     ]) {
       await target.scrollIntoViewIfNeeded();
@@ -77,7 +77,7 @@ test("mobile navigation traps keyboard focus and supports repeated open and clos
   }
 });
 
-test("mobile home header stays opaque over scrolling photography", async ({ page }) => {
+test("mobile home header stays opaque over the client proof section", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
@@ -89,9 +89,9 @@ test("mobile home header stays opaque over scrolling photography", async ({ page
   const initialBounds = await header.boundingBox();
   expect(initialBounds?.height).toBeCloseTo(63, 1);
 
-  const audienceImage = page.getByAltText("Home services workspace showing a new lead becoming a prepared contract");
-  await audienceImage.evaluate((image) => {
-    window.scrollTo({ top: window.scrollY + image.getBoundingClientRect().top, behavior: "instant" });
+  const proof = page.locator("#client-work");
+  await proof.evaluate((section) => {
+    window.scrollTo({ top: window.scrollY + section.getBoundingClientRect().top, behavior: "instant" });
   });
 
   const scrollState = await page.evaluate(() => ({
@@ -99,13 +99,13 @@ test("mobile home header stays opaque over scrolling photography", async ({ page
     scrollY: window.scrollY,
   }));
   const scrolledHeaderBounds = await header.boundingBox();
-  const imageBounds = await audienceImage.boundingBox();
+  const proofBounds = await proof.boundingBox();
 
   expect(scrollState.scrollY).toBeGreaterThan(0);
   expect(scrollState.overflow).toBeLessThanOrEqual(1);
   expect(Math.abs(scrolledHeaderBounds?.y ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(1);
-  expect(imageBounds?.y).toBeLessThanOrEqual(scrolledHeaderBounds?.height ?? 0);
-  expect((imageBounds?.y ?? 0) + (imageBounds?.height ?? 0)).toBeGreaterThan(0);
+  expect(proofBounds?.y).toBeLessThanOrEqual(scrolledHeaderBounds?.height ?? 0);
+  expect((proofBounds?.y ?? 0) + (proofBounds?.height ?? 0)).toBeGreaterThan(0);
   await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
   await expectBackdropFilter(header, "none");
   expect(scrolledHeaderBounds?.height).toBeCloseTo(63, 1);
@@ -182,7 +182,7 @@ test("homepage fills iPhone safe areas in portrait and landscape", async ({ page
 
   const landscapeHeader = await header.boundingBox();
   const landscapeInner = await headerInner.boundingBox();
-  expect(landscapeHeader?.height).toBeCloseTo(71, 0);
+  expect(landscapeHeader?.height).toBeCloseTo(63, 0);
   expect(landscapeInner?.x).toBeGreaterThanOrEqual(47);
   expect((landscapeInner?.x ?? 0) + (landscapeInner?.width ?? 0)).toBeLessThanOrEqual(844 - 47);
   await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
@@ -227,7 +227,7 @@ test("homepage header stays opaque through iPhone landscape widths", async ({ pa
   await expect(header).toHaveCSS("background-color", "rgb(251, 250, 247)");
   await expectBackdropFilter(header, "none");
 
-  await page.setViewportSize({ width: 1025, height: 844 });
+  await page.setViewportSize({ width: 1121, height: 844 });
   await expect(header).toHaveCSS("background-color", "rgba(251, 250, 247, 0.76)");
   await expectBackdropFilter(header, "blur(18px) saturate(1.1)");
 });
@@ -250,7 +250,7 @@ test("mobile menu dismisses on desktop resize without leaving an invisible modal
 test("primary menu links navigate and release modal state", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  for (const destination of [{ name: /Demos/, path: "/demos" }, { name: /Stories/, path: "/stories" }]) {
+  for (const destination of [{ name: /Demos/, path: "/demos" }, { name: /Client work/, path: "/#client-work" }]) {
     const dialog = await openNavigation(page);
     await dialog.getByRole("link", { name: destination.name }).click();
     await expect(page).toHaveURL(new RegExp(`${destination.path}$`));
@@ -264,8 +264,9 @@ test("mobile navigation remains operable when the device requests reduced motion
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/");
   const dialog = await openNavigation(page);
-  await dialog.getByRole("link", { name: /Stories/ }).click();
-  await expect(page).toHaveURL(/\/stories$/);
+  await dialog.getByRole("link", { name: /Client work/ }).click();
+  await expect(page).toHaveURL(/\/#client-work$/);
+  await expect(page.locator("#client-work")).toBeInViewport();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator("body")).not.toHaveAttribute("data-scroll-locked");
 });
@@ -288,7 +289,7 @@ test("mobile menu keeps its three destinations without a pitch or settings secti
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   const navigation = await openNavigation(page);
-  const destinations = navigation.getByRole("link").filter({ hasText: /Demos|Stories|Record a note/ });
+  const destinations = navigation.getByRole("link").filter({ hasText: /Client work|Demos|Record a note/ });
   await expect(destinations).toHaveCount(3);
   const positions = await destinations.evaluateAll((links) => links.map((link) => link.getBoundingClientRect().top));
   expect(positions[0]).toBeLessThan(positions[1]);

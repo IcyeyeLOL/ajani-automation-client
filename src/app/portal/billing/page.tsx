@@ -61,7 +61,7 @@ export default async function BillingPage() {
     <section className={styles.billingNote}>
       <i aria-hidden="true">i</i>
       <div><b>Questions about a proposal or invoice?</b><span>Reply to the Ajani email attached to that build so the context stays together.</span></div>
-      <a href="mailto:hello@ajaniautomation.com">Email Ajani →</a>
+      <a href="mailto:olakunleajani@ajaniautomation.com">Email Ajani →</a>
     </section>
   </div>;
 }

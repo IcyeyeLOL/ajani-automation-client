@@ -72,7 +72,7 @@ export default function AccessibilityPage() {
               <p className={styles.sectionNumber}>03</p>
               <h2>Alternative access and formats</h2>
               <p>You do not have to use the voice recorder. The request flow includes a written option, and Ajani can provide another reasonable way to submit a request if the standard flow is not usable for you.</p>
-              <p>If you need a legal document, project message, or other Ajani information in a different format, email <a href="mailto:hello@ajaniautomation.com?subject=Accessibility%20request">hello@ajaniautomation.com</a>. Describe the page or information, the barrier, and the format or method that would help.</p>
+              <p>If you need a legal document, project message, or other Ajani information in a different format, email <a href="mailto:olakunleajani@ajaniautomation.com?subject=Accessibility%20request">olakunleajani@ajaniautomation.com</a>. Describe the page or information, the barrier, and the format or method that would help.</p>
             </section>
 
             <section id="motion">
@@ -92,7 +92,7 @@ export default function AccessibilityPage() {
             <section id="feedback">
               <p className={styles.sectionNumber}>06</p>
               <h2>Report a barrier</h2>
-              <p>Email <a href="mailto:hello@ajaniautomation.com?subject=Accessibility%20feedback">hello@ajaniautomation.com</a> with &ldquo;Accessibility feedback&rdquo; in the subject. Include the page address, what you were trying to do, what happened, and any assistive technology or browser involved if you are comfortable sharing it. Do not include a diagnosis, medical record, or other sensitive information.</p>
+              <p>Email <a href="mailto:olakunleajani@ajaniautomation.com?subject=Accessibility%20feedback">olakunleajani@ajaniautomation.com</a> with &ldquo;Accessibility feedback&rdquo; in the subject. Include the page address, what you were trying to do, what happened, and any assistive technology or browser involved if you are comfortable sharing it. Do not include a diagnosis, medical record, or other sensitive information.</p>
               <p>Ajani reviews accessibility reports and, when feasible and appropriate, works to provide a reasonable alternative. Accessibility feedback is used to improve the product and is handled under the <Link href="/privacy">Privacy Policy</Link>.</p>
             </section>
 

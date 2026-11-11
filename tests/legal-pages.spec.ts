@@ -35,7 +35,7 @@ test.describe("organized legal section", () => {
 
     const access = groups.filter({ has: page.getByRole("heading", { name: "Accessibility & support" }) });
     await expect(access.getByRole("link", { name: /Read the statement/ })).toHaveAttribute("href", "/accessibility");
-    await expect(access.getByRole("link", { name: /Contact Ajani/ })).toHaveAttribute("href", /mailto:hello@ajaniautomation\.com/);
+    await expect(access.getByRole("link", { name: /Contact Ajani/ })).toHaveAttribute("href", /mailto:olakunleajani@ajaniautomation\.com/);
 
     await expect(page.getByRole("navigation", { name: "Legal documents" }).getByRole("link")).toHaveCount(3);
     await page.screenshot({ path: "artifacts/legal-review/legal-overview-mobile.png", fullPage: true });

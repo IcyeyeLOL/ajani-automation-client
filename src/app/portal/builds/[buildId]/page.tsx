@@ -91,7 +91,7 @@ export default async function BuildDetailPage({ params }: PageProps<"/portal/bui
           <div className={styles.detailProgress}><i style={{ width: build.progress + "%" }} /></div>
           <h2>{build.statusLabel}</h2>
           <p>{build.nextStep}</p>
-          {build.status === "needs_attention" ? <a href="mailto:hello@ajaniautomation.com">Reply to Ajani <i>→</i></a> : null}
+          {build.status === "needs_attention" ? <a href="mailto:olakunleajani@ajaniautomation.com">Reply to Ajani <i>→</i></a> : null}
         </section>
 
         <section className={styles.timelineCard}>
