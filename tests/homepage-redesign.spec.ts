@@ -1,10 +1,100 @@
 import { expect, test } from "@playwright/test";
 
+const credibilityNavigation = [
+  ["Solutions", "/#solutions"],
+  ["Industries", "/#industries"],
+  ["Client work and Stories", "/stories"],
+  ["Process", "/#process"],
+  ["About", "/#about"],
+  ["Demos", "/demos"],
+  ["Contact", "/#contact"],
+] as const;
+
+test("credibility-first homepage keeps supported navigation and section order", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", {
+    level: 1,
+    name: "AI workflow systems for service businesses.",
+  })).toBeVisible();
+  for (const heading of [
+    "Proof you can inspect.",
+    "A named client story. One measurable case.",
+    "Start with the expensive handoff, not an AI shopping list.",
+    "Different businesses. The same operational gap.",
+    "A working request system, not a generic simulation.",
+    "You know the route before the build begins.",
+    "Start with the stronger result. Click through the proof.",
+    "The controls should be as visible as the workflow.",
+    "Know who is behind the system and what is still missing.",
+    "Bring the process that keeps slipping. We will make the route discussable.",
+  ]) {
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  }
+
+  const header = page.getByRole("banner");
+  for (const [name, href] of credibilityNavigation) {
+    await expect(header.getByRole("link", { name })).toHaveAttribute("href", href);
+  }
+  await expect(header.getByRole("link", { name: "Discuss a workflow" })).toHaveAttribute("href", /^mailto:/);
+
+  const orderedSections = page.locator([
+    "#client-work",
+    "#solutions",
+    "#industries",
+    "#process",
+    "#client-voices",
+    "#engagement",
+    "#security",
+    "#about",
+    "#faq",
+    "#contact",
+  ].join(", "));
+  expect(await orderedSections.evaluateAll((elements) => elements.map((element) => element.id))).toEqual([
+    "client-work",
+    "solutions",
+    "industries",
+    "process",
+    "client-voices",
+    "engagement",
+    "security",
+    "about",
+    "faq",
+    "contact",
+  ]);
+
+  const hero = page.getByRole("heading", {
+    level: 1,
+    name: "AI workflow systems for service businesses.",
+  }).locator("xpath=ancestor::section[1]");
+  await expect(hero.locator('[data-hero-carousel="true"]')).toHaveCount(1);
+
+  const clientWork = page.locator("#client-work");
+  await expect(clientWork.getByTitle("Karol from Granker's Team shares his experience working with Ajani"))
+    .toHaveCount(1);
+
+  const productionSystem = page.locator("#industries + section");
+  await expect(productionSystem.getByRole("heading", {
+    name: "A working request system, not a generic simulation.",
+  })).toBeVisible();
+  await expect(productionSystem.locator('[data-hero-carousel="true"]')).toHaveCount(0);
+  await expect(productionSystem).toContainText("Request → route → review → delivery brief");
+  expect(await productionSystem.evaluate((element) => element.nextElementSibling?.id)).toBe("process");
+
+  const additionalClientWork = page.locator("#client-voices + section");
+  await expect(additionalClientWork.getByRole("heading", {
+    name: "The route stays visible where judgment matters.",
+  })).toBeVisible();
+  await expect(additionalClientWork.getByRole("complementary", { name: "Real client system" })).toHaveCount(1);
+  expect(await additionalClientWork.evaluate((element) => element.nextElementSibling?.firstElementChild?.id))
+    .toBe("engagement");
+});
+
 test("homepage carousel cycles through all three systems and honors pause state", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Tell us where the work sucks. We fix it." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI workflow systems for service businesses." })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
 
   const carousel = page.locator('[data-hero-carousel="true"]');
@@ -14,6 +104,8 @@ test("homepage carousel cycles through all three systems and honors pause state"
   const systemTitle = page.locator('[data-system-preview-title="true"]:visible');
 
   await expect(heroVisual).toHaveCount(1);
+  await carousel.scrollIntoViewIfNeeded();
+  await expect(carousel).toHaveAttribute("data-paused", "false");
   await page.getByRole("button", { name: "Pause illustrative systems" }).click();
   await expect(page.getByRole("button", { name: "Play illustrative systems" })).toBeVisible();
   // Increase playback speed without changing duration or seeking the timeline:
@@ -74,11 +166,11 @@ test("homepage carousel cycles through all three systems and honors pause state"
       : "network";
   await expectScene(sceneAfterManualResume);
 
-  const proofHeading = page.getByRole("heading", { name: "The work is the proof." });
-  const proofReveal = proofHeading.locator("..");
-  await expect(proofReveal).toHaveCSS("opacity", "0");
-  await proofHeading.scrollIntoViewIfNeeded();
-  await expect(proofReveal).toHaveCSS("opacity", "1");
+  const securityHeading = page.getByRole("heading", { name: "The controls should be as visible as the workflow." });
+  const securityReveal = securityHeading.locator("xpath=../..");
+  await expect(securityReveal).toHaveCSS("opacity", "0");
+  await securityHeading.scrollIntoViewIfNeeded();
+  await expect(securityReveal).toHaveCSS("opacity", "1");
   await expect(carousel).toHaveAttribute("data-paused", "true");
 
   const offscreenPausedScene = await carousel.getAttribute("data-active-scene");
@@ -105,6 +197,7 @@ test("after-hours routing labels fit their stations without colliding with stage
 
     const carousel = page.locator('[data-hero-carousel="true"]');
     const sceneViewport = carousel.locator('[data-scene-viewport="true"]');
+    await carousel.scrollIntoViewIfNeeded();
     await page.getByRole("button", { name: "Pause illustrative systems" }).click();
     await sceneViewport.dispatchEvent("animationiteration");
     await expect(carousel).toHaveAttribute("data-active-scene", "routing");
@@ -152,7 +245,7 @@ test("real client proof plays one sourced sequential halo and fully settles", as
   const stages = proof.locator("[data-client-proof-stage]");
   const route = proof.locator("ol");
   const result = proof.locator('[data-client-proof-result="true"]');
-  const storyLink = page.getByRole("link", { name: "Read the client story" });
+  const storyLink = page.getByRole("link", { name: "Review the client-work library" });
 
   await expect(proof).toHaveCount(1);
   await expect(proof).toHaveAttribute("data-client-proof-motion", "true");
@@ -243,7 +336,7 @@ test("real client proof plays one sourced sequential halo and fully settles", as
   await expect.poll(async () => (await haloFrame()).currentTime, { timeout: 1_500 }).toBeGreaterThan(80);
   expect((await haloFrame()).names).toHaveLength(4);
   expect((await haloFrame()).names.every((name) => name.endsWith("case-row-halo"))).toBe(true);
-  await page.getByRole("heading", { name: "Tell us where the work sucks. We fix it." }).scrollIntoViewIfNeeded();
+  await page.getByRole("heading", { name: "AI workflow systems for service businesses." }).scrollIntoViewIfNeeded();
   await expect(proof).toHaveAttribute("data-client-proof-paused", "true");
   await expect.poll(async () => (await haloFrame()).playState).toBe("paused");
   const pausedFrame = await haloFrame();
@@ -343,15 +436,29 @@ test("homepage has a meaningful static route when the full-motion override is ab
     transform: getComputedStyle(element, "::after").transform,
   }))).toEqual({ content: "none", name: "none", transform: "none" });
 
-  const dialog = page.getByRole("dialog");
-  await expect(async () => {
-    await page.getByRole("button", { name: "See how it works" }).click();
-    await expect(dialog).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 10_000 });
-  await expect(dialog).toHaveCSS("animation-name", "none");
-  expect(await dialog.evaluate((element) => element.getAnimations({ subtree: true })
-    .map((animation) => animation instanceof CSSAnimation ? animation.animationName : "")
-    .filter(Boolean))).toEqual([]);
+  const integrationMarquee = page.getByRole("heading", { name: "Ajani integrates with" })
+    .locator("xpath=ancestor::section[1]");
+  await expect(integrationMarquee.getByRole("list", {
+    name: "Platforms and connection methods Ajani works with",
+  })).toBeVisible();
+  await expect(integrationMarquee.getByRole("button", { name: "Pause integration marquee" })).toBeHidden();
+  expect(await integrationMarquee.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+
+  const testimonialCarousel = page.getByRole("group", { name: "Client proof carousel" });
+  await testimonialCarousel.scrollIntoViewIfNeeded();
+  await expect(testimonialCarousel).toHaveAttribute("data-carousel-state", "paused");
+  await expect(testimonialCarousel).toHaveAttribute("data-pause-reason", "reduced-motion");
+  await expect(testimonialCarousel.getByRole("button", { name: /client proof rotation/i })).toHaveCount(0);
+  await expect(testimonialCarousel.getByRole("button", { name: "Next client proof" })).toHaveCSS("transition-duration", "0s");
+  await expect(testimonialCarousel.locator("[data-testimonial-status='current']").first()).toHaveCSS("transition-duration", "0s");
+  expect(await testimonialCarousel.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+
+  const processTimeline = page.getByTestId("how-it-works-timeline");
+  await processTimeline.scrollIntoViewIfNeeded();
+  await expect(processTimeline).toHaveAttribute("data-process-complete", "true");
+  await expect(processTimeline).not.toHaveAttribute("data-process-motion", "true");
+  await expect(processTimeline.locator("[data-process-step]")).toHaveCount(4);
+  expect(await processTimeline.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
 });
 
 test("homepage content remains visible if viewport observation is unavailable", async ({ page }) => {
@@ -360,19 +467,31 @@ test("homepage content remains visible if viewport observation is unavailable", 
   });
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Tell us where the work sucks. We fix it." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Different businesses, the same gap." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI workflow systems for service businesses." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proof you can inspect." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Different businesses. The same operational gap." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "A working request system, not a generic simulation." })).toBeVisible();
   const clientProof = page.getByRole("complementary", { name: "Real client system" });
   await expect(clientProof).toHaveAttribute("data-client-proof-active", "true");
   await expect(clientProof).toHaveAttribute("data-client-proof-paused", "false");
   await expect(clientProof.locator("[data-client-proof-stage]")).toHaveCount(4);
   await expect(clientProof.locator('[data-client-proof-result="true"]')).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Private by default. Clear by design." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The controls should be as visible as the workflow." })).toBeVisible();
 });
 
 test("homepage remains contained at narrow mobile widths", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   await page.goto("/");
+
+  await page.getByRole("button", { name: "Open navigation menu" }).click();
+  const mobileNavigation = page.getByRole("navigation", { name: "Mobile navigation" });
+  for (const [name, href] of credibilityNavigation) {
+    const link = mobileNavigation.getByRole("link", { exact: true, name });
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", href);
+  }
+  await page.getByRole("button", { name: "Close navigation menu" }).click();
 
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 760 });
@@ -382,6 +501,7 @@ test("homepage remains contained at narrow mobile widths", async ({ page }) => {
     const heroCarousel = page.locator('[data-hero-carousel="true"]');
     const heroScene = heroCarousel.locator('[data-scene-viewport="true"]');
     const systemTitle = page.locator('[data-system-preview-title="true"]:visible');
+    await heroCarousel.scrollIntoViewIfNeeded();
     await page.getByRole("button", { name: "Pause illustrative systems" }).click();
 
     for (const [scene, title] of [
@@ -420,8 +540,8 @@ test("homepage remains contained at narrow mobile widths", async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(1);
 
-    await page.getByRole("heading", { name: "Private by default. Clear by design." }).scrollIntoViewIfNeeded();
-    await expect(page.getByRole("heading", { name: "Private by default. Clear by design." })).toBeVisible();
+    await page.getByRole("heading", { name: "The controls should be as visible as the workflow." }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: "The controls should be as visible as the workflow." })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(1);
   }

@@ -227,23 +227,30 @@ test("privacy policy stays aligned with the implementation", async ({ page }) =>
   expect(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test("the public footer stays focused on verified social and legal destinations", async ({ page }) => {
+test("the public footer exposes verified contact, social, navigation, and legal destinations", async ({ page }) => {
   for (const path of ["/", "/demos", "/stories", "/record", "/terms"]) {
     await page.goto(path);
     const footer = page.getByRole("contentinfo");
 
     await expect(footer).toHaveCount(1);
     await expect(footer.getByRole("link", { name: "Ajani Automation home" })).toHaveAttribute("href", "/");
+    await expect(footer.getByRole("link", { name: "hello@ajaniautomation.com" })).toHaveAttribute("href", "mailto:hello@ajaniautomation.com");
     await expect(footer.getByRole("link", { name: "YouTube" })).toHaveAttribute("href", "https://youtu.be/upEkMB8pYRA");
     await expect(footer.getByRole("link", { name: "LinkedIn" })).toHaveAttribute("href", "https://www.linkedin.com/in/olakunleajani/");
-    await expect(footer.getByRole("img", { name: "Instagram — coming soon" })).toBeVisible();
-    await expect(footer.getByRole("img", { name: "Facebook — coming soon" })).toBeVisible();
+    await expect(footer.getByRole("img", { name: /coming soon/i })).toHaveCount(0);
+    for (const [name, href] of [
+      ["Solutions", "/#solutions"],
+      ["Client work", "/stories"],
+      ["Demos", "/demos"],
+      ["About", "/#about"],
+    ] as const) {
+      await expect(footer.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
+    }
     const legalLinks = footer.locator('[data-footer-legal="true"]').getByRole("link");
     await expect(legalLinks).toHaveCount(3);
     await expect(legalLinks.nth(0)).toHaveAttribute("href", "/legal");
     await expect(legalLinks.nth(1)).toHaveAttribute("href", "/terms");
     await expect(legalLinks.nth(2)).toHaveAttribute("href", "/privacy");
-    await expect(footer.getByRole("link", { name: /^(Home|Stories|Demos|Client portal|Record a note)$/ })).toHaveCount(0);
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -668,12 +675,34 @@ test("a failed recorder save is announced and can be retried", async ({ page }) 
   await expect.poll(() => draftRequests).toBe(2);
 });
 
-test("recording a note opens account access instead of showing a separate sign-in link", async ({ page }) => {
+test("the homepage offers direct workflow contact while record access stays account-gated", async ({ page }) => {
   await page.goto("/");
 
   const header = page.locator("header").first();
   await expect(header.getByRole("link", { name: "Sign in" })).toHaveCount(0);
-  const record = header.getByRole("link", { name: "Record a note" });
+  for (const [name, href] of [
+    ["Solutions", "/#solutions"],
+    ["Industries", "/#industries"],
+    ["Client work and Stories", "/stories"],
+    ["Process", "/#process"],
+    ["About", "/#about"],
+    ["Demos", "/demos"],
+    ["Contact", "/#contact"],
+  ] as const) {
+    await expect(header.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
+  }
+  await expect(header.getByRole("link", { name: "Discuss a workflow" })).toHaveAttribute(
+    "href",
+    "mailto:hello@ajaniautomation.com?subject=Workflow%20audit",
+  );
+  await expect(header.getByRole("link", { name: "Record a note" })).toHaveCount(0);
+
+  const main = page.locator("main");
+  await expect(main.getByRole("link", { name: "Discuss a workflow" }).first()).toHaveAttribute(
+    "href",
+    "mailto:hello@ajaniautomation.com?subject=Workflow%20audit",
+  );
+  const record = main.getByRole("link", { name: /^Record a note/ }).first();
   await expect(record).toHaveAttribute("href", "/sign-in?redirect_url=%2Frecord");
   await record.click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -681,64 +710,34 @@ test("recording a note opens account access instead of showing a separate sign-i
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("the homepage explains the Ajani workflow in an accessible tutorial", async ({ page }) => {
+test("the homepage explains the Ajani workflow in accessible solution and process sections", async ({ page }) => {
   await page.goto("/");
 
-  const trigger = page.getByRole("button", { name: "See how it works" });
-  const dialog = page.getByRole("dialog");
-  await expect(async () => {
-    await trigger.click();
-    await expect(dialog).toBeVisible();
-  }).toPass();
+  await expect(page.getByRole("heading", {
+    level: 1,
+    name: "AI workflow systems for service businesses.",
+  })).toBeVisible();
 
-  await expect(dialog).toContainText("Step 1 of 6");
-  await expect(dialog).toContainText("Ajani tutorial");
-  expect(await dialog.evaluate((node) => getComputedStyle(node).animationName)).toContain("dialogIn");
-  await expect(dialog.getByRole("heading", { name: "Tell Ajani what keeps wasting time." })).toBeVisible();
-  await dialog.getByRole("button", { name: /^Next/ }).click();
-  await expect(dialog.getByRole("heading", { name: "Your note becomes a clear working brief." })).toBeVisible();
-  expect(await dialog.locator("[data-direction]").evaluate((node) => getComputedStyle(node).animationName)).toContain("stageForward");
-  await dialog.getByRole("button", { name: "Back" }).click();
-  expect(await dialog.locator("[data-direction]").evaluate((node) => getComputedStyle(node).animationName)).toContain("stageBackward");
+  const solutions = page.locator("#solutions");
+  await expect(solutions.getByRole("heading", {
+    name: "Start with the expensive handoff, not an AI shopping list.",
+  })).toBeVisible();
+  for (const [name, steps] of [
+    ["Lead response route", ["Inquiry", "Qualification", "Human follow-up"]],
+    ["Client intake route", ["Request", "Clarification", "Approved brief"]],
+    ["Operations handoff route", ["Trigger", "System action", "Named owner"]],
+  ] as const) {
+    const route = solutions.getByRole("list", { name });
+    await expect(route.getByRole("listitem")).toHaveCount(3);
+    await expect(route.getByRole("listitem")).toHaveText(steps);
+  }
 
-  await dialog.getByRole("button", { name: "Go to step 3: Only what matters" }).click();
-  const defaultAnswer = dialog.getByRole("button", { name: "B After every first reply" });
-  await expect(defaultAnswer).toHaveAttribute("aria-pressed", "true");
-  await expect(dialog.getByText("Every replied-to lead is routed to the team.")).toBeVisible();
-  const answer = dialog.getByRole("button", { name: "A When they ask about price or availability" });
-  await answer.click();
-  await expect(answer).toHaveAttribute("aria-pressed", "true");
-  await expect(dialog.getByText("Handoff starts when buying intent is clear.")).toBeVisible();
-
-  await dialog.getByRole("button", { name: "Go to step 4: See the route" }).click();
-  await expect(dialog).toContainText("Proposed lead-response route");
-  await expect(dialog).toContainText("Approved system route");
-
-  await dialog.getByRole("button", { name: "Go to step 5: One workspace" }).click();
-  await expect(dialog).toContainText("Audio + transcript");
-  await expect(dialog).toContainText("Ready to build");
-
-  await dialog.getByRole("button", { name: "Go to step 6: Built and visible" }).click();
-  await expect(dialog).toContainText("Your team spends less time on repetitive steps and more time on client work.");
-  await expect(dialog.getByRole("link", { name: /Record your note/ })).toHaveAttribute("href", "/sign-in?redirect_url=%2Frecord");
-
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(trigger).toBeFocused();
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await trigger.click();
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveCSS("max-height", "824px");
-  expect(await dialog.evaluate((node) => Array.from(node.querySelectorAll("*")).flatMap((child) => {
-    const element = child as HTMLElement;
-    const overflowX = getComputedStyle(element).overflowX;
-    const clipsOverflow = overflowX === "hidden" || overflowX === "clip";
-    return !clipsOverflow && element.scrollWidth > element.clientWidth + 1
-      ? [{ tag: element.tagName, className: element.className, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }]
-      : [];
-  }))).toEqual([]);
-  await expect(dialog.getByRole("button", { name: /^Next/ })).toBeVisible();
+  const process = page.locator("#process");
+  await expect(process.getByRole("heading", {
+    name: "You know the route before the build begins.",
+  })).toBeVisible();
+  await expect(process.getByTestId("how-it-works-timeline").getByRole("listitem")).toHaveCount(4);
+  await expect(process.getByRole("heading", { name: "Approve scope and price" })).toBeVisible();
 });
 
 test("automation theatre runs play by play with accessible controls", async ({ page }) => {
@@ -894,14 +893,15 @@ test("internal navigation does not show a floating opening notice", async ({ pag
   await expect(page.getByText(/Opening demos/i)).toHaveCount(0);
 });
 
-test("homepage keeps the review in one session without repeating a closing sales block", async ({ page }) => {
+test("homepage distinguishes same-session review from the target build timeline", async ({ page }) => {
   await page.goto("/");
 
-  const timeline = page.locator("#how");
-  await expect(timeline.getByText("Same session", { exact: true })).toHaveCount(2);
+  const timeline = page.locator("#process");
+  await expect(timeline.getByText("Same session", { exact: true })).toHaveCount(1);
   await expect(timeline.getByText("1 day", { exact: true })).toHaveCount(0);
   await expect(timeline.getByText("3 days", { exact: true })).toHaveCount(0);
-  await expect(timeline.getByText("7–10 days", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Before build", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("Target: 7–10 days", { exact: true })).toBeVisible();
   await expect(page.getByText("Ready when you are", { exact: true })).toHaveCount(0);
   await expect(page.getByText("The working agreement", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Based on your budget", { exact: true })).toHaveCount(0);
@@ -913,7 +913,7 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: /Three places good work/i })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /Different businesses, the same gap/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Different businesses\. The same operational gap\./i })).toBeVisible();
   const clinics = page.getByRole("tab", { name: "Clinics & practices" });
   await expect(page.getByRole("tabpanel").locator("img")).toHaveCount(1);
   await expect(async () => {
@@ -1021,7 +1021,7 @@ test("audience tabs animate their content and keep supplied imagery contained", 
   await page.waitForTimeout(300);
   expect((await inputFrame()).currentTime - resumedFrame.currentTime).toBeGreaterThan(150);
 
-  await page.getByRole("heading", { name: "Tell us where the work sucks. We fix it." }).scrollIntoViewIfNeeded();
+  await page.getByRole("heading", { level: 1, name: "AI workflow systems for service businesses." }).scrollIntoViewIfNeeded();
   await expect(proof).toHaveAttribute("data-story-paused", "true");
   await expect(proof).toHaveAttribute("data-story-active", "true");
   await expect(inputStage).toHaveCSS("animation-play-state", "paused");
@@ -1094,10 +1094,26 @@ test("mobile navigation fits the viewport and keeps every primary destination av
   const menuDialog = page.getByRole("dialog");
   const mobileNavigation = menuDialog.getByRole("navigation", { name: "Mobile navigation" });
   await expect(header.locator('a[href="/"]').first()).toBeVisible();
-  await expect(mobileNavigation.getByRole("link", { name: /Demos/ })).toBeVisible();
-  await expect(mobileNavigation.getByRole("link", { name: /Stories/ })).toBeVisible();
+  for (const [name, href] of [
+    ["Solutions", "/#solutions"],
+    ["Industries", "/#industries"],
+    ["Client work and Stories", "/stories"],
+    ["Process", "/#process"],
+    ["About", "/#about"],
+    ["Demos", "/demos"],
+    ["Contact", "/#contact"],
+  ] as const) {
+    await expect(mobileNavigation.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
+  }
   await expect(menuDialog.getByRole("navigation", { name: "Legal" })).toHaveCount(0);
-  await expect(menuDialog.getByRole("link", { name: "Record a note" })).toBeVisible();
+  await expect(mobileNavigation.getByRole("link", { name: "Discuss a workflow", exact: true })).toHaveAttribute(
+    "href",
+    "mailto:hello@ajaniautomation.com?subject=Workflow%20audit",
+  );
+  await expect(mobileNavigation.getByRole("link", { name: /^Record a note/ })).toHaveAttribute(
+    "href",
+    "/sign-in?redirect_url=%2Frecord",
+  );
 
   await page.goto("/demos");
   const theatreOverflows = await page.getByRole("region", { name: "Automation theatre" }).evaluate((theatre) => theatre.scrollWidth > theatre.clientWidth);
