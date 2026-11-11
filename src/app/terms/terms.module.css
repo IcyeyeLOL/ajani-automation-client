@@ -236,18 +236,23 @@
   background: var(--paper);
 }
 
+/* A long badge drops below the name instead of squeezing it. */
 .providerList header {
   display: flex;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 7px 16px;
 }
 
+/* Names wrap between words only. break-word (unlike anywhere) keeps the
+   longest word as the minimum width, and still breaks a word that is wider
+   than the whole card rather than overflowing. */
 .providerList h3 {
-  min-width: 0;
+  max-width: 100%;
   margin: 0;
   font-size: 20px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .providerList header span {

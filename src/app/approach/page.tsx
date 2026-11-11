@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import { MotionReveal } from "@/components/motion-reveal";
 import { SiteFoot, SiteTop } from "@/components/site/chrome";
+
+// Nothing links here yet and the copy is still a working draft, so search
+// engines are asked to leave it out.
+export const metadata: Metadata = {
+  title: "Our approach · Ajani Automation",
+  description: "How Ajani makes sure a business problem is understood before any automation is built.",
+  robots: { index: false, follow: false },
+};
 
 const stages = [
   ["01 / LISTEN", "Start where the work gets heavy.", "A voice brief makes room for the real version of the problem."],

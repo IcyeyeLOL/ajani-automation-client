@@ -1,23 +1,48 @@
 import "server-only";
 
+import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { notFound, redirect } from "next/navigation";
+import { notFound, redirect, RedirectType } from "next/navigation";
 import { getAdminAllowlist, isAdminIdentityAllowed } from "@/lib/admin/authorization";
 import { hasClerkCredentials } from "@/lib/clerk/config";
 
-export async function requireAdminClerkUser(returnTo = "/admin") {
-  const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(returnTo)}`;
+export type AdminClerkResolution =
+  | { status: "allowed"; userId: string }
+  | { status: "signed_out" }
+  | { status: "forbidden" };
 
-  if (!hasClerkCredentials()) redirect(signInUrl);
+/**
+ * `next dev` only: open the control desk with the access key alone, skipping the
+ * Clerk sign-in. Ignored in any production build or deployment, whatever the flag says.
+ */
+export function skipsSignInLocally(environment: Partial<Record<"NODE_ENV" | "AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT", string>> = process.env) {
+  return environment.NODE_ENV === "development" && environment.AJANI_ADMIN_SKIP_SIGN_IN_IN_DEVELOPMENT === "true";
+}
+
+/**
+ * Non-throwing identity check for JSON route handlers. Memoized per request:
+ * one desk render runs it in the layout and every loader, and each run would
+ * otherwise call Clerk's API again.
+ */
+export const resolveAdminClerkUser = cache(async (): Promise<AdminClerkResolution> => {
+  if (skipsSignInLocally()) return { status: "allowed", userId: "local-development-admin" };
+  if (!hasClerkCredentials()) return { status: "signed_out" };
 
   const { userId } = await auth();
-  if (!userId) redirect(signInUrl);
+  if (!userId) return { status: "signed_out" };
 
   const user = await currentUser();
   const emails = user?.emailAddresses
     .filter((address) => address.verification?.status === "verified")
     .map((address) => address.emailAddress) ?? [];
-  if (!isAdminIdentityAllowed({ userId, emails }, getAdminAllowlist())) notFound();
+  if (!isAdminIdentityAllowed({ userId, emails }, getAdminAllowlist())) return { status: "forbidden" };
 
-  return userId;
+  return { status: "allowed", userId };
+});
+
+export async function requireAdminClerkUser(returnTo = "/admin") {
+  const resolution = await resolveAdminClerkUser();
+  if (resolution.status === "signed_out") redirect(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`, RedirectType.replace);
+  if (resolution.status === "forbidden") notFound();
+  return resolution.userId;
 }

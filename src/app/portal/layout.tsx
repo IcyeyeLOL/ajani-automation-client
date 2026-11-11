@@ -32,7 +32,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
       <div className={styles.railFoot}>
         <div className={styles.helpCard}>
           <span>Need a hand?</span>
-          <p>Reply to any Ajani email and it stays attached to your workspace.</p>
+          <p>Open any request and ask in its conversation. The answer stays with that build.</p>
         </div>
         <div className={styles.accountRow}>
           <HeaderUserMenu showName />

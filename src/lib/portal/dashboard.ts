@@ -2,6 +2,20 @@ import "server-only";
 
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
+import { z } from "zod";
+import {
+  BUILD_STATE_COLUMNS,
+  buildStatusLabel,
+  conversationState,
+  conversationStateFromRow,
+  flaggedAt,
+  shapeBuildThread,
+  type BuildMessageAuthor,
+  type BuildThreadMessage,
+  type ConversationState,
+} from "@/lib/builds/conversation";
+import { SAMPLE_CLIENT_ORGANIZATION_ID, sampleBuildWorkspace } from "@/lib/builds/sample";
+import { hasClerkCredentials } from "@/lib/clerk/config";
 import { provisionClerkWorkspace } from "@/lib/clerk/provisioning";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -12,7 +26,13 @@ export type PortalBuild = {
   created: string;
   createdIso: string;
   id: string;
+  /** True while the client owes Ajani an answer: an open question, or a "Needs input" stage they have not replied to. */
+  needsClient: boolean;
   nextStep: string;
+  /** The newest of those questions, even when it is older than the posts a page loads. */
+  openQuestion: string | null;
+  /** Ajani questions the client has not replied to yet. */
+  openQuestions: number;
   price: string;
   progress: number;
   status: string;
@@ -22,6 +42,7 @@ export type PortalBuild = {
   title: string;
   updated: string;
   updatedIso: string;
+  waitingOn: BuildMessageAuthor | null;
 };
 
 export type PortalSystem = {
@@ -84,6 +105,9 @@ export type PortalBuildDetail = {
   plainLanguageScope: string;
   questions: PortalBuildQuestion[];
   steps: PortalBuildStep[];
+  /** The newest posts, oldest first; `threadTotal` counts every post on the build. */
+  thread: BuildThreadMessage[];
+  threadTotal: number;
   transcript: string;
   voiceMemo: PortalVoiceMemo | null;
 };
@@ -116,7 +140,23 @@ export type PortalBillingData = {
   subscriptions: PortalSubscription[];
 };
 
+/**
+ * `next dev` without Clerk only: the portal shows made-up builds so its screens
+ * can be previewed. Never on in a production build or wherever sign-in exists.
+ */
+export function portalSampleMode(environment: Partial<Record<"AJANI_PORTAL_SAMPLE_IN_DEVELOPMENT" | "NODE_ENV", string>> = process.env) {
+  return environment.NODE_ENV === "development"
+    && environment.AJANI_PORTAL_SAMPLE_IN_DEVELOPMENT === "true"
+    && !hasClerkCredentials();
+}
+
+/** What the portal shows when Clerk is not configured. */
+export function unconfiguredPortal(): PortalDashboardData {
+  return portalSampleMode() ? samplePortalDashboard() : emptyPortal();
+}
+
 export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> => {
+  if (portalSampleMode()) return samplePortalDashboard();
   try {
     const organizationId = await portalOrganizationId();
     const admin = createSupabaseAdminClient();
@@ -143,7 +183,7 @@ export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> 
     if (baseError) throw baseError;
 
     const buildIds = (buildsResult.data ?? []).map((build) => String(build.id));
-    const [quotesResult, eventsResult] = buildIds.length > 0
+    const [quotesResult, eventsResult, messagesResult, statesResult] = buildIds.length > 0
       ? await Promise.all([
         admin.from("build_request_quotes")
           .select("build_request_id,amount_cents,review_status")
@@ -155,10 +195,20 @@ export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> 
           .in("build_request_id", buildIds)
           .order("created_at", { ascending: false })
           .limit(40),
+        // Only feeds the activity list; who a build waits on comes from the state view.
+        admin.from("build_messages")
+          .select(BUILD_MESSAGE_COLUMNS)
+          .in("build_request_id", buildIds)
+          .eq("author_role", "ajani")
+          .order("seq", { ascending: false })
+          .limit(40),
+        admin.from("build_conversation_state")
+          .select(BUILD_STATE_COLUMNS)
+          .in("build_request_id", buildIds),
       ])
-      : [{ data: [], error: null }, { data: [], error: null }];
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
 
-    const relatedError = quotesResult.error ?? eventsResult.error;
+    const relatedError = quotesResult.error ?? eventsResult.error ?? messagesResult.error ?? statesResult.error;
     if (relatedError) throw relatedError;
 
     return shapePortalDashboard({
@@ -168,6 +218,8 @@ export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> 
       systems: systemsResult.data ?? [],
       subscriptions: subscriptionsResult.data ?? [],
       events: eventsResult.data ?? [],
+      messages: messagesResult.data ?? [],
+      conversationStates: statesResult.data ?? [],
     });
   } catch (error) {
     console.error("Portal dashboard unavailable", portalError(error));
@@ -176,6 +228,10 @@ export const loadPortalDashboard = cache(async (): Promise<PortalDashboardData> 
 });
 
 export const loadPortalBuildDetail = cache(async (buildId: string): Promise<PortalBuildDetailResult> => {
+  // Postgres rejects an id that is not a UUID, which used to read as an outage.
+  // No request can have that id, so it is simply not found.
+  if (!z.guid().safeParse(buildId).success) return { available: true, detail: null };
+  if (portalSampleMode()) return samplePortalBuildDetail(buildId);
   try {
     const organizationId = await portalOrganizationId();
     const admin = createSupabaseAdminClient();
@@ -187,7 +243,7 @@ export const loadPortalBuildDetail = cache(async (buildId: string): Promise<Port
     if (buildResult.error) throw buildResult.error;
     if (!buildResult.data) return { available: true, detail: null };
 
-    const [quoteResult, eventsResult, questionsResult, voiceResult, systemResult] = await Promise.all([
+    const [quoteResult, eventsResult, questionsResult, voiceResult, systemResult, messagesResult, stateResult] = await Promise.all([
       admin.from("build_request_quotes")
         .select("build_request_id,amount_cents,review_status")
         .eq("build_request_id", buildId)
@@ -214,12 +270,23 @@ export const loadPortalBuildDetail = cache(async (buildId: string): Promise<Port
         .eq("organization_id", organizationId)
         .eq("build_request_id", buildId)
         .maybeSingle(),
+      admin.from("build_messages")
+        .select(BUILD_MESSAGE_COLUMNS)
+        .eq("build_request_id", buildId)
+        .order("seq", { ascending: false })
+        .limit(BUILD_THREAD_LIMIT),
+      admin.from("build_conversation_state")
+        .select(BUILD_STATE_COLUMNS)
+        .eq("build_request_id", buildId)
+        .maybeSingle(),
     ]);
     const relatedError = quoteResult.error
       ?? eventsResult.error
       ?? questionsResult.error
       ?? voiceResult.error
-      ?? systemResult.error;
+      ?? systemResult.error
+      ?? messagesResult.error
+      ?? stateResult.error;
     if (relatedError) throw relatedError;
 
     return {
@@ -231,6 +298,8 @@ export const loadPortalBuildDetail = cache(async (buildId: string): Promise<Port
         questions: questionsResult.data ?? [],
         voiceMemos: voiceResult.data ?? [],
         system: systemResult.data,
+        messages: messagesResult.data ?? [],
+        conversationState: stateResult.data,
       }),
     };
   } catch (error) {
@@ -283,14 +352,25 @@ export const loadPortalBilling = cache(async (): Promise<PortalBillingData> => {
 
 export function shapePortalDashboard(input: {
   builds: Row[];
+  /** build_conversation_state rows. Without them (sample data), state comes from `messages`, which must then be complete. */
+  conversationStates?: Row[];
   events?: Row[];
+  messages?: Row[];
   organization: Row | null;
   quotes: Row[];
   subscriptions: Row[];
   systems: Row[];
 }): PortalDashboardData {
   const quoteAmounts = new Map(input.quotes.map((quote) => [String(quote.build_request_id), numberValue(quote.amount_cents)]));
-  const builds = input.builds.map((build) => shapeBuild(build, quoteAmounts));
+  const threads = threadsByBuild(input.messages ?? []);
+  const states = new Map((input.conversationStates ?? []).map((row) => [String(row.build_request_id), conversationStateFromRow(row)]));
+  const builds = input.builds.map((build) => {
+    const id = String(build.id);
+    const state = input.conversationStates
+      ? states.get(id)
+      : conversationState(threads.get(id) ?? [], { status: stringValue(build.status), flaggedAt: flaggedAt(input.events ?? [], id) });
+    return shapeBuild(build, quoteAmounts, state);
+  });
   const buildLookup = new Map(builds.map((build) => [build.id, build]));
   const systems = input.systems.map(shapeSystem);
   const monthlyCents = input.subscriptions.reduce((sum, subscription) => (
@@ -308,20 +388,27 @@ export function shapePortalDashboard(input: {
     monthlyRetainer: monthlyCents ? formatMoney(monthlyCents) : "—",
     nextBillingDate: nextPeriod ? formatDate(nextPeriod) : null,
     systems,
-    activity: shapeActivity(input.events ?? [], buildLookup, builds, systems),
+    activity: shapeActivity(input.events ?? [], buildLookup, builds, systems, [...threads.values()].flat()),
   };
 }
 
 export function shapePortalBuildDetail(input: {
   build: Row;
+  /** The build's build_conversation_state row; undefined means `messages` is the complete thread. */
+  conversationState?: Row | null;
   events: Row[];
   questions: Row[];
+  messages?: Row[];
   quotes: Row[];
   system: Row | null;
   voiceMemos: Row[];
 }): PortalBuildDetail {
   const quoteAmounts = new Map(input.quotes.map((quote) => [String(quote.build_request_id), numberValue(quote.amount_cents)]));
-  const build = shapeBuild(input.build, quoteAmounts);
+  const thread = shapeBuildThread(input.messages ?? []);
+  const state = input.conversationState === undefined
+    ? conversationState(thread, { status: stringValue(input.build.status), flaggedAt: flaggedAt(input.events, String(input.build.id)) })
+    : input.conversationState ? conversationStateFromRow(input.conversationState) : undefined;
+  const build = shapeBuild(input.build, quoteAmounts, state);
   const rawSteps = arrayValue(input.build.system_definition);
   const extractedContext = recordValue(input.build.extracted_context);
   const capturedAnswers = arrayValue(extractedContext.clarificationAnswers);
@@ -329,6 +416,8 @@ export function shapePortalBuildDetail(input: {
   return {
     build,
     transcript: stringValue(input.build.transcript),
+    thread,
+    threadTotal: Math.max(state?.postCount ?? 0, thread.length),
     plainLanguageScope: stringValue(input.build.plain_language_scope),
     steps: rawSteps.map((value, index) => {
       const step = recordValue(value);
@@ -355,7 +444,8 @@ export function shapePortalBuildDetail(input: {
           answered: Boolean(stringValue(answer.answer)),
         };
       }),
-    events: shapeActivity(input.events, new Map([[build.id, build]]), [build], input.system ? [shapeSystem(input.system)] : []),
+    // Ajani's posts belong in the activity card too, or it reads "nothing posted" beside an update.
+    events: shapeActivity(input.events, new Map([[build.id, build]]), [build], input.system ? [shapeSystem(input.system)] : [], thread.map((message) => ({ ...message, buildId: build.id }))),
     linkedSystem: input.system ? shapeSystem(input.system) : null,
     voiceMemo: voice ? {
       status: stringValue(voice.status) || "ready",
@@ -377,7 +467,7 @@ export function emptyPortal(available = true): PortalDashboardData {
   };
 }
 
-function shapeBuild(build: Row, quoteAmounts: Map<string, number>): PortalBuild {
+function shapeBuild(build: Row, quoteAmounts: Map<string, number>, state?: ConversationState): PortalBuild {
   const id = String(build.id);
   const status = stringValue(build.status) || "draft";
   const context = recordValue(build.extracted_context);
@@ -387,6 +477,7 @@ function shapeBuild(build: Row, quoteAmounts: Map<string, number>): PortalBuild 
   const steps = arrayValue(build.system_definition);
   const createdIso = stringValue(build.created_at);
   const updatedIso = stringValue(build.updated_at);
+  const waitingOn = state?.waitingOn ?? null;
   return {
     id,
     title: stringValue(build.title) || "Automation request",
@@ -399,7 +490,12 @@ function shapeBuild(build: Row, quoteAmounts: Map<string, number>): PortalBuild 
     category: stringValue(demand.demandCategory) || "Automation workflow",
     stepCount: steps.length,
     progress: buildProgress(status),
-    nextStep: buildNextStep(status),
+    // Once the client has replied to a "Needs input" build, the next move is Ajani's.
+    nextStep: status === "needs_attention" && waitingOn !== "client" ? "You replied. Ajani is reviewing your answer." : buildNextStep(status),
+    needsClient: waitingOn === "client",
+    openQuestion: state?.openQuestion ?? null,
+    openQuestions: state?.openQuestions ?? 0,
+    waitingOn,
     price: formatPrice(quoteAmounts.get(id) ?? numberValue(build.quoted_amount_cents)),
     created: formatDate(createdIso),
     createdIso,
@@ -436,24 +532,37 @@ function shapeActivity(
   buildLookup: Map<string, PortalBuild>,
   builds: PortalBuild[],
   systems: PortalSystem[],
+  messages: ThreadPost[] = [],
 ): PortalActivity[] {
   const eventActivity = events.map((event) => {
     const buildId = stringValue(event.build_request_id);
     const build = buildLookup.get(buildId);
     const eventType = stringValue(event.event_type);
     const timestamp = stringValue(event.created_at);
-    const eventCopy = activityCopy(eventType);
+    const eventCopy = activityCopy(eventType, recordValue(event.payload));
     return {
       id: stringValue(event.id) || `${buildId}-${timestamp}`,
       title: eventCopy.title,
       detail: build?.title || "Automation request",
-      href: buildId ? `/portal/builds/${buildId}` : "/portal/builds",
+      // A move to "Needs input" asks for an answer, so it opens the reply box.
+      href: buildId ? `/portal/builds/${buildId}${asksForInput(eventType, recordValue(event.payload)) ? "#reply" : ""}` : "/portal/builds",
       timestamp,
       when: formatRelativeDate(timestamp),
       tone: eventCopy.tone,
     } satisfies PortalActivity;
   });
-  if (eventActivity.length > 0) return eventActivity.slice(0, 8);
+  // Only Ajani's posts: the client knows what they wrote.
+  const postActivity = messages.filter((message) => message.author === "ajani").map((message) => ({
+    id: `message-${message.id}`,
+    title: message.kind === "question" ? "Ajani asked you a question" : "Ajani posted an update",
+    detail: buildLookup.get(message.buildId)?.title || "Automation request",
+    href: `/portal/builds/${message.buildId}#conversation`,
+    timestamp: message.timestamp,
+    when: formatRelativeDate(message.timestamp),
+    tone: message.kind === "question" ? "warning" as const : "active" as const,
+  } satisfies PortalActivity));
+  const recorded = [...eventActivity, ...postActivity].sort((first, second) => second.timestamp.localeCompare(first.timestamp));
+  if (recorded.length > 0) return recorded.slice(0, 8);
 
   const derived = [
     ...builds.map((build) => ({
@@ -478,7 +587,21 @@ function shapeActivity(
   return derived.slice(0, 8);
 }
 
-function activityCopy(eventType: string): Pick<PortalActivity, "title" | "tone"> {
+function asksForInput(eventType: string, payload: Row) {
+  return eventType === "needs_attention" || (eventType === "status_changed" && stringValue(payload.to) === "needs_attention");
+}
+
+function activityCopy(eventType: string, payload: Row = {}): Pick<PortalActivity, "title" | "tone"> {
+  if (eventType === "status_changed") {
+    switch (stringValue(payload.to)) {
+      case "in_review": return { title: "Back in review", tone: "active" };
+      case "in_progress": return { title: "Build work started", tone: "active" };
+      case "live": return { title: "Automation moved live", tone: "complete" };
+      case "needs_attention": return { title: "A decision is needed", tone: "warning" };
+      case "cancelled": return { title: "Request closed", tone: "neutral" };
+      default: return { title: "Stage updated", tone: "neutral" };
+    }
+  }
   switch (eventType) {
     case "request_submitted": return { title: "Request received", tone: "active" };
     case "quote_created": return { title: "Proposal prepared", tone: "active" };
@@ -495,21 +618,6 @@ async function portalOrganizationId() {
   if (!userId) throw new Error("portal_auth_required");
   const workspace = await provisionClerkWorkspace(userId, orgId ?? null);
   return workspace.organizationId;
-}
-
-function buildStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    draft: "Draft",
-    clarifying: "Clarifying",
-    quoted: "Proposal ready",
-    paid: "Approved",
-    in_review: "In review",
-    in_progress: "In build",
-    live: "Live",
-    needs_attention: "Needs input",
-    cancelled: "Closed",
-  };
-  return labels[status] ?? titleCase(status);
 }
 
 function buildProgress(status: string) {
@@ -535,7 +643,7 @@ function buildNextStep(status: string) {
     paid: "Ajani is preparing the implementation handoff.",
     in_review: "Ajani is reviewing the approved workflow.",
     in_progress: "The system is being built and connected.",
-    live: "The system is live and being monitored.",
+    live: "Ajani marked this live. Anything you need to know shows in the conversation.",
     needs_attention: "Ajani needs one decision before work can continue.",
     cancelled: "This request is closed and remains in your history.",
   };
@@ -593,6 +701,55 @@ function arrayValue(value: unknown): unknown[] {
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const BUILD_MESSAGE_COLUMNS = "id,seq,build_request_id,author_role,kind,body,link_url,link_label,created_at";
+/** The newest posts a build page shows; older ones stay saved. */
+const BUILD_THREAD_LIMIT = 300;
+
+type ThreadPost = BuildThreadMessage & { buildId: string };
+
+function threadsByBuild(rows: Row[]) {
+  const grouped = new Map<string, Row[]>();
+  for (const row of rows) {
+    const buildId = stringValue(row.build_request_id);
+    if (buildId) grouped.set(buildId, [...(grouped.get(buildId) ?? []), row]);
+  }
+  return new Map([...grouped].map(([buildId, group]): [string, ThreadPost[]] => [buildId, shapeBuildThread(group).map((message) => ({ ...message, buildId }))]));
+}
+
+function sampleClientRows() {
+  const sample = sampleBuildWorkspace();
+  const builds = sample.builds.filter((build) => build.organization_id === SAMPLE_CLIENT_ORGANIZATION_ID);
+  const buildIds = new Set(builds.map((build) => String(build.id)));
+  return {
+    builds,
+    organization: sample.organizations.find((organization) => organization.id === SAMPLE_CLIENT_ORGANIZATION_ID) ?? null,
+    events: sample.events.filter((event) => buildIds.has(String(event.build_request_id))),
+    messages: sample.messages.filter((message) => buildIds.has(String(message.build_request_id))),
+  };
+}
+
+function samplePortalDashboard(): PortalDashboardData {
+  return shapePortalDashboard({ ...sampleClientRows(), quotes: [], systems: [], subscriptions: [] });
+}
+
+function samplePortalBuildDetail(buildId: string): PortalBuildDetailResult {
+  const sample = sampleClientRows();
+  const build = sample.builds.find((item) => item.id === buildId);
+  if (!build) return { available: true, detail: null };
+  return {
+    available: true,
+    detail: shapePortalBuildDetail({
+      build,
+      quotes: [],
+      events: sample.events.filter((event) => event.build_request_id === buildId).reverse(),
+      questions: [],
+      voiceMemos: [],
+      system: null,
+      messages: sample.messages.filter((message) => message.build_request_id === buildId),
+    }),
+  };
 }
 
 function portalError(error: unknown) {

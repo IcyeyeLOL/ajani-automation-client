@@ -11,6 +11,7 @@ import {
   POST,
   clarificationRound,
   consumePublicRequestAllowance,
+  discardUnpublishedDraft,
   readLimitedJson,
   scheduleRequestDemandAnalysis,
 } from "@/app/api/request-drafts/route";
@@ -49,7 +50,7 @@ describe("request draft body parsing", () => {
       method: "POST",
       body: new ReadableStream({
         start(controller) {
-          controller.enqueue(new Uint8Array(100_001));
+          controller.enqueue(new Uint8Array(256_001));
           controller.close();
         },
       }),
@@ -58,6 +59,13 @@ describe("request draft body parsing", () => {
       duplex: "half",
     } as RequestInit & { duplex: "half" });
     await expect(readLimitedJson(request)).resolves.toEqual({ status: "too_large" });
+  });
+
+  it("reads a draft at the schema's limits in non-Latin text", async () => {
+    // 180,000 bytes as UTF-8 (3 bytes a character), a little over a full draft at the schema's limits.
+    const note = "क".repeat(60_000);
+    const request = new Request("https://ajani.test/api/request-drafts", { method: "POST", body: JSON.stringify({ draft: { note } }) });
+    await expect(readLimitedJson(request)).resolves.toEqual({ status: "ok", value: { draft: { note } } });
   });
 });
 
@@ -117,6 +125,29 @@ describe("request draft legal acceptance", () => {
 
     expect(response.status).toBe(409);
     expect(routeMocks.createAdmin).not.toHaveBeenCalled();
+  });
+});
+
+describe("failed save compensation", () => {
+  it("discards the unpublished draft and its cohort count through the RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const from = vi.fn();
+
+    await discardUnpublishedDraft({ rpc, from } as never, "draft-1");
+
+    expect(rpc).toHaveBeenCalledWith("discard_unpublished_request_draft", { p_draft_id: "draft-1" });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("falls back to deleting the draft before the accuracy migration exists", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST202" } });
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn(() => ({ delete: () => ({ eq }) }));
+
+    await discardUnpublishedDraft({ rpc, from } as never, "draft-1");
+
+    expect(from).toHaveBeenCalledWith("request_drafts");
+    expect(eq).toHaveBeenCalledWith("id", "draft-1");
   });
 });
 

@@ -94,7 +94,7 @@ export async function saveWebsiteRequestDraft(draft: WebsiteRequestDraftInput, v
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ draft }),
   });
-  const result = await response.json() as DraftResponse;
+  const result = await readJson<DraftResponse>(response);
 
   if (!response.ok || !result.draft || !result.draftToken) {
     const diagnostic = result.diagnostic?.stage
@@ -121,7 +121,7 @@ export async function saveWebsiteRequestDraft(draft: WebsiteRequestDraftInput, v
         body: JSON.stringify({ draftToken: result.draftToken }),
       });
       if (!completed.ok) {
-        const completion = await completed.json() as { error?: string };
+        const completion = await readJson<{ error?: string }>(completed);
         throw new Error(completion.error || "The voice note upload could not be verified.");
       }
     }
@@ -155,7 +155,7 @@ export async function claimSavedWebsiteRequestDraft(expectedDraftId?: string): P
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ draftId, draftToken }),
   });
-  const result = await response.json() as RequestDraftClaimResult;
+  const result = await readJson<RequestDraftClaimResult>(response);
   if (!response.ok) throw new RequestDraftApiError(
     result.error || "Your saved request could not be sent to Ajani.",
     response.status,
@@ -176,7 +176,7 @@ export async function acknowledgeSavedWebsiteRequestDraft(legalAcceptanceVersion
       legalAcceptanceVersions,
     }),
   });
-  const result = await response.json() as { error?: string; status?: string };
+  const result = await readJson<{ error?: string; status?: string }>(response);
   if (!response.ok) throw new RequestDraftApiError(
     result.error || "The saved request acknowledgment could not be recorded.",
     response.status,
@@ -199,7 +199,14 @@ async function deleteDraftCapability(draftId: string, draftToken: string) {
     body: JSON.stringify({ draftToken }),
   });
   if (!response.ok) {
-    const result = await response.json() as { error?: string };
+    const result = await readJson<{ error?: string }>(response);
     throw new Error(result.error || "The saved request could not be deleted.");
   }
+}
+
+// A platform error page (a timeout or an outage) is HTML, not JSON. Reading it
+// as empty lets each caller show its own plain message instead of a parse error.
+async function readJson<T extends object>(response: Response): Promise<Partial<T>> {
+  const value: unknown = await response.json().catch(() => null);
+  return value && typeof value === "object" ? value as Partial<T> : {};
 }

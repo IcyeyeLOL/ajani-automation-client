@@ -22,6 +22,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // /request is the old address of the recorder. Redirecting here returns a
+  // real 308; a page-level redirect() streams behind the root loading screen
+  // and arrives as a 200 with a meta refresh.
+  async redirects() {
+    return [{ source: "/request", destination: "/record", permanent: true }];
+  },
   async headers() {
     return [{
       source: "/:path*",

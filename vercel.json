@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/process-intake-jobs",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-dripify",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/sync-platforms",
+      "schedule": "30 22 * * *"
     }
   ]
 }

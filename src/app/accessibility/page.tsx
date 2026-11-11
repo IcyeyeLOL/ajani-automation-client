@@ -78,7 +78,7 @@ export default function AccessibilityPage() {
             <section id="motion">
               <p className={styles.sectionNumber}>04</p>
               <h2>Motion, demonstrations, and media</h2>
-              <p>Major interactive demonstrations provide pause or manual controls where the experience continues automatically. Ajani respects the operating system&apos;s reduced-motion preference by default and is continuing to review experiences that may still present more movement than a person prefers.</p>
+              <p>Animations play by default, including on devices set to reduce motion. The major animations and interactive demonstrations have pause or manual controls where the experience continues automatically. Ajani is continuing to review experiences that may present more movement than a person prefers. If movement makes a page hard to use, contact Ajani and we will provide the information another way.</p>
               <p>Embedded third-party video may have controls and accessibility behavior supplied by that provider. A direct link is provided when available. Contact Ajani if you need the substance of a video or demonstration in another format.</p>
             </section>
 

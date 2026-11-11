@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { hasClerkCredentials } from "@/lib/clerk/config";
-import { emptyPortal, loadPortalDashboard } from "@/lib/portal/dashboard";
+import { loadPortalDashboard, unconfiguredPortal } from "@/lib/portal/dashboard";
 import styles from "../portal.module.css";
 
 export const metadata: Metadata = { title: "Requests | Ajani Automation" };
 export const dynamic = "force-dynamic";
 
 export default async function BuildsPage({ searchParams }: PageProps<"/portal/builds">) {
-  const data = hasClerkCredentials() ? await loadPortalDashboard() : emptyPortal();
+  const data = hasClerkCredentials() ? await loadPortalDashboard() : unconfiguredPortal();
   const params = await searchParams;
   const view = typeof params.view === "string" ? params.view : "all";
   const query = typeof params.q === "string" ? params.q.trim().toLocaleLowerCase("en-US") : "";
@@ -58,7 +58,10 @@ export default async function BuildsPage({ searchParams }: PageProps<"/portal/bu
           <div className={styles.requestIndex}>{String(index + 1).padStart(2, "0")}</div>
           <div className={styles.requestCardMain}>
             <div className={styles.requestCardHead}>
-              <span className={styles.statusPill} data-status={build.status}><i />{build.statusLabel}</span>
+              <span className={styles.requestCardPills}>
+                <span className={styles.statusPill} data-status={build.status}><i />{build.statusLabel}</span>
+                {build.openQuestions ? <span className={styles.questionPill}>{build.openQuestions === 1 ? "Question for you" : `${build.openQuestions} questions for you`}</span> : null}
+              </span>
               <small>{build.updated}</small>
             </div>
             <h2>{build.title}</h2>

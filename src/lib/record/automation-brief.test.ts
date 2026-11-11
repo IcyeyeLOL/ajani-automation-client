@@ -39,4 +39,25 @@ describe("automation brief fallback", () => {
     expect(shape.emailBrief.implementationNotes).toHaveLength(4);
     expect(shape.emailBrief.assumptions[0]).toContain("Customer confirmed");
   });
+
+  it("keeps long confirmed answers inside the limits the browser validates", () => {
+    const transcript = "Our dental clinic gets patient booking requests after hours and the front desk has to copy them into the calendar each morning.";
+    const answers = Array.from({ length: 5 }, (_, index) => ({ question: `Question ${index + 1}?`, answer: `${"a".repeat(480)} ${index}`.padEnd(500, "b") }));
+    const shape = fallbackAutomationShape(transcript, answers);
+
+    expect(shape.emailBrief.implementationNotes.every((note) => note.length <= 500)).toBe(true);
+    expect(shape.emailBrief.assumptions.every((assumption) => assumption.length <= 500)).toBe(true);
+    expect(shape.emailBrief.assumptions[0]).toMatch(/^Customer confirmed: a+/);
+    expect(automationEmailBriefSchema.safeParse(shape.emailBrief).success).toBe(true);
+    expect(automationShapeResponseSchema.safeParse(shape).success).toBe(true);
+  });
+
+  it("never cuts an emoji in half at the limit", () => {
+    const transcript = "Our dental clinic gets patient booking requests after hours and the front desk has to copy them into the calendar each morning.";
+    // "Customer confirmed: " is 20 characters, so the emoji straddles character 500.
+    const shape = fallbackAutomationShape(transcript, [{ question: "Anything else?", answer: `${"a".repeat(479)}😀 and more` }]);
+
+    expect(shape.emailBrief.assumptions[0]).toHaveLength(499);
+    expect(shape.emailBrief.assumptions[0].endsWith("a")).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { adminPageNumber, aggregateExperimentPerformance, buildContentDemand, loadAdminDashboardData, outreachTouchCount, shapeAdminAnalytics } from "@/lib/admin/dashboard";
+import { adminPageNumber, aggregateExperimentPerformance, buildContentDemand, loadAdminDashboardData, loadOutreachChannelSeries, outreachTouchCount, shapeAdminAnalytics } from "@/lib/admin/dashboard";
 import type { OutreachExperiment } from "@/lib/admin/types";
 
 vi.mock("server-only", () => ({}));
@@ -22,6 +22,17 @@ describe("exact admin analytics read model", () => {
     expect(result.dataNotice).toContain("already-deleted history cannot be reconstructed");
     expect(result.dataStatus).toBe("partial");
   });
+  it("measures reply rate against reply_base so follow-up experiments cannot exceed 100%", () => {
+    const result = shapeAdminAnalytics({
+      coverage_started_at: "2026-01-01T00:00:00.000Z",
+      metrics: { replies_current: 30, initial_dms_current: 0, reply_base_current: 160 },
+      funnel: {}, trend: [], experiments: [], recent_batches: [],
+      outreach: { initial_dms: 0, f1_sent: 160, replies: 30, reply_base: 160 },
+    }, "2026-09-05T12:00:00.000Z", { experimentPage: 0, batchPage: 0 });
+    expect(result.outreach.replyBase).toBe(160);
+    expect(result.outreach.replyRate).toBe(18.75);
+    expect(result.metrics.find((metric) => metric.label === "Replies")?.detail).toBe("18.8% reply rate");
+  });
   it("does not present missing infrastructure as zero or healthy statistics", async () => {
     mocks.authorize.mockResolvedValue("user_admin");
     mocks.rpc.mockResolvedValue({ error: { code: "PGRST202" }, data: null });
@@ -37,6 +48,39 @@ describe("exact admin analytics read model", () => {
     expect(adminPageNumber(-1)).toBe(0);
     expect(adminPageNumber("oops")).toBe(0);
     expect(() => shapeAdminAnalytics({}, "now", { experimentPage: 0, batchPage: 0 })).toThrow("analytics_payload_incomplete");
+  });
+});
+
+describe("outreach channels", () => {
+  const series = (args: Record<string, unknown>) => ({ grain: "day", from: args.p_from, to: args.p_to, previous_from: "2026-08-20", previous_to: "2026-09-18", today: "2026-10-18", dimension: args.p_dimension, buckets: [], series: [] });
+
+  it("says the Outreach touches card adds up only Dripify, Reddit DMs and cold calls, and rates replies on people reached", () => {
+    const result = shapeAdminAnalytics({
+      coverage_started_at: "2026-01-01T00:00:00.000Z",
+      metrics: { outreach_current: 400, replies_current: 18, reply_base_current: 400, initial_dms_current: 0 },
+      funnel: {}, trend: [], experiments: [], recent_batches: [], outreach: {},
+    }, "2026-09-05T12:00:00.000Z", { experimentPage: 0, batchPage: 0 });
+    expect(result.metrics.find((metric) => metric.label === "Outreach touches")?.detail).toBe("All channels: Dripify, Reddit DMs and cold calls");
+    expect(result.metrics.find((metric) => metric.label === "Replies")?.detail).toBe("4.5% reply rate");
+  });
+
+  it("loads each channel's last 30 days, after authorizing, filtered to that channel", async () => {
+    mocks.rpc.mockReset();
+    mocks.authorize.mockResolvedValue("user_admin");
+    mocks.rpc.mockImplementation(async (_name: string, args: Record<string, unknown>) => ({ error: null, data: series(args) }));
+    const result = await loadOutreachChannelSeries("2026-10-18");
+    expect(mocks.authorize).toHaveBeenCalled();
+    expect(mocks.rpc.mock.calls.map(([name, args]) => [name, args.p_dimension, args.p_grain, args.p_from, args.p_to, args.p_metric_keys])).toEqual(["linkedin/dripify", "reddit/dm", "phone/cold_call"].map((dimension) => [
+      "load_analytics_series", dimension, "day", "2026-09-19", "2026-10-18", ["outreach.touches", "outreach.replies", "outreach.reply_base", "outreach.calls_booked"],
+    ]));
+    expect(result?.map((item) => item.dimension)).toEqual(["linkedin/dripify", "reddit/dm", "phone/cold_call"]);
+  });
+
+  it("reports the channels unavailable, not zero, when any series fails", async () => {
+    mocks.rpc.mockReset();
+    mocks.authorize.mockResolvedValue("user_admin");
+    mocks.rpc.mockImplementation(async (_name: string, args: Record<string, unknown>) => args.p_dimension === "reddit/dm" ? { error: { code: "PGRST202" }, data: null } : { error: null, data: series(args) });
+    expect(await loadOutreachChannelSeries("2026-10-18")).toBeNull();
   });
 });
 

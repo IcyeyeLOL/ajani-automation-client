@@ -21,10 +21,10 @@ This creates a clean boundary between automated interpretation and human authori
 ## Core experiences
 
 - **Marketing and education** — the home page, client proof library, interactive system preview, and automation demos explain the product without requiring an account.
-- **Guided request flow** — `/record` and `/request` support voice and written intake, transcription, clarification, workflow editing, review, and submission.
+- **Guided request flow** — `/record` (the old `/request` redirects there) supports voice and written intake, transcription, clarification, workflow editing, review, and submission.
 - **Secure account handoff** — Clerk authentication connects an anonymous draft to the correct user and organization without discarding work completed before sign-in.
 - **Client portal** — authenticated organizations can inspect submitted builds, delivery status, system activity, and billing-oriented information.
-- **Internal operations** — the admin experience supports demand triage, request comparison, outreach tracking, experiment metrics, and operational follow-up.
+- **Internal operations** — the admin experience supports demand triage, request comparison, outreach tracking, experiment metrics, operational follow-up, and day-to-year Trends across the funnel, outreach, content platforms and revenue.
 
 ## System architecture
 
@@ -141,6 +141,7 @@ Copy `.env.example` to `.env.local` and add only the integrations needed for the
 - **Persistence** — Supabase URL, publishable key, and trusted server key
 - **AI and transcription** — gateway/provider selection, Anthropic fallback, and Deepgram
 - **Operations** — Resend delivery, internal recipients, admin authorization, and cron protection
+- **Analytics connectors** — the Dripify API key for nightly campaign snapshots in the control desk's Trends ([details](./docs/analytics-metric-store.md#dripify-connector))
 - **Abuse prevention** — dedicated secrets for request fingerprints and signed sessions
 - **Future billing** — Stripe values reserved for the billing phase
 
@@ -189,6 +190,8 @@ The proxy deliberately fails closed in a production runtime when valid live Cler
 ## Additional documentation
 
 - [Architecture notes](./docs/architecture.md)
+- [Analytics metric store and Trends](./docs/analytics-metric-store.md)
+- [Agent handoff: analytics backend (2026-10-16)](./docs/agent-handoff-2026-10-16.md)
 - [Engineering audit](./docs/engineering-audit-2026-09-05.md)
 - [Engineering remediation and release gates](./docs/engineering-remediation-2026-09-05.md)
 

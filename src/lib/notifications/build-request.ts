@@ -243,7 +243,7 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
-function safeAppUrl(value: string | undefined) {
+export function safeAppUrl(value: string | undefined) {
   try {
     const url = new URL(value || "https://ajaniflow.com");
     if (url.protocol !== "https:" && url.hostname !== "localhost") return "https://ajaniflow.com";
@@ -284,7 +284,7 @@ async function readProviderPayload(response: Response): Promise<{ id?: string; e
   }
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
     "<": "&lt;",

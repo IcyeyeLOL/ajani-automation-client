@@ -4,6 +4,7 @@ import { useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clearRecordFlowProgress } from "@/lib/record/flow-progress";
 import {
   claimSavedWebsiteRequestDraft,
   clearSavedWebsiteRequestCapability,
@@ -47,6 +48,9 @@ export function PendingRequestResumer() {
 
       if (result.status === "submitted") {
         clearSavedWebsiteRequestCapability(savedDraft.id);
+        // The brief is with Ajani now. Without this, /record would reopen its
+        // handoff step and a second send would create a duplicate request.
+        clearRecordFlowProgress();
         setMessage(null);
         setSubmittedReference(result.buildRequest?.build_request_id?.slice(0, 8).toUpperCase() ?? "RECEIVED");
       } else {

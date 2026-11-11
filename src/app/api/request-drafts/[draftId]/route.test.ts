@@ -11,6 +11,7 @@ vi.mock("@/lib/request-drafts/delete-request-draft", () => ({
 }));
 
 import { DELETE } from "@/app/api/request-drafts/[draftId]/route";
+import { deleteRequestDraftData } from "@/lib/request-drafts/delete-request-draft";
 
 describe("draft deletion body parsing", () => {
   it("rejects streamed request bodies over the limit without trusting Content-Length", async () => {
@@ -31,5 +32,18 @@ describe("draft deletion body parsing", () => {
     });
 
     expect(response.status).toBe(413);
+  });
+
+  it("returns not found for an id that is not a UUID instead of reporting an outage", async () => {
+    const response = await DELETE(new Request("https://ajani.test/api/request-drafts/not-a-draft", {
+      method: "DELETE",
+      headers: { "content-type": "application/json", origin: "https://ajani.test" },
+      body: JSON.stringify({ draftToken: "a".repeat(40) }),
+    }), {
+      params: Promise.resolve({ draftId: "not-a-draft" }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(deleteRequestDraftData).not.toHaveBeenCalled();
   });
 });

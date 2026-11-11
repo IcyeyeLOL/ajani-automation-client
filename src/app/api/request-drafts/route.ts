@@ -13,7 +13,10 @@ import {
 
 export const runtime = "nodejs";
 
-const MAX_BODY_BYTES = 100_000;
+// websiteRequestDraftSchema bounds the text fields. This caps the raw body,
+// and must fit a draft at those bounds in non-Latin text (about 175 KB as
+// UTF-8), or a long note would pass every step and then fail at Send.
+const MAX_BODY_BYTES = 256_000;
 const WINDOW_MS = 10 * 60 * 1_000;
 const MAX_REQUESTS_PER_WINDOW = 8;
 
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
       requires_human_review: false,
     });
     if (workflowError) {
-      await admin.from("request_drafts").delete().eq("id", data.id);
+      await discardUnpublishedDraft(admin, data.id);
       throw workflowError;
     }
     let voiceMemoUpload: { path: string; token: string } | undefined;
@@ -158,7 +161,7 @@ export async function POST(request: Request) {
         byte_length: input.voiceMemo.byteLength,
       });
       if (memoError) {
-        await admin.from("request_drafts").delete().eq("id", data.id);
+        await discardUnpublishedDraft(admin, data.id);
         throw memoError;
       }
 
@@ -166,7 +169,7 @@ export async function POST(request: Request) {
         .from("voice-memos")
         .createSignedUploadUrl(storagePath);
       if (signedUploadError) {
-        await admin.from("request_drafts").delete().eq("id", data.id);
+        await discardUnpublishedDraft(admin, data.id);
         throw signedUploadError;
       }
       voiceMemoUpload = { path: storagePath, token: signedUpload.token };
@@ -289,6 +292,23 @@ export async function persistRequestDemandAnalysis(job: RequestDemandAnalysisJob
     p_confidence: demandResult.extraction.confidence,
   });
   if (stateError) throw stateError;
+}
+
+type DraftCleanupClient = Pick<ReturnType<typeof createSupabaseAdminClient>, "rpc" | "from">;
+
+/**
+ * Compensates a save that failed before its capability was returned. The RPC
+ * also removes the draft's cohort contribution so failed saves never count as
+ * saved briefs; before that migration is applied, fall back to a plain delete.
+ */
+export async function discardUnpublishedDraft(admin: DraftCleanupClient, draftId: string) {
+  const { error } = await admin.rpc("discard_unpublished_request_draft", { p_draft_id: draftId });
+  if (!error) return;
+  if (error.code !== "PGRST202" && error.code !== "42883") {
+    // The unpublished draft is still removed; only its cohort count remains.
+    console.warn("[request-drafts] discard_rpc_failed", JSON.stringify({ code: error.code ?? "unknown" }));
+  }
+  await admin.from("request_drafts").delete().eq("id", draftId);
 }
 
 type AllowanceClient = Pick<ReturnType<typeof createSupabaseAdminClient>, "rpc">;

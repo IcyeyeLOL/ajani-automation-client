@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { PendingRequestResumer } from "@/components/portal/pending-request-resumer";
 import { hasClerkCredentials } from "@/lib/clerk/config";
-import { emptyPortal, loadPortalDashboard, type PortalBuild } from "@/lib/portal/dashboard";
+import { loadPortalDashboard, unconfiguredPortal, type PortalBuild } from "@/lib/portal/dashboard";
 import styles from "./portal.module.css";
 
 export const metadata: Metadata = { title: "My portal | Ajani Automation" };
@@ -14,11 +14,16 @@ export default async function PortalPage() {
   const configured = hasClerkCredentials();
   const [user, data] = configured
     ? await Promise.all([currentUser(), loadPortalDashboard()])
-    : [null, emptyPortal()];
+    : [null, unconfiguredPortal()];
   const firstName = user?.firstName || user?.fullName?.split(" ")[0] || "there";
   const openBuilds = data.builds.filter((build) => !["live", "cancelled"].includes(build.status));
   const healthySystems = data.systems.filter((system) => system.health === "healthy");
-  const decisionBuild = openBuilds.find((build) => build.status === "needs_attention") ?? openBuilds[0] ?? data.builds[0];
+  // An unanswered question from Ajani is the client's next move, wherever the build is.
+  // A "Needs input" build the client already replied to is Ajani's move, not theirs.
+  const questionBuild = data.builds.find((build) => build.openQuestions > 0);
+  const decisionBuild = questionBuild ?? data.builds.find((build) => build.needsClient) ?? openBuilds[0] ?? data.builds[0];
+  const decisionNeeded = Boolean(decisionBuild?.needsClient);
+  const decisionCount = data.builds.filter((build) => build.needsClient).length;
 
   return <div className={styles.page}>
     {configured ? <PendingRequestResumer /> : null}
@@ -40,7 +45,7 @@ export default async function PortalPage() {
       <Metric copy={openBuilds.length === 1 ? "request moving" : "requests moving"} label="Open requests" value={String(openBuilds.length).padStart(2, "0")} />
       <Metric copy={healthySystems.length + " running normally"} label="Live systems" value={String(data.systems.length).padStart(2, "0")} />
       <Metric copy={data.nextBillingDate ? "renews " + data.nextBillingDate : "no active subscription"} label="Monthly care" value={data.monthlyRetainer} />
-      <Metric copy={decisionBuild ? decisionBuild.statusLabel : "nothing waiting"} label="Next decision" value={decisionBuild?.status === "needs_attention" ? "01" : "—"} tone={decisionBuild?.status === "needs_attention" ? "attention" : undefined} />
+      <Metric copy={questionBuild ? "question from Ajani" : decisionBuild ? decisionBuild.statusLabel : "nothing waiting"} label="Next decision" value={decisionNeeded ? String(decisionCount).padStart(2, "0") : "—"} tone={decisionNeeded ? "attention" : undefined} />
     </section>
 
     <section className={styles.dashboardGrid}>
@@ -58,14 +63,16 @@ export default async function PortalPage() {
       <aside className={styles.nextMove}>
         <span className={styles.cardLabel}>Your next move</span>
         {decisionBuild ? <>
-          <div className={styles.nextMoveStatus}><i data-status={decisionBuild.status} /><span>{decisionBuild.statusLabel}</span></div>
+          <div className={styles.nextMoveStatus}><i data-status={questionBuild ? "needs_attention" : decisionBuild.status} /><span>{questionBuild ? "Question from Ajani" : decisionBuild.statusLabel}</span></div>
           <h2>{decisionBuild.title}</h2>
-          <p>{decisionBuild.nextStep}</p>
+          <p>{questionBuild ? "Ajani asked you a question about this build. Your answer keeps the work moving." : decisionBuild.nextStep}</p>
           <div className={styles.nextMoveMeta}>
             <span><b>{decisionBuild.progress}%</b> through delivery</span>
             <span><b>{decisionBuild.price}</b> current scope</span>
           </div>
-          <Link href={"/portal/builds/" + decisionBuild.id}>Open request <i aria-hidden="true">→</i></Link>
+          {questionBuild
+            ? <Link href={"/portal/builds/" + decisionBuild.id + "#open-question"}>Answer the question <i aria-hidden="true">→</i></Link>
+            : <Link href={"/portal/builds/" + decisionBuild.id}>Open request <i aria-hidden="true">→</i></Link>}
         </> : <>
           <div className={styles.nextMoveMark} aria-hidden="true">A</div>
           <h2>Nothing needs your attention.</h2>
@@ -128,6 +135,7 @@ function BuildRow({ build }: { build: PortalBuild }) {
   return <Link className={styles.buildRow} href={"/portal/builds/" + build.id}>
     <div className={styles.buildRowMain}>
       <span className={styles.statusPill} data-status={build.status}><i />{build.statusLabel}</span>
+      {build.openQuestions ? <span className={styles.questionPill}>Question for you</span> : null}
       <h3>{build.title}</h3>
       <p>{build.summary}</p>
     </div>

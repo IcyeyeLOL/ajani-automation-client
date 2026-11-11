@@ -16,6 +16,7 @@ let {
   acknowledgeSavedWebsiteRequestDraft,
   claimSavedWebsiteRequestDraft,
   clearSavedWebsiteRequestCapability,
+  deleteSavedWebsiteRequestDraft,
   getSavedWebsiteRequestDraft,
   saveWebsiteRequestDraft,
 } = await import("@/lib/request-drafts/client");
@@ -55,7 +56,7 @@ describe("website request draft client", () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    ({ acknowledgeSavedWebsiteRequestDraft, claimSavedWebsiteRequestDraft, clearSavedWebsiteRequestCapability, getSavedWebsiteRequestDraft, saveWebsiteRequestDraft } = await import("@/lib/request-drafts/client"));
+    ({ acknowledgeSavedWebsiteRequestDraft, claimSavedWebsiteRequestDraft, clearSavedWebsiteRequestCapability, deleteSavedWebsiteRequestDraft, getSavedWebsiteRequestDraft, saveWebsiteRequestDraft } = await import("@/lib/request-drafts/client"));
     values = new Map([
       ["ajani_request_draft_id", "prior-draft-id"],
       ["ajani_request_draft_token", "prior-capability-token"],
@@ -168,6 +169,39 @@ describe("website request draft client", () => {
     });
   });
 
+  it("shows a plain message instead of a parse error when the platform returns an error page", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => platformErrorPage()));
+
+    await expect(saveWebsiteRequestDraft({ ...draftInput, voiceMemo: null })).rejects.toThrow(/^Your request could not be saved\.$/);
+    await expect(claimSavedWebsiteRequestDraft()).rejects.toMatchObject({
+      message: "Your saved request could not be sent to Ajani.",
+      status: 504,
+    });
+    await expect(acknowledgeSavedWebsiteRequestDraft(CURRENT_HANDOFF_POLICY_VERSION)).rejects.toMatchObject({
+      message: "The saved request acknowledgment could not be recorded.",
+      status: 504,
+    });
+    expect(values.get("ajani_request_draft_id")).toBe("prior-draft-id");
+  });
+
+  it("keeps plain messages for voice upload and cleanup failures that return error pages", async () => {
+    mocks.uploadToSignedUrl.mockResolvedValue({ error: null });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/request-drafts" && init?.method === "POST") return createdResponse();
+      return platformErrorPage();
+    }));
+
+    await expect(saveWebsiteRequestDraft(draftInput, voiceBlob())).rejects.toThrow(/^The voice note upload could not be verified\.$/);
+    await expect(deleteSavedWebsiteRequestDraft()).rejects.toThrow(/^The saved request could not be deleted\.$/);
+  });
+
+  it("treats an unreadable success reply as not yet sent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 200 })));
+
+    await expect(claimSavedWebsiteRequestDraft()).resolves.toEqual({});
+    expect(values.get("ajani_request_draft_id")).toBe("prior-draft-id");
+  });
+
   it("can finish the current handoff in memory when every storage method is denied", async () => {
     const denied = () => { throw new DOMException("Storage denied", "SecurityError"); };
     vi.stubGlobal("sessionStorage", { getItem: denied, setItem: denied, removeItem: denied });
@@ -232,6 +266,13 @@ function createdResponse() {
     draftToken: newToken,
     voiceMemoUpload: { path: `${newDraft.id}/voice-note.webm`, token: "signed-upload-token" },
   }, { status: 201 });
+}
+
+function platformErrorPage() {
+  return new Response("<!doctype html><title>504 Gateway Timeout</title>", {
+    status: 504,
+    headers: { "content-type": "text/html" },
+  });
 }
 
 function voiceBlob() {

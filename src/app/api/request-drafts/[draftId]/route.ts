@@ -13,6 +13,9 @@ const MAX_BODY_BYTES = 4_096;
 
 export async function DELETE(request: Request, context: RouteContext<"/api/request-drafts/[draftId]">) {
   if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin request rejected" }, { status: 403 });
+  const { draftId } = await context.params;
+  // Postgres rejects an id that is not a UUID; that is a missing draft, not an outage.
+  if (!z.guid().safeParse(draftId).success) return Response.json({ error: "The draft is unavailable." }, { status: 404 });
   if (Number(request.headers.get("content-length") || 0) > MAX_BODY_BYTES) {
     return Response.json({ error: "Request body is too large" }, { status: 413 });
   }
@@ -27,7 +30,6 @@ export async function DELETE(request: Request, context: RouteContext<"/api/reque
   const parsed = deleteSchema.safeParse(body.value);
   if (!parsed.success) return Response.json({ error: "The draft capability is invalid." }, { status: 400 });
 
-  const { draftId } = await context.params;
   const tokenHash = createHash("sha256").update(parsed.data.draftToken, "utf8").digest("hex");
 
   try {
